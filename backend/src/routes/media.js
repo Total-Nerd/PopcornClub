@@ -1,0 +1,1794 @@
+const express = require('express');
+const axios = require('axios');
+const prisma = require('../prismaClient');
+const { authenticateToken } = require('../middleware/auth');
+const { fetchTMDB } = require('../utils/tmdb');
+const { resolveDuration } = require('../utils/durationResolver');
+const { getAiringDateTime } = require('../utils/airtime');
+
+const router = express.Router();
+
+router.use(authenticateToken);
+
+// Thread-safe helper to fetch or create a Media record, handling concurrent insertions gracefully
+async function getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath }) {
+  if (!tmdbId) {
+    throw new Error('tmdbId is required to get or create media record');
+  }
+  const parsedId = parseInt(tmdbId);
+  
+  let media = await prisma.media.findFirst({ where: { tmdbId: parsedId, type } });
+  if (media) {
+    // Self-heal/enrich existing record with any missing details if we have them now:
+    const needsUpdate = (!media.posterPath && posterPath) ||
+                        (!media.overview && overview) ||
+                        (!media.releaseDate && releaseDate) ||
+                        (media.title.startsWith(`${media.type} #`) && title && !title.startsWith(`${media.type} #`));
+    
+    if (needsUpdate) {
+      try {
+        media = await prisma.media.update({
+          where: { id: media.id },
+          data: {
+            posterPath: media.posterPath || posterPath || null,
+            overview: media.overview || overview || '',
+            releaseDate: media.releaseDate || (releaseDate ? new Date(releaseDate) : null),
+            title: media.title.startsWith(`${media.type} #`) && title ? title : media.title
+          }
+        });
+      } catch (err) {
+        console.error('Failed to update missing fields in getOrCreateMediaRecord:', err.message);
+      }
+    }
+    return media;
+  }
+
+  try {
+    media = await prisma.media.create({
+      data: {
+        tmdbId: parsedId,
+        type,
+        title: title || `${type} #${parsedId}`,
+        overview: overview || '',
+        releaseDate: releaseDate ? new Date(releaseDate) : null,
+        posterPath
+      }
+    });
+    return media;
+  } catch (err) {
+    if (err.code === 'P2002') {
+      console.log(`Media with tmdbId ${parsedId} was created concurrently. Fetching existing record.`);
+      media = await prisma.media.findFirst({ where: { tmdbId: parsedId, type } });
+      if (media) return media;
+    }
+    throw err;
+  }
+}
+
+// Reusable helper to dynamically self-heal a media record by fetching missing data from TMDB (cached locally)
+async function healMediaRecordIfMissingDetails(media, userApiKey) {
+  if (!media) return media;
+  const needsUpdate = !media.posterPath || 
+                      !media.overview || 
+                      !media.releaseDate || 
+                      !media.genres ||
+                      (media.title && media.title.startsWith(`${media.type} #`));
+  
+  if (needsUpdate && userApiKey) {
+    try {
+      const type = media.type === 'movie' ? 'movie' : 'tv';
+      const data = await fetchTMDB(`/3/${type}/${media.tmdbId}`, userApiKey);
+      if (data) {
+        const updated = await prisma.media.update({
+          where: { id: media.id },
+          data: {
+            posterPath: media.posterPath || data.poster_path || null,
+            overview: media.overview || data.overview || '',
+            releaseDate: media.releaseDate || (data.release_date || data.first_air_date ? new Date(data.release_date || data.first_air_date) : null),
+            title: media.title && media.title.startsWith(`${media.type} #`) ? (data.title || data.name) : media.title,
+            genres: media.genres || (data.genres ? data.genres.map(g => g.name).join(', ') : null)
+          },
+          include: {
+            collections: true,
+            watchHistory: true,
+            episodeWatchHistory: true,
+            episodeCollections: true
+          }
+        });
+        return updated;
+      }
+    } catch (err) {
+      console.error(`Failed to self-heal media record ${media.tmdbId}:`, err.message);
+    }
+  }
+  return media;
+}
+
+// Automatically update show-level watch history based on whether all episodes are watched
+async function syncShowWatchHistory(mediaId, tmdbId, tmdbApiKey) {
+  if (!tmdbApiKey) return;
+  try {
+    const tmdbRes = await fetchTMDB(`/3/tv/${tmdbId}`, tmdbApiKey);
+    const totalEpisodes = tmdbRes.number_of_episodes || 0;
+    if (totalEpisodes === 0) return;
+
+    // Get current watched episodes count
+    const watchedEpisodesCount = await prisma.episodeWatchHistory.count({
+      where: { mediaId }
+    });
+
+    if (watchedEpisodesCount === totalEpisodes) {
+      // All episodes are watched! Create a WatchHistory record for the show if not already exists
+      const existing = await prisma.watchHistory.findFirst({
+        where: { mediaId }
+      });
+      if (!existing) {
+        await prisma.watchHistory.create({
+          data: { mediaId }
+        });
+        console.log(`Automatically marked TV Show (mediaId: ${mediaId}, tmdbId: ${tmdbId}) as watched.`);
+      }
+    } else {
+      // Not all episodes are watched. Delete show-level WatchHistory record if exists
+      await prisma.watchHistory.deleteMany({
+        where: { mediaId }
+      });
+    }
+  } catch (err) {
+    console.error(`Failed to sync show watch history for mediaId ${mediaId}:`, err.message);
+  }
+}
+
+// Attach helpers to router so they can be exported
+router.getOrCreateMediaRecord = getOrCreateMediaRecord;
+router.healMediaRecordIfMissingDetails = healMediaRecordIfMissingDetails;
+router.syncShowWatchHistory = syncShowWatchHistory;
+
+
+// Search TMDB
+router.get('/search', async (req, res) => {
+  const { query } = req.query;
+  if (!query) return res.status(400).json({ error: 'Query is required' });
+
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const response = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
+      params: {
+        api_key: user.tmdbApiKey,
+        query,
+        page: 1,
+        include_adult: false
+      }
+    });
+    
+    // Filter out non-media
+    const results = response.data.results.filter(item => item.media_type === 'movie' || item.media_type === 'tv');
+    
+    // Enrich with local database status (isCollected, isWatched)
+    const tmdbIds = results.map(item => item.id);
+    const localMediaList = await prisma.media.findMany({
+      where: { tmdbId: { in: tmdbIds } },
+      include: {
+        collections: true,
+        watchHistory: true,
+        episodeWatchHistory: true
+      }
+    });
+    
+    const localMediaMap = {};
+    for (const media of localMediaList) {
+      localMediaMap[media.tmdbId] = {
+        isCollected: media.collections.length > 0,
+        isWatched: media.watchHistory.length > 0,
+        localId: media.id
+      };
+    }
+    
+    const enrichedResults = results.map(item => {
+      const local = localMediaMap[item.id] || { isCollected: false, isWatched: false, localId: null };
+      return {
+        ...item,
+        isCollected: local.isCollected,
+        isWatched: local.isWatched,
+        localId: local.localId
+      };
+    });
+    
+    res.json(enrichedResults);
+  } catch (error) {
+    console.error('TMDB Search Error:', error.message);
+    res.status(500).json({ error: 'Failed to search TMDB' });
+  }
+});
+
+// Import from Trakt TV (real API import)
+router.post('/import-trakt', async (req, res) => {
+  const { username, clientId, mode } = req.body;
+
+  try {
+    // Real Trakt Import API
+    if (!username) {
+      return res.status(400).json({ error: 'Trakt username is required' });
+    }
+    const settings = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    const traktApiKey = clientId || settings?.traktClientId || process.env.TRAKT_CLIENT_ID || 'd83a151b72cccd41c88806283db87cc4f56f1837ff44821815b3e24e10b14643';
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': traktApiKey,
+      'User-Agent': 'TVTracker/1.0'
+    };
+    const tmdbApiKey = settings?.tmdbApiKey;
+
+    const getMediaData = async (tmdbId, type) => {
+      if (!tmdbApiKey) return { title: `${type} #${tmdbId}` };
+      try {
+        const data = await fetchTMDB(`/3/${type}/${tmdbId}`, tmdbApiKey);
+        return {
+          title: data.title || data.name,
+          overview: data.overview || '',
+          releaseDate: data.release_date || data.first_air_date,
+          posterPath: data.poster_path
+        };
+      } catch (err) {
+        console.error(`Failed to fetch tmdb metadata:`, err.message);
+        return { title: `${type} #${tmdbId}` };
+      }
+    };
+
+    if (mode === 'collected') {
+      // A. Fetch movies collection
+      const movieCollRes = await axios.get(`https://api.trakt.tv/users/${username}/collection/movies`, { headers });
+      for (const item of movieCollRes.data) {
+        const tmdbId = item.movie.ids.tmdb;
+        if (!tmdbId) continue;
+        
+        // Skip if already in collection
+        const existingCollection = await prisma.collection.findFirst({
+          where: { media: { tmdbId, type: 'movie' } }
+        });
+        if (existingCollection) continue;
+
+        let media = await prisma.media.findFirst({ where: { tmdbId, type: 'movie' } });
+        if (!media) {
+          const details = await getMediaData(tmdbId, 'movie');
+          media = await getOrCreateMediaRecord({
+            tmdbId,
+            type: 'movie',
+            ...details
+          });
+        }
+        await prisma.collection.upsert({
+          where: { mediaId: media.id },
+          update: { collectedAt: item.collected_at ? new Date(item.collected_at) : new Date() },
+          create: { mediaId: media.id, collectedAt: item.collected_at ? new Date(item.collected_at) : new Date() }
+        });
+      }
+
+      // B. Fetch shows collection
+      const showCollRes = await axios.get(`https://api.trakt.tv/users/${username}/collection/shows`, { headers });
+      for (const item of showCollRes.data) {
+        const tmdbId = item.show.ids.tmdb;
+        if (!tmdbId) continue;
+
+        // Skip if already in collection
+        const existingCollection = await prisma.collection.findFirst({
+          where: { media: { tmdbId, type: 'tv' } }
+        });
+        if (existingCollection) continue;
+
+        let media = await prisma.media.findFirst({ where: { tmdbId, type: 'tv' } });
+        if (!media) {
+          const details = await getMediaData(tmdbId, 'tv');
+          media = await getOrCreateMediaRecord({
+            tmdbId,
+            type: 'tv',
+            ...details
+          });
+        }
+        await prisma.collection.upsert({
+          where: { mediaId: media.id },
+          update: { collectedAt: new Date() },
+          create: { mediaId: media.id, collectedAt: new Date() }
+        });
+
+        for (const season of item.seasons) {
+          for (const ep of season.episodes) {
+            await prisma.episodeCollection.upsert({
+              where: { mediaId_season_episode: { mediaId: media.id, season: season.number, episode: ep.number } },
+              update: { collectedAt: ep.collected_at ? new Date(ep.collected_at) : new Date() },
+              create: { mediaId: media.id, season: season.number, episode: ep.number, collectedAt: ep.collected_at ? new Date(ep.collected_at) : new Date() }
+            });
+          }
+        }
+      }
+
+      return res.json({ success: true, message: 'Successfully synced Trakt TV collections!' });
+
+    } else if (mode === 'watched') {
+      const allMedia = await prisma.media.findMany();
+      const movieTmdbIds = new Set(allMedia.filter(m => m.type === 'movie').map(m => m.tmdbId));
+      const tvTmdbIds = new Set(allMedia.filter(m => m.type === 'tv').map(m => m.tmdbId));
+
+      // A. Fetch movies watched
+      const movieWatchRes = await axios.get(`https://api.trakt.tv/users/${username}/watched/movies`, { headers });
+      for (const item of movieWatchRes.data) {
+        const tmdbId = item.movie.ids.tmdb;
+        if (!tmdbId || !movieTmdbIds.has(tmdbId)) continue;
+
+        const media = allMedia.find(m => m.tmdbId === tmdbId);
+        if (!media) continue;
+
+        const existingWatch = await prisma.watchHistory.findFirst({
+          where: { mediaId: media.id }
+        });
+        if (!existingWatch) {
+          await prisma.watchHistory.create({
+            data: { mediaId: media.id, watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date() }
+          });
+        }
+
+        const existingLog = await prisma.watchHistoryLog.findFirst({
+          where: { mediaId: media.id, type: 'movie', isCompleted: true }
+        });
+        if (!existingLog) {
+          await prisma.watchHistoryLog.create({
+            data: {
+              mediaId: media.id,
+              type: 'movie',
+              watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date(),
+              isCompleted: true,
+              duration: 0,
+              viewOffset: 0
+            }
+          });
+        }
+      }
+
+      // B. Fetch shows watched
+      const showWatchRes = await axios.get(`https://api.trakt.tv/users/${username}/watched/shows`, { headers });
+      for (const item of showWatchRes.data) {
+        const tmdbId = item.show.ids.tmdb;
+        if (!tmdbId || !tvTmdbIds.has(tmdbId)) continue;
+
+        const media = allMedia.find(m => m.tmdbId === tmdbId);
+        if (!media) continue;
+
+        for (const season of item.seasons) {
+          for (const ep of season.episodes) {
+            await prisma.episodeWatchHistory.upsert({
+              where: { mediaId_season_episode: { mediaId: media.id, season: season.number, episode: ep.number } },
+              update: { watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date() },
+              create: { mediaId: media.id, season: season.number, episode: ep.number, watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date() }
+            });
+
+            const existingLog = await prisma.watchHistoryLog.findFirst({
+              where: { mediaId: media.id, type: 'tv', season: season.number, episode: ep.number, isCompleted: true }
+            });
+            if (!existingLog) {
+              await prisma.watchHistoryLog.create({
+                data: {
+                  mediaId: media.id,
+                  type: 'tv',
+                  season: season.number,
+                  episode: ep.number,
+                  watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date(),
+                  isCompleted: true,
+                  duration: 0,
+                  viewOffset: 0
+                }
+              });
+            }
+          }
+        }
+        if (tmdbApiKey) {
+          await syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey);
+        }
+      }
+
+      return res.json({ success: true, message: 'Successfully synced Trakt TV watch histories!' });
+    } else {
+      return res.status(400).json({ error: 'Invalid sync mode specified' });
+    }
+  } catch (error) {
+    console.error('Trakt Import Error:', error.message);
+    if (error.response) {
+      const status = error.response.status;
+      const data = error.response.data;
+      const details = typeof data === 'string' ? data : JSON.stringify(data);
+      console.error(`Trakt API responded with status ${status}:`, details);
+      return res.status(status).json({
+        error: `Trakt Import failed: Request failed with status code ${status}. ${status === 403 ? 'Please verify your Trakt Client ID (API Key) under Advanced API Settings.' : details}`
+      });
+    }
+    res.status(500).json({ error: `Trakt Import failed: ${error.message}` });
+  }
+});
+
+// GET media conflicts (mismatched titles/years, unresolved details, or orphaned files)
+router.get('/conflicts', async (req, res) => {
+  try {
+    const mediaList = await prisma.media.findMany({
+      include: {
+        localFiles: true,
+        collections: true,
+        watchHistoryLogs: true,
+        listItems: true
+      }
+    });
+
+    const conflicts = [];
+
+    const getYear = (date) => {
+      if (!date) return null;
+      return new Date(date).getFullYear();
+    };
+
+    const cleanTitle = (str) => {
+      return str.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
+    };
+
+    const parseFilenameSimple = (filePath) => {
+      const filename = filePath.split(/[/\\]/).pop();
+      const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
+      
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/');
+
+      if (isTvPath) {
+        const parts = normalizedPath.split('/');
+        const tvIndex = parts.indexOf('tv');
+        let title = '';
+        if (tvIndex !== -1 && parts.length > tvIndex + 1) {
+          title = parts[tvIndex + 1];
+        } else {
+          title = nameWithoutExt;
+        }
+        
+        let season = 1;
+        let episode = 1;
+        let year = null;
+
+        if (parts.length >= 2) {
+          const parentFolder = parts[parts.length - 2];
+          const seasonMatch = parentFolder.match(/season\s*(\d{1,2})/i);
+          if (seasonMatch) {
+            season = parseInt(seasonMatch[1], 10);
+          }
+        }
+
+        const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})/i);
+        const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})/i);
+
+        if (tvMatch1) {
+          season = parseInt(tvMatch1[1], 10);
+          episode = parseInt(tvMatch1[2], 10);
+        } else if (tvMatch2) {
+          season = parseInt(tvMatch2[1], 10);
+          episode = parseInt(tvMatch2[2], 10);
+        }
+
+        const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+        if (yearMatch) {
+          year = parseInt(yearMatch[1], 10);
+        }
+
+        return {
+          type: 'tv',
+          title: cleanTitle(title),
+          season,
+          episode,
+          year
+        };
+      }
+
+      // Movie logic
+      let title = nameWithoutExt;
+      let year = null;
+      const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+      if (yearMatch) {
+        year = parseInt(yearMatch[1], 10);
+        title = nameWithoutExt.substring(0, nameWithoutExt.indexOf(yearMatch[0]));
+      }
+
+      return {
+        type: 'movie',
+        title: cleanTitle(title),
+        year
+      };
+    };
+
+    for (const media of mediaList) {
+      const mediaTitleClean = cleanTitle(media.title);
+      const mediaYear = getYear(media.releaseDate);
+
+      // Check 1: Missing metadata (no overview and no posterPath)
+      if (!media.overview && !media.posterPath) {
+        conflicts.push({
+          mediaId: media.id,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          type: media.type,
+          posterPath: media.posterPath,
+          releaseDate: media.releaseDate,
+          conflictType: 'missing_metadata',
+          message: 'Missing overview and poster artwork (unresolved details)',
+          files: media.localFiles.map(f => f.path)
+        });
+        continue;
+      }
+
+      // Check 2: No local files linked to collection or watch history
+      // Bypassed if item is present on any custom lists (e.g. Watchlist)
+      if (media.localFiles.length === 0 && media.listItems.length === 0) {
+        conflicts.push({
+          mediaId: media.id,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          type: media.type,
+          posterPath: media.posterPath,
+          releaseDate: media.releaseDate,
+          conflictType: 'no_files',
+          message: 'Orphaned media record (no local files linked on disk)',
+          files: []
+        });
+        continue;
+      }
+
+      // Check file mismatches
+      const yearMismatchedFiles = [];
+      const titleMismatchedFiles = [];
+      const yearValues = [];
+
+      for (const file of media.localFiles) {
+        if (file.manuallyCorrected) continue;
+        const parsed = parseFilenameSimple(file.path);
+        
+        // Check 3: Year Mismatch
+        if (parsed.year && mediaYear && parsed.year !== mediaYear) {
+          yearMismatchedFiles.push(file.path);
+          if (!yearValues.includes(parsed.year)) {
+            yearValues.push(parsed.year);
+          }
+        }
+
+        // Check 4: Title Mismatch
+        const fileWords = parsed.title.split(/\s+/).filter(w => w.length > 2 && w !== 'the' && w !== 'and' && w !== 'for');
+        const mediaWords = mediaTitleClean.split(/\s+/).filter(w => w.length > 2 && w !== 'the' && w !== 'and' && w !== 'for');
+        
+        const hasSubstring = parsed.title.includes(mediaTitleClean) || mediaTitleClean.includes(parsed.title);
+        const overlaps = fileWords.some(w => mediaWords.includes(w));
+
+        if (!hasSubstring && !overlaps && fileWords.length > 0 && mediaWords.length > 0) {
+          titleMismatchedFiles.push(file.path);
+        }
+      }
+
+      if (yearMismatchedFiles.length > 0) {
+        conflicts.push({
+          mediaId: media.id,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          type: media.type,
+          posterPath: media.posterPath,
+          releaseDate: media.releaseDate,
+          conflictType: 'year_mismatch',
+          message: `Year mismatch: File(s) have year ${yearValues.join(', ')}, TMDB has ${mediaYear}`,
+          files: yearMismatchedFiles
+        });
+      }
+
+      if (titleMismatchedFiles.length > 0) {
+        conflicts.push({
+          mediaId: media.id,
+          tmdbId: media.tmdbId,
+          title: media.title,
+          type: media.type,
+          posterPath: media.posterPath,
+          releaseDate: media.releaseDate,
+          conflictType: 'title_mismatch',
+          message: `Title mismatch: Filename parsed titles do not match TMDB title "${media.title}"`,
+          files: titleMismatchedFiles
+        });
+      }
+    }
+
+    res.json(conflicts);
+  } catch (error) {
+    console.error('Failed to get media conflicts:', error);
+    res.status(500).json({ error: 'Failed to get media conflicts' });
+  }
+});
+
+// GET collected movies
+router.get('/movies', async (req, res) => {
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    const tmdbApiKey = user?.tmdbApiKey;
+    const mediaList = await prisma.media.findMany({
+      where: {
+        type: 'movie',
+        OR: [
+          { collections: { some: {} } },
+          { listItems: { some: {} } }
+        ]
+      },
+      include: {
+        collections: true,
+        watchHistory: true
+      }
+    });
+
+    const movies = await Promise.all(mediaList.map(async (m) => {
+      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey);
+      const isWatched = healedMedia.watchHistory.length > 0;
+      const collectionEntry = healedMedia.collections[0];
+      
+      let backdropPath = null;
+      if (tmdbApiKey) {
+        try {
+          const data = await fetchTMDB(`/3/movie/${m.tmdbId}`, tmdbApiKey);
+          if (data) backdropPath = data.backdrop_path;
+        } catch (err) {
+          console.error(`Failed to fetch cached backdrop for movie ${m.tmdbId}:`, err.message);
+        }
+      }
+
+      return {
+        ...healedMedia,
+        collectedAt: collectionEntry ? collectionEntry.collectedAt : null,
+        isCollected: healedMedia.collections.length > 0,
+        isWatched,
+        watchHistory: healedMedia.watchHistory,
+        backdropPath
+      };
+    }));
+
+    res.json(movies);
+  } catch (error) {
+    console.error('Failed to fetch movies:', error);
+    res.status(500).json({ error: 'Failed to fetch movies' });
+  }
+});
+
+// GET collected shows
+router.get('/shows', async (req, res) => {
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    const tmdbApiKey = user?.tmdbApiKey;
+    const mediaList = await prisma.media.findMany({
+      where: {
+        type: 'tv',
+        OR: [
+          { collections: { some: {} } },
+          { listItems: { some: {} } }
+        ]
+      },
+      include: {
+        collections: true,
+        episodeWatchHistory: true,
+        episodeCollections: true
+      }
+    });
+
+    const shows = await Promise.all(mediaList.map(async (m) => {
+      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey);
+      let totalEpisodes = 0;
+      let totalSeasons = 0;
+      let backdropPath = null;
+
+      if (tmdbApiKey) {
+        try {
+          const tmdbRes = await fetchTMDB(`/3/tv/${healedMedia.tmdbId}`, tmdbApiKey);
+          totalEpisodes = tmdbRes.number_of_episodes || 0;
+          totalSeasons = tmdbRes.number_of_seasons || 0;
+          backdropPath = tmdbRes.backdrop_path;
+        } catch (err) {
+          console.error(`Failed to fetch TMDB details for TV show ${healedMedia.tmdbId}:`, err.message);
+        }
+      }
+
+      const watchedCount = healedMedia.episodeWatchHistory.length;
+      const collectedCount = healedMedia.episodeCollections.length;
+      const collectionEntry = healedMedia.collections[0];
+
+      return {
+        ...healedMedia,
+        collectedAt: collectionEntry ? collectionEntry.collectedAt : null,
+        isCollected: healedMedia.collections.length > 0,
+        watchedCount,
+        collectedCount,
+        totalEpisodes,
+        totalSeasons,
+        backdropPath
+      };
+    }));
+
+    res.json(shows);
+  } catch (error) {
+    console.error('Failed to fetch shows:', error);
+    res.status(500).json({ error: 'Failed to fetch shows' });
+  }
+});
+
+// GET TV show details (TMDB details + local watched/collected status details)
+router.get('/tv/:tmdbId', async (req, res) => {
+  const { tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId);
+
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const [tmdbData, creditsData, externalIdsData] = await Promise.all([
+      fetchTMDB(`/3/tv/${parsedId}`, user.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/credits`, user.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/external_ids`, user.tmdbApiKey)
+    ]);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        collections: true,
+        episodeCollections: true,
+        episodeWatchHistory: true
+      }
+    });
+
+    const isCollected = media ? media.collections.length > 0 : false;
+    const collectedEpisodes = media ? media.episodeCollections.map(e => ({ season: e.season, episode: e.episode })) : [];
+    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => ({ season: e.season, episode: e.episode })) : [];
+
+    res.json({
+      ...tmdbData,
+      cast: creditsData.cast?.slice(0, 10) || [],
+      external_ids: externalIdsData || {},
+      isCollected,
+      collectedEpisodes,
+      watchedEpisodes,
+      localId: media?.id
+    });
+  } catch (error) {
+    console.error('Failed to fetch TV details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch TV details' });
+  }
+});
+
+// GET movie details
+router.get('/movie/:tmdbId', async (req, res) => {
+  const { tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId);
+
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const [tmdbData, creditsData] = await Promise.all([
+      fetchTMDB(`/3/movie/${parsedId}`, user.tmdbApiKey),
+      fetchTMDB(`/3/movie/${parsedId}/credits`, user.tmdbApiKey)
+    ]);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'movie' },
+      include: {
+        collections: true,
+        watchHistory: true
+      }
+    });
+
+    const isCollected = media ? media.collections.length > 0 : false;
+    const isWatched = media ? media.watchHistory.length > 0 : false;
+
+    res.json({
+      ...tmdbData,
+      cast: creditsData.cast?.slice(0, 10) || [],
+      isCollected,
+      isWatched,
+      localId: media?.id
+    });
+  } catch (error) {
+    console.error('Failed to fetch movie details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch movie details' });
+  }
+});
+
+// GET TV season details (proxy season episodes merged with local watched/collected episode state)
+router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
+  const { tmdbId, seasonNumber } = req.params;
+  const parsedId = parseInt(tmdbId);
+  const parsedSeason = parseInt(seasonNumber);
+
+  try {
+    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}`, user.tmdbApiKey);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        episodeCollections: { where: { season: parsedSeason } },
+        episodeWatchHistory: { where: { season: parsedSeason } }
+      }
+    });
+
+    const collectedEpisodes = media ? media.episodeCollections.map(e => e.episode) : [];
+    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => e.episode) : [];
+
+    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
+    const tvCacheKey = `/3/tv/${parsedId}`;
+    const tvCache = await prisma.tMDBCache.findUnique({
+      where: { key: tvCacheKey }
+    });
+    const originCountries = tvCache?.data?.origin_country || [];
+
+    const episodes = tmdbData.episodes.map(ep => {
+      const airDateTime = getAiringDateTime(ep.air_date, originCountries);
+      return {
+        ...ep,
+        airDateTime,
+        isCollected: collectedEpisodes.includes(ep.episode_number),
+        isWatched: watchedEpisodes.includes(ep.episode_number)
+      };
+    });
+
+    res.json({
+      ...tmdbData,
+      episodes
+    });
+  } catch (error) {
+    console.error('Failed to fetch season details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch season details' });
+  }
+});
+
+// Toggle episode watch status
+router.post('/episode/watch', async (req, res) => {
+  const { tmdbId, season, episode, watched, title, posterPath } = req.body;
+  if (!tmdbId || season === undefined || episode === undefined) {
+    return res.status(400).json({ error: 'Missing required episode fields' });
+  }
+
+  try {
+    const media = await getOrCreateMediaRecord({ tmdbId, type: 'tv', title, posterPath });
+    const user = await prisma.settings.findFirst();
+
+    if (watched) {
+      const history = await prisma.episodeWatchHistory.upsert({
+        where: { mediaId_season_episode: { mediaId: media.id, season, episode } },
+        update: { watchedAt: new Date() },
+        create: { mediaId: media.id, season, episode, watchedAt: new Date() }
+      });
+      await prisma.watchHistoryLog.create({
+        data: {
+          mediaId: media.id,
+          type: 'tv',
+          season,
+          episode,
+          watchedAt: new Date(),
+          isCompleted: true,
+          duration: 0,
+          viewOffset: 0
+        }
+      });
+      if (user?.tmdbApiKey) {
+        await syncShowWatchHistory(media.id, media.tmdbId, user.tmdbApiKey);
+      }
+      res.json({ success: true, history });
+    } else {
+      await prisma.episodeWatchHistory.deleteMany({
+        where: { mediaId: media.id, season, episode }
+      });
+      await prisma.watchHistoryLog.deleteMany({
+        where: { mediaId: media.id, season, episode }
+      });
+      if (user?.tmdbApiKey) {
+        await syncShowWatchHistory(media.id, media.tmdbId, user.tmdbApiKey);
+      }
+      res.json({ success: true, removed: true });
+    }
+  } catch (error) {
+    console.error('Failed to toggle episode watch:', error);
+    res.status(500).json({ error: 'Failed to toggle episode watch status' });
+  }
+});
+
+// Toggle episode collect status
+router.post('/episode/collect', async (req, res) => {
+  const { tmdbId, season, episode, collected, title, posterPath } = req.body;
+  if (!tmdbId || season === undefined || episode === undefined) {
+    return res.status(400).json({ error: 'Missing required episode fields' });
+  }
+
+  try {
+    const media = await getOrCreateMediaRecord({ tmdbId, type: 'tv', title, posterPath });
+
+    if (collected) {
+      const coll = await prisma.episodeCollection.upsert({
+        where: { mediaId_season_episode: { mediaId: media.id, season, episode } },
+        update: { collectedAt: new Date() },
+        create: { mediaId: media.id, season, episode, collectedAt: new Date() }
+      });
+      res.json({ success: true, collection: coll });
+    } else {
+      await prisma.episodeCollection.deleteMany({
+        where: { mediaId: media.id, season, episode }
+      });
+      res.json({ success: true, removed: true });
+    }
+  } catch (error) {
+    console.error('Failed to toggle episode collection:', error);
+    res.status(500).json({ error: 'Failed to toggle episode collection status' });
+  }
+});
+
+// Mark Collected
+router.post('/collect', async (req, res) => {
+  const { tmdbId, type, title, overview, releaseDate, posterPath, collectedAt, remove } = req.body;
+  if (!tmdbId || !type || !title) return res.status(400).json({ error: 'Missing required media fields' });
+
+  try {
+    const media = await getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath });
+
+    if (remove) {
+      await prisma.collection.deleteMany({ where: { mediaId: media.id } });
+      res.json({ removed: true });
+    } else {
+      const collection = await prisma.collection.upsert({
+        where: { mediaId: media.id },
+        update: { collectedAt: collectedAt ? new Date(collectedAt) : new Date() },
+        create: { mediaId: media.id, collectedAt: collectedAt ? new Date(collectedAt) : new Date() }
+      });
+      res.json(collection);
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to collect media' });
+  }
+});
+
+// Mark Watched
+router.post('/watch', async (req, res) => {
+  const { tmdbId, type, title, overview, releaseDate, posterPath, watchedAt, remove } = req.body;
+  if (!tmdbId || !type || !title) return res.status(400).json({ error: 'Missing required media fields' });
+
+  try {
+    const media = await getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath });
+
+    if (remove) {
+      await prisma.watchHistory.deleteMany({ where: { mediaId: media.id } });
+      await prisma.watchHistoryLog.deleteMany({ where: { mediaId: media.id } });
+      res.json({ removed: true });
+    } else {
+      const history = await prisma.watchHistory.create({
+        data: { mediaId: media.id, watchedAt: watchedAt ? new Date(watchedAt) : new Date() }
+      });
+      await prisma.watchHistoryLog.create({
+        data: {
+          mediaId: media.id,
+          type: type,
+          watchedAt: watchedAt ? new Date(watchedAt) : new Date(),
+          isCompleted: true,
+          duration: 0,
+          viewOffset: 0
+        }
+      });
+      res.json(history);
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to record watch history' });
+  }
+});
+
+// POST force remove a Media record and all its associated data
+router.post('/force-remove', async (req, res) => {
+  const { tmdbId, type } = req.body;
+  if (!tmdbId || !type) {
+    return res.status(400).json({ error: 'Missing tmdbId or type' });
+  }
+
+  try {
+    const parsedId = parseInt(tmdbId, 10);
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type }
+    });
+
+    if (!media) {
+      return res.status(404).json({ error: 'Media record not found in database.' });
+    }
+
+    // Explicitly delete collections, watch histories, list items, episode watch history, episode collections, local files, and watch history logs to be database-agnostic
+    await prisma.collection.deleteMany({ where: { mediaId: media.id } });
+    await prisma.watchHistory.deleteMany({ where: { mediaId: media.id } });
+    await prisma.watchHistoryLog.deleteMany({ where: { mediaId: media.id } });
+    await prisma.listItem.deleteMany({ where: { mediaId: media.id } });
+    await prisma.episodeCollection.deleteMany({ where: { mediaId: media.id } });
+    await prisma.episodeWatchHistory.deleteMany({ where: { mediaId: media.id } });
+    await prisma.localFile.deleteMany({ where: { mediaId: media.id } });
+
+    // Now delete the Media record
+    await prisma.media.delete({ where: { id: media.id } });
+
+    res.json({ success: true, message: 'Media record permanently deleted from database.' });
+  } catch (error) {
+    console.error('Failed to force remove media:', error);
+    res.status(500).json({ error: `Failed to force remove media: ${error.message}` });
+  }
+});
+
+// GET active Plex playback session
+router.get('/plex-session', (req, res) => {
+  try {
+    const plexStore = require('../utils/plexStore');
+    res.json({ session: plexStore.getActiveSession() });
+  } catch (error) {
+    console.error('Failed to get Plex session:', error);
+    res.status(500).json({ error: 'Failed to get Plex session' });
+  }
+});
+
+// GET raw database details and associated files list
+router.get('/raw/:type/:tmdbId', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId);
+  try {
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type }
+    });
+    if (!media) {
+      return res.status(404).json({ error: 'Media not found in local database.' });
+    }
+    const files = await prisma.localFile.findMany({
+      where: { mediaId: media.id },
+      orderBy: [
+        { season: 'asc' },
+        { episode: 'asc' },
+        { path: 'asc' }
+      ]
+    });
+    res.json({ media, files });
+  } catch (error) {
+    console.error('Failed to get raw media info:', error);
+    res.status(500).json({ error: 'Failed to get raw media info.' });
+  }
+});
+
+// POST correct match for a Movie or TV Show
+router.post('/correct', async (req, res) => {
+  const { oldTmdbId, type, newTmdbId, imdbId, title, releaseYear } = req.body;
+  if (!oldTmdbId || !type) {
+    return res.status(400).json({ error: 'Missing oldTmdbId or type' });
+  }
+
+  try {
+    const user = await prisma.settings.findFirst();
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+    const apiKey = user.tmdbApiKey;
+
+    let targetTmdbId = newTmdbId ? parseInt(newTmdbId) : null;
+
+    // 1. Resolve IMDb ID if provided
+    if (!targetTmdbId && imdbId) {
+      const cleanImdbId = imdbId.trim();
+      const findRes = await fetchTMDB(`/3/find/${cleanImdbId}`, apiKey, { external_source: 'imdb_id' });
+      const results = type === 'movie' ? findRes.movie_results : findRes.tv_results;
+      if (results && results.length > 0) {
+        targetTmdbId = results[0].id;
+      } else {
+        return res.status(404).json({ error: `Could not find any ${type === 'movie' ? 'movie' : 'TV show'} matching IMDb ID ${cleanImdbId}` });
+      }
+    }
+
+    // 2. Resolve Title/Year search if targetTmdbId still not resolved
+    if (!targetTmdbId && title) {
+      const searchEndpoint = type === 'movie' ? '/3/search/movie' : '/3/search/tv';
+      const searchParams = { query: title.trim() };
+      if (releaseYear) {
+        if (type === 'movie') searchParams.primary_release_year = releaseYear;
+        else searchParams.first_air_date_year = releaseYear;
+      }
+      const searchRes = await fetchTMDB(searchEndpoint, apiKey, searchParams);
+      if (searchRes.results && searchRes.results.length > 0) {
+        targetTmdbId = searchRes.results[0].id;
+      } else {
+        return res.status(404).json({ error: `Could not find any ${type === 'movie' ? 'movie' : 'TV show'} matching "${title}"` });
+      }
+    }
+
+    if (!targetTmdbId) {
+      return res.status(400).json({ error: 'Could not resolve a target TMDB ID. Please provide TMDB ID, IMDb ID, or search details.' });
+    }
+
+    // 3. Find the old media record
+    let oldMedia = await prisma.media.findUnique({
+      where: { id: parseInt(oldTmdbId) }
+    });
+    if (!oldMedia) {
+      oldMedia = await prisma.media.findFirst({
+        where: { tmdbId: parseInt(oldTmdbId), type }
+      });
+    }
+    if (!oldMedia) {
+      return res.status(404).json({ error: 'Original media record not found in database.' });
+    }
+
+    // 4. Fetch the target media metadata from TMDB
+    const detailsEndpoint = type === 'movie' ? `/3/movie/${targetTmdbId}` : `/3/tv/${targetTmdbId}`;
+    const details = await fetchTMDB(detailsEndpoint, apiKey);
+    if (!details) {
+      return res.status(404).json({ error: `Failed to fetch metadata from TMDB for target ID ${targetTmdbId}` });
+    }
+
+    const newTitle = details.title || details.name;
+    const newOverview = details.overview || '';
+    const newReleaseDate = details.release_date || details.first_air_date ? new Date(details.release_date || details.first_air_date) : null;
+    const newPosterPath = details.poster_path || null;
+
+    // Check if a Media record with the new TMDB ID already exists
+    let newMedia = await prisma.media.findFirst({
+      where: { tmdbId: targetTmdbId, type }
+    });
+
+    if (newMedia) {
+      if (newMedia.id === oldMedia.id) {
+        await prisma.localFile.updateMany({
+          where: { mediaId: oldMedia.id },
+          data: { manuallyCorrected: true }
+        });
+        return res.json({ success: true, message: 'Media match confirmed and all files marked as corrected.', media: newMedia });
+      }
+
+      // Merge: move oldMedia's LocalFiles to newMedia
+      await prisma.localFile.updateMany({
+        where: { mediaId: oldMedia.id },
+        data: { mediaId: newMedia.id, manuallyCorrected: true }
+      });
+
+      // Move Collections
+      const oldColl = await prisma.collection.findUnique({ where: { mediaId: oldMedia.id } });
+      if (oldColl) {
+        const newColl = await prisma.collection.findUnique({ where: { mediaId: newMedia.id } });
+        if (!newColl) {
+          await prisma.collection.create({
+            data: { mediaId: newMedia.id, collectedAt: oldColl.collectedAt }
+          });
+        }
+        await prisma.collection.delete({ where: { id: oldColl.id } });
+      }
+
+      // Move WatchHistory
+      const oldWatchHistories = await prisma.watchHistory.findMany({ where: { mediaId: oldMedia.id } });
+      for (const wh of oldWatchHistories) {
+        await prisma.watchHistory.create({
+          data: { mediaId: newMedia.id, watchedAt: wh.watchedAt }
+        });
+      }
+      if (oldWatchHistories.length > 0) {
+        await prisma.watchHistory.deleteMany({ where: { mediaId: oldMedia.id } });
+      }
+
+      // Move Custom List Items
+      const oldListItems = await prisma.listItem.findMany({ where: { mediaId: oldMedia.id } });
+      for (const li of oldListItems) {
+        const existsInNew = await prisma.listItem.findUnique({
+          where: { listId_mediaId: { listId: li.listId, mediaId: newMedia.id } }
+        });
+        if (!existsInNew) {
+          await prisma.listItem.update({
+            where: { id: li.id },
+            data: { mediaId: newMedia.id }
+          });
+        } else {
+          await prisma.listItem.delete({
+            where: { id: li.id }
+          });
+        }
+      }
+
+      // For TV: move old media's episode collections, watched histories, and watch history logs (deduplicating to avoid constraint violations)
+      if (type === 'tv') {
+        const oldEpisodeCollections = await prisma.episodeCollection.findMany({ where: { mediaId: oldMedia.id } });
+        for (const ec of oldEpisodeCollections) {
+          const exists = await prisma.episodeCollection.findUnique({
+            where: {
+              mediaId_season_episode: {
+                mediaId: newMedia.id,
+                season: ec.season,
+                episode: ec.episode
+              }
+            }
+          });
+          if (!exists) {
+            await prisma.episodeCollection.update({
+              where: { id: ec.id },
+              data: { mediaId: newMedia.id }
+            });
+          } else {
+            await prisma.episodeCollection.delete({ where: { id: ec.id } });
+          }
+        }
+
+        const oldEpisodeWatchHistories = await prisma.episodeWatchHistory.findMany({ where: { mediaId: oldMedia.id } });
+        for (const ewh of oldEpisodeWatchHistories) {
+          const exists = await prisma.episodeWatchHistory.findUnique({
+            where: {
+              mediaId_season_episode: {
+                mediaId: newMedia.id,
+                season: ewh.season,
+                episode: ewh.episode
+              }
+            }
+          });
+          if (!exists) {
+            await prisma.episodeWatchHistory.update({
+              where: { id: ewh.id },
+              data: { mediaId: newMedia.id }
+            });
+          } else {
+            await prisma.episodeWatchHistory.delete({ where: { id: ewh.id } });
+          }
+        }
+
+        await prisma.watchHistoryLog.updateMany({
+          where: { mediaId: oldMedia.id },
+          data: { mediaId: newMedia.id }
+        });
+      } else {
+        // For Movie: update old media's watch history logs to point to new media id
+        await prisma.watchHistoryLog.updateMany({
+          where: { mediaId: oldMedia.id },
+          data: { mediaId: newMedia.id }
+        });
+      }
+
+      // Delete old media record
+      await prisma.media.delete({ where: { id: oldMedia.id } });
+      
+      // Sync watch history for the new show
+      if (type === 'tv') {
+        await syncShowWatchHistory(newMedia.id, newMedia.tmdbId, apiKey);
+      }
+      
+      await recreateCollectionsFromLocalFiles(newMedia.id, type);
+      
+      return res.json({ success: true, message: `Successfully matched and merged files into existing show "${newTitle}".`, media: newMedia });
+    } else {
+      // Update existing record to new TMDB ID and new metadata
+      const updatedMedia = await prisma.media.update({
+        where: { id: oldMedia.id },
+        data: {
+          tmdbId: targetTmdbId,
+          title: newTitle,
+          overview: newOverview,
+          releaseDate: newReleaseDate,
+          posterPath: newPosterPath
+        }
+      });
+      
+      // Mark all files linked to this media as manually corrected
+      await prisma.localFile.updateMany({
+        where: { mediaId: oldMedia.id },
+        data: { manuallyCorrected: true }
+      });
+
+      // Keep existing episode collections, watch history, and logs so they follow the metadata correction
+
+      await recreateCollectionsFromLocalFiles(updatedMedia.id, type);
+
+      return res.json({ success: true, message: `Successfully updated match to "${newTitle}".`, media: updatedMedia });
+    }
+  } catch (error) {
+    console.error('Error during media correction:', error);
+    res.status(500).json({ error: `Failed to correct media match: ${error.message}` });
+  }
+});
+
+// POST correct match for a specific file path (re-linking/separating it from old media to new/different media)
+router.post('/correct-file', async (req, res) => {
+  const { fileId, filePath, type, newTmdbId, imdbId, title, releaseYear } = req.body;
+  if ((fileId === undefined && !filePath) || !type) {
+    return res.status(400).json({ error: 'Missing fileId, filePath or type' });
+  }
+
+  try {
+    const user = await prisma.settings.findFirst();
+    if (!user || !user.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+    const apiKey = user.tmdbApiKey;
+
+    let targetTmdbId = newTmdbId ? parseInt(newTmdbId) : null;
+
+    // 1. Resolve IMDb ID if provided
+    if (!targetTmdbId && imdbId) {
+      const cleanImdbId = imdbId.trim();
+      const findRes = await fetchTMDB(`/3/find/${cleanImdbId}`, apiKey, { external_source: 'imdb_id' });
+      const results = type === 'movie' ? findRes.movie_results : findRes.tv_results;
+      if (results && results.length > 0) {
+        targetTmdbId = results[0].id;
+      } else {
+        return res.status(404).json({ error: `Could not find any ${type === 'movie' ? 'movie' : 'TV show'} matching IMDb ID ${cleanImdbId}` });
+      }
+    }
+
+    // 2. Resolve Title/Year search if targetTmdbId still not resolved
+    if (!targetTmdbId && title) {
+      const searchEndpoint = type === 'movie' ? '/3/search/movie' : '/3/search/tv';
+      const searchParams = { query: title.trim() };
+      if (releaseYear) {
+        if (type === 'movie') searchParams.primary_release_year = releaseYear;
+        else searchParams.first_air_date_year = releaseYear;
+      }
+      const searchRes = await fetchTMDB(searchEndpoint, apiKey, searchParams);
+      if (searchRes.results && searchRes.results.length > 0) {
+        targetTmdbId = searchRes.results[0].id;
+      } else {
+        return res.status(404).json({ error: `Could not find any ${type === 'movie' ? 'movie' : 'TV show'} matching "${title}"` });
+      }
+    }
+
+    if (!targetTmdbId) {
+      return res.status(400).json({ error: 'Could not resolve a target TMDB ID. Please provide TMDB ID, IMDb ID, or search details.' });
+    }
+
+    // 3. Find the specific local file record
+    let file = null;
+    if (fileId !== undefined) {
+      file = await prisma.localFile.findUnique({
+        where: { id: parseInt(fileId) },
+        include: { media: true }
+      });
+    } else if (filePath) {
+      file = await prisma.localFile.findUnique({
+        where: { path: filePath },
+        include: { media: true }
+      });
+    }
+
+    if (!file) {
+      return res.status(404).json({ error: 'Local file record not found in database.' });
+    }
+
+    const oldMediaId = file.mediaId;
+    const oldMedia = file.media;
+
+    // 4. Fetch the target media metadata from TMDB
+    const detailsEndpoint = type === 'movie' ? `/3/movie/${targetTmdbId}` : `/3/tv/${targetTmdbId}`;
+    const details = await fetchTMDB(detailsEndpoint, apiKey);
+    if (!details) {
+      return res.status(404).json({ error: `Failed to fetch metadata from TMDB for target ID ${targetTmdbId}` });
+    }
+
+    const newTitle = details.title || details.name;
+    const newOverview = details.overview || '';
+    const newReleaseDate = details.release_date || details.first_air_date ? new Date(details.release_date || details.first_air_date) : null;
+    const newPosterPath = details.poster_path || null;
+
+    // 5. Check if a Media record with the new TMDB ID already exists
+    let targetMedia = await prisma.media.findFirst({
+      where: { tmdbId: targetTmdbId, type }
+    });
+
+    if (!targetMedia) {
+      targetMedia = await prisma.media.create({
+        data: {
+          tmdbId: targetTmdbId,
+          type,
+          title: newTitle,
+          overview: newOverview,
+          releaseDate: newReleaseDate,
+          posterPath: newPosterPath
+        }
+      });
+    }
+
+    // Parse the file path using the scanner helper logic to extract season/episode if it is TV
+    let season = null;
+    let episode = null;
+    if (type === 'tv') {
+      const filename = file.path.split(/[/\\]/).pop();
+      const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
+      const normalizedPath = file.path.replace(/\\/g, '/');
+      const parts = normalizedPath.split('/');
+      
+      season = 1;
+      episode = 1;
+      
+      if (parts.length >= 2) {
+        const parentFolder = parts[parts.length - 2];
+        const seasonMatch = parentFolder.match(/season\s*(\d{1,2})/i);
+        if (seasonMatch) {
+          season = parseInt(seasonMatch[1], 10);
+        }
+      }
+
+      const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})/i);
+      const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})/i);
+
+      if (tvMatch1) {
+        season = parseInt(tvMatch1[1], 10);
+        episode = parseInt(tvMatch1[2], 10);
+      } else if (tvMatch2) {
+        season = parseInt(tvMatch2[1], 10);
+        episode = parseInt(tvMatch2[2], 10);
+      } else {
+        const epMatch = nameWithoutExt.match(/(?:ep|episode|e)[. _-]*(\d{1,2})/i);
+        if (epMatch) {
+          episode = parseInt(epMatch[1], 10);
+        } else {
+          const numMatch = nameWithoutExt.match(/\b(\d{1,2})\b/);
+          if (numMatch) {
+            episode = parseInt(numMatch[1], 10);
+          }
+        }
+      }
+    }
+
+    // 6. Update the file to point to the target media record
+    await prisma.localFile.update({
+      where: { id: file.id },
+      data: {
+        mediaId: targetMedia.id,
+        season,
+        episode,
+        manuallyCorrected: true
+      }
+    });
+
+    if (type === 'tv' && season !== null && episode !== null) {
+      // Migrate specific EpisodeCollection if it exists
+      const oldEc = await prisma.episodeCollection.findUnique({
+        where: {
+          mediaId_season_episode: {
+            mediaId: oldMediaId,
+            season,
+            episode
+          }
+        }
+      });
+      if (oldEc) {
+        const exists = await prisma.episodeCollection.findUnique({
+          where: {
+            mediaId_season_episode: {
+              mediaId: targetMedia.id,
+              season,
+              episode
+            }
+          }
+        });
+        if (!exists) {
+          await prisma.episodeCollection.update({
+            where: { id: oldEc.id },
+            data: { mediaId: targetMedia.id }
+          });
+        } else {
+          await prisma.episodeCollection.delete({ where: { id: oldEc.id } });
+        }
+      }
+
+      // Migrate specific EpisodeWatchHistory if it exists
+      const oldEwh = await prisma.episodeWatchHistory.findUnique({
+        where: {
+          mediaId_season_episode: {
+            mediaId: oldMediaId,
+            season,
+            episode
+          }
+        }
+      });
+      if (oldEwh) {
+        const exists = await prisma.episodeWatchHistory.findUnique({
+          where: {
+            mediaId_season_episode: {
+              mediaId: targetMedia.id,
+              season,
+              episode
+            }
+          }
+        });
+        if (!exists) {
+          await prisma.episodeWatchHistory.update({
+            where: { id: oldEwh.id },
+            data: { mediaId: targetMedia.id }
+          });
+        } else {
+          await prisma.episodeWatchHistory.delete({ where: { id: oldEwh.id } });
+        }
+      }
+
+      // Migrate WatchHistoryLogs for this episode
+      await prisma.watchHistoryLog.updateMany({
+        where: {
+          mediaId: oldMediaId,
+          type: 'tv',
+          season,
+          episode
+        },
+        data: {
+          mediaId: targetMedia.id
+        }
+      });
+    }
+
+    // 7. Update collection statuses for both old and target media
+    await recreateCollectionsFromLocalFiles(oldMediaId, oldMedia.type);
+    await recreateCollectionsFromLocalFiles(targetMedia.id, type);
+
+    // Sync watch histories
+    if (type === 'tv') {
+      await syncShowWatchHistory(targetMedia.id, targetMedia.tmdbId, apiKey);
+    }
+    if (oldMedia.type === 'tv') {
+      await syncShowWatchHistory(oldMediaId, oldMedia.tmdbId, apiKey);
+    }
+
+    // 8. Auto-cleanup: if old media has no local files left AND no watch logs and no collections, delete it!
+    const remainingFiles = await prisma.localFile.count({ where: { mediaId: oldMediaId } });
+    if (remainingFiles === 0) {
+      const remainingCollections = await prisma.collection.count({ where: { mediaId: oldMediaId } });
+      const remainingLogs = await prisma.watchHistoryLog.count({ where: { mediaId: oldMediaId } });
+      if (remainingCollections === 0 && remainingLogs === 0) {
+        await prisma.media.delete({ where: { id: oldMediaId } });
+        console.log(`[Correct File] Cleaned up empty orphaned media ID: ${oldMediaId}`);
+      }
+    }
+
+    res.json({ success: true, message: `Successfully re-matched file to "${newTitle}".`, media: targetMedia });
+  } catch (error) {
+    console.error('Error during file correction:', error);
+    res.status(500).json({ error: `Failed to correct file match: ${error.message}` });
+  }
+});
+
+// GET complete watch history
+router.get('/watch-history', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const type = req.query.type || 'all'; // 'all', 'movie', 'tv'
+    const includePartial = req.query.includePartial === 'true';
+    const search = req.query.search || '';
+    const startDate = req.query.startDate || '';
+    const endDate = req.query.endDate || '';
+    const genre = req.query.genre || '';
+
+    const skip = (page - 1) * limit;
+
+    const where = {};
+    if (type !== 'all') {
+      where.type = type;
+    }
+    if (!includePartial) {
+      where.isCompleted = true;
+    }
+
+    if (req.query.mediaId) {
+      where.mediaId = parseInt(req.query.mediaId);
+    }
+    if (req.query.season) {
+      where.season = parseInt(req.query.season);
+    }
+    if (req.query.episode) {
+      where.episode = parseInt(req.query.episode);
+    }
+
+    if (startDate || endDate) {
+      where.watchedAt = {};
+      if (startDate) {
+        where.watchedAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.watchedAt.lte = end;
+      }
+    }
+
+    if (search || genre) {
+      where.media = {};
+      if (search) {
+        where.media.title = {
+          contains: search,
+          mode: 'insensitive'
+        };
+      }
+      if (genre) {
+        where.media.genres = {
+          contains: genre,
+          mode: 'insensitive'
+        };
+      }
+    }
+
+    const [logs, total] = await Promise.all([
+      prisma.watchHistoryLog.findMany({
+        where,
+        include: {
+          media: {
+            select: {
+              title: true,
+              posterPath: true,
+              tmdbId: true,
+              genres: true
+            }
+          }
+        },
+        orderBy: { watchedAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.watchHistoryLog.count({ where })
+    ]);
+
+    // Extract unique genres from all media for the dropdown
+    const mediaWithGenres = await prisma.media.findMany({
+      where: {
+        genres: { not: null }
+      },
+      select: { genres: true }
+    });
+
+    const uniqueGenresSet = new Set();
+    mediaWithGenres.forEach(m => {
+      if (m.genres) {
+        m.genres.split(',').forEach(g => {
+          const clean = g.trim();
+          if (clean) uniqueGenresSet.add(clean);
+        });
+      }
+    });
+    
+    const uniqueGenres = Array.from(uniqueGenresSet).sort();
+
+    res.json({
+      logs,
+      genres: uniqueGenres,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Failed to get watch history logs:', error);
+    res.status(500).json({ error: 'Failed to get watch history logs' });
+  }
+});
+
+// DELETE a watch history entry
+router.delete('/watch-history/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
+
+  try {
+    const log = await prisma.watchHistoryLog.findUnique({ where: { id } });
+    if (!log) return res.status(404).json({ error: 'Watch history entry not found' });
+
+    // Delete from WatchHistoryLog first
+    await prisma.watchHistoryLog.delete({ where: { id } });
+
+    // Synchronize deletion with old watch history tables
+    if (log.type === 'movie') {
+      // Find a matching WatchHistory record close to the log's watchedAt
+      let match = await prisma.watchHistory.findFirst({
+        where: {
+          mediaId: log.mediaId,
+          watchedAt: {
+            gte: new Date(log.watchedAt.getTime() - 60000),
+            lte: new Date(log.watchedAt.getTime() + 60000)
+          }
+        }
+      });
+      // Fallback: find the one closest in time
+      if (!match) {
+        const allHistories = await prisma.watchHistory.findMany({
+          where: { mediaId: log.mediaId }
+        });
+        if (allHistories.length > 0) {
+          allHistories.sort((a, b) => Math.abs(a.watchedAt.getTime() - log.watchedAt.getTime()) - Math.abs(b.watchedAt.getTime() - log.watchedAt.getTime()));
+          match = allHistories[0];
+        }
+      }
+      if (match) {
+        await prisma.watchHistory.delete({ where: { id: match.id } });
+        console.log(`[Sync Delete] Deleted matching WatchHistory record for movie ID ${log.mediaId}`);
+      }
+    } else if (log.type === 'tv' && log.isCompleted) {
+      // Check if there are other completed watch logs for this episode
+      const otherLogs = await prisma.watchHistoryLog.findFirst({
+        where: {
+          mediaId: log.mediaId,
+          type: 'tv',
+          season: log.season,
+          episode: log.episode,
+          isCompleted: true
+        }
+      });
+      // If no other completed watch logs exist, delete from EpisodeWatchHistory
+      if (!otherLogs) {
+        await prisma.episodeWatchHistory.deleteMany({
+          where: {
+            mediaId: log.mediaId,
+            season: log.season,
+            episode: log.episode
+          }
+        });
+        console.log(`[Sync Delete] Deleted EpisodeWatchHistory record for S${log.season}E${log.episode} of show ID ${log.mediaId}`);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete watch history log:', error);
+    res.status(500).json({ error: 'Failed to delete watch history log' });
+  }
+});
+
+// Get media details (local stats fallback)
+router.get('/:tmdbId', async (req, res) => {
+  const { tmdbId } = req.params;
+  const media = await prisma.media.findFirst({
+    where: { tmdbId: parseInt(tmdbId) },
+    include: { collections: true, watchHistory: { orderBy: { watchedAt: 'desc' } } }
+  });
+  
+  if (!media) return res.json(null);
+  res.json(media);
+});
+
+async function recreateCollectionsFromLocalFiles(mediaId, type) {
+  try {
+    const files = await prisma.localFile.findMany({
+      where: { mediaId }
+    });
+
+    if (files.length === 0) return;
+
+    // Ensure the main Collection entry exists
+    await prisma.collection.upsert({
+      where: { mediaId },
+      update: {},
+      create: { mediaId }
+    });
+
+    if (type === 'tv') {
+      for (const file of files) {
+        if (file.season !== null && file.episode !== null) {
+          await prisma.episodeCollection.upsert({
+            where: {
+              mediaId_season_episode: {
+                mediaId,
+                season: file.season,
+                episode: file.episode
+              }
+            },
+            update: {},
+            create: {
+              mediaId,
+              season: file.season,
+              episode: file.episode
+            }
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`Failed to recreate collections from local files for mediaId ${mediaId}:`, err);
+  }
+}
+
+module.exports = router;

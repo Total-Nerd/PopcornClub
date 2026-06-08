@@ -1,0 +1,146 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Settings {
+  id             Int      @id @default(1)
+  username       String   @unique
+  passwordHash   String
+  plexUser       String?
+  tmdbApiKey     String?
+  traktUsername  String?
+  traktClientId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Media {
+  id                  Int                  @id @default(autoincrement())
+  tmdbId              Int
+  type                String               // "movie" or "tv"
+  title               String
+  overview            String?
+  releaseDate         DateTime?
+  posterPath          String?
+  genres              String?
+  
+  collections         Collection[]
+  watchHistory        WatchHistory[]
+  listItems           ListItem[]
+  episodeCollections  EpisodeCollection[]
+  episodeWatchHistory EpisodeWatchHistory[]
+  localFiles          LocalFile[]
+  watchHistoryLogs    WatchHistoryLog[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([tmdbId, type])
+}
+
+model WatchHistoryLog {
+  id          Int      @id @default(autoincrement())
+  mediaId     Int
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  type        String   // "movie" or "tv"
+  season      Int?     // TV only
+  episode     Int?     // TV only
+  watchedAt   DateTime @default(now())
+  duration    Int      @default(0) // total duration in seconds
+  viewOffset  Int      @default(0) // offset/progress in seconds
+  isCompleted Boolean  @default(true) // true = full watch, false = partial watch
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Collection {
+  id         Int      @id @default(autoincrement())
+  mediaId    Int      @unique
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  collectedAt DateTime @default(now())
+}
+
+model WatchHistory {
+  id         Int      @id @default(autoincrement())
+  mediaId    Int
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  watchedAt  DateTime @default(now())
+}
+
+model EpisodeCollection {
+  id          Int      @id @default(autoincrement())
+  mediaId     Int
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season      Int
+  episode     Int
+  collectedAt DateTime @default(now())
+
+  @@unique([mediaId, season, episode])
+}
+
+model EpisodeWatchHistory {
+  id        Int      @id @default(autoincrement())
+  mediaId   Int
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season    Int
+  episode   Int
+  watchedAt DateTime @default(now())
+
+  @@unique([mediaId, season, episode])
+}
+
+model CustomList {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  items     ListItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model ListItem {
+  id           Int        @id @default(autoincrement())
+  listId       Int
+  list         CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  mediaId      Int
+  media        Media      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  addedAt      DateTime   @default(now())
+
+  @@unique([listId, mediaId])
+}
+
+model TMDBCache {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+model LocalFolder {
+  id        Int      @id @default(autoincrement())
+  path      String   @unique
+  type      String   // "movie" or "tv"
+  watch     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LocalFile {
+  id            Int          @id @default(autoincrement())
+  path          String       @unique
+  type          String       // "movie" or "tv"
+  mediaId       Int
+  media         Media        @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season        Int?         // TV only
+  episode       Int?         // TV only
+  lastSeen          DateTime     @default(now())
+  missingSince      DateTime?    // Track when deleted to implement the 12-hour removal rule
+  manuallyCorrected Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}

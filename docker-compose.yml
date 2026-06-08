@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: tvtracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tvtracker
+      POSTGRES_PASSWORD: tvtracker_password
+      POSTGRES_DB: tvtracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    container_name: tvtracker-backend
+    restart: unless-stopped
+    ports:
+      - "3002:3001"
+    environment:
+      DATABASE_URL: "postgresql://tvtracker:tvtracker_password@db:5432/tvtracker?schema=public"
+      PORT: 3001
+      JWT_SECRET: "supersecretkey_change_in_production"
+      TMDB_API_KEY: "7edc57c4c9b73aa990f5b4230d569014"
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - G:\Movies:/movies
+      - G:\TV Shows:/tv
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: tvtracker-frontend
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

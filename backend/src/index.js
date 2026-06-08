@@ -1,0 +1,60 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middlewares
+app.use(cors());
+app.use(express.json());
+app.use(morgan('dev'));
+
+const authRoutes = require('./routes/auth');
+const settingsRoutes = require('./routes/settings');
+const mediaRoutes = require('./routes/media');
+const listsRoutes = require('./routes/lists');
+const calendarRoutes = require('./routes/calendar');
+const foldersRoutes = require('./routes/folders');
+const { initFolderScanner } = require('./utils/folderScanner');
+const { seedWatchHistoryLogs, backfillMediaGenres } = require('./utils/historyMigration');
+
+// Basic route
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date() });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/media', mediaRoutes);
+app.use('/api/lists', listsRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/folders', foldersRoutes);
+
+const plexRoutes = require('./routes/plex');
+
+app.use('/api/webhook/plex', plexRoutes);
+
+// Start Server
+app.listen(PORT, async () => {
+  console.log(`TVTracker backend running on port ${PORT}`);
+  try {
+    await seedWatchHistoryLogs();
+    backfillMediaGenres().catch(err => console.error('Failed to backfill media genres:', err));
+    
+    const prisma = require('./prismaClient');
+    await prisma.customList.upsert({
+      where: { name: 'Watchlist' },
+      update: {},
+      create: { name: 'Watchlist' }
+    });
+    console.log('Ensured default Watchlist exists.');
+  } catch (err) {
+    console.error('Failed to run watch history migration:', err);
+  }
+  initFolderScanner().catch(err => console.error('Failed to initialize folder scanner:', err));
+});
