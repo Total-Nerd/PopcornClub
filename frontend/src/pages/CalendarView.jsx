@@ -60,6 +60,16 @@ const CalendarView = () => {
   const [loading, setLoading] = useState(true);
   const [isOfflineMode, setIsOfflineMode] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
   const [expandedStacks, setExpandedStacks] = useState({});
+  const [isMobile, setIsMobile] = useState(false);
+  const [selectedMobileDate, setSelectedMobileDate] = useState(new Date());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleStackExpand = (id) => {
     setExpandedStacks(prev => ({
@@ -327,6 +337,183 @@ const CalendarView = () => {
 
   const weekDaysHeader = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+  const renderEventCard = (ev) => {
+    const isWatched = ev.isWatched;
+    const poster = ev.type === 'tv' ? ev.showPoster : ev.posterPath;
+    const title = ev.type === 'tv' ? ev.showTitle : ev.title;
+
+    const totalCount = ev.isStacked ? ev.originalEpisodes.length : 1;
+    const watchedCount = ev.isStacked ? ev.originalEpisodes.filter(e => e.isWatched).length : (ev.isWatched ? 1 : 0);
+    const collectedCount = ev.isStacked ? ev.originalEpisodes.filter(e => e.isCollected).length : (ev.isCollected ? 1 : 0);
+
+    // Button labels
+    let collectLabel = 'Collect';
+    if (ev.isStacked) {
+      if (collectedCount === totalCount) {
+        collectLabel = 'Collected All';
+      } else if (collectedCount === 0) {
+        collectLabel = 'Collect All';
+      } else {
+        collectLabel = `Collected ${collectedCount}/${totalCount}`;
+      }
+    } else {
+      collectLabel = ev.isCollected ? 'Collected' : 'Collect';
+    }
+
+    let watchLabel = 'Watch';
+    if (ev.isStacked) {
+      if (watchedCount === totalCount) {
+        watchLabel = 'Watched All';
+      } else if (watchedCount === 0) {
+        watchLabel = 'Watch All';
+      } else {
+        watchLabel = `Watched ${watchedCount}/${totalCount}`;
+      }
+    } else {
+      watchLabel = ev.isWatched ? 'Watched' : 'Watch';
+    }
+
+    return (
+      <div
+        key={ev.id}
+        className={`glass-panel ${ev.isStacked ? 'calendar-card-stacked' : ''}`}
+        onClick={() => {
+          if (ev.isStacked) {
+            toggleStackExpand(ev.id);
+          } else {
+            handleOpenDetails(ev);
+          }
+        }}
+        style={{
+          padding: '10px',
+          fontSize: '1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          cursor: 'pointer',
+          background: isWatched ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '8px',
+          marginRight: '0px',
+          marginBottom: ev.isStacked ? '8px' : '0px',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: '290px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
+          {poster ? (
+            <img
+              src={`https://image.tmdb.org/t/p/w185${poster}`}
+              alt={title}
+              style={{ width: '60px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+            />
+          ) : (
+            <div style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
+            <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {title}
+            </div>
+            {ev.type === 'tv' ? (
+              <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
+                {ev.localTimeStr && (
+                  <>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{ev.localTimeStr}</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: '#c084fc', fontWeight: '500', fontSize: '0.95rem', marginTop: '2px' }}>
+                Movie Release
+              </div>
+            )}
+          </div>
+          {ev.isStacked && (
+            <Layers size={14} style={{ color: 'var(--text-muted)', position: 'absolute', top: 0, right: 0 }} />
+          )}
+        </div>
+
+        {ev.isStacked && expandedStacks[ev.id] && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+            {ev.originalEpisodes.map(subEv => (
+              <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => handleOpenDetails(subEv)}>
+                  S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => handleToggleCollect('collect', subEv)}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '4px 6px',
+                      fontSize: '0.8rem',
+                      background: subEv.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isCollected ? 'var(--success)' : 'var(--text-muted)'
+                    }}
+                  >
+                    {subEv.isCollected ? 'Collected' : 'Collect'}
+                  </button>
+                  <button
+                    onClick={() => handleToggleWatch('watch', subEv)}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '4px 6px',
+                      fontSize: '0.8rem',
+                      background: subEv.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isWatched ? 'var(--accent)' : 'var(--text-muted)'
+                    }}
+                  >
+                    {subEv.isWatched ? 'Watched' : 'Watch'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifySelf: 'flex-end', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => handleToggleCollect('collect', ev)}
+            className="btn btn-secondary"
+            style={{
+              padding: '6px 8px',
+              fontSize: '0.9rem',
+              background: ev.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+              color: ev.isCollected ? 'var(--success)' : 'var(--text-muted)',
+              flex: 1,
+              justifyContent: 'center'
+            }}
+          >
+            {collectLabel}
+          </button>
+          <button
+            onClick={() => handleToggleWatch('watch', ev)}
+            className="btn btn-secondary"
+            style={{
+              padding: '6px 8px',
+              fontSize: '0.9rem',
+              background: ev.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+              color: ev.isWatched ? 'var(--accent)' : 'var(--text-muted)',
+              flex: 1,
+              justifyContent: 'center'
+            }}
+          >
+            {watchLabel}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const selectedDateStr = format(selectedMobileDate, 'yyyy-MM-dd');
+  const selectedDayEvents = filteredEvents.filter(e => e.localDateStr === selectedDateStr);
+
   return (
     <div style={{ width: '100%' }}>
 
@@ -452,306 +639,235 @@ const CalendarView = () => {
         </div>
       )}
 
-      {/* -------------------- MONTH VIEW GRID -------------------- */}
+      {/* -------------------- MONTH VIEW -------------------- */}
       {viewMode === 'month' && (
-        <div className="glass-panel" style={{ padding: '16px', borderRadius: '16px' }}>
+        isMobile ? (
+          /* Mobile Month View: Full Screen Grid with Dots + Selected Day List */
+          <div>
+            <div className="mobile-calendar-grid">
+              {weekDaysHeader.map(day => (
+                <div key={day} className="mobile-calendar-header-day">{day.substring(0, 1)}</div>
+              ))}
+              {getMonthDays().map((day, idx) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
+                const isToday = isSameDay(day, new Date());
+                const isSelected = isSameDay(day, selectedMobileDate);
+                const isCurrentMonth = day.getMonth() === currentDate.getMonth();
 
-          {/* Weekday headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '8px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            {weekDaysHeader.map(day => <div key={day}>{day}</div>)}
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedMobileDate(day)}
+                    className={`mobile-calendar-day-cell ${isToday ? 'is-today' : ''} ${isSelected ? 'selected' : ''} ${!isCurrentMonth ? 'other-month' : ''}`}
+                  >
+                    <span className="mobile-calendar-day-number">
+                      {day.getDate()}
+                    </span>
+                    <div className="mobile-calendar-dots-row">
+                      {dayEvents.slice(0, 4).map((ev, dIdx) => {
+                        let dotClass = 'tv';
+                        if (ev.isWatched) {
+                          dotClass = 'watched';
+                        } else if (ev.type === 'movie') {
+                          dotClass = 'movie';
+                        }
+                        return (
+                          <div key={ev.id || dIdx} className={`mobile-calendar-dot ${dotClass}`} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Selected Day Agenda view panel */}
+            <div className="mobile-day-details-panel">
+              <h3 className="mobile-day-details-title">
+                Releases on {format(selectedMobileDate, 'EEEE, MMM d')}
+              </h3>
+              {selectedDayEvents.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '16px 8px' }}>
+                  No releases or airings scheduled for this day.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {groupDayEvents(selectedDayEvents).map(ev => renderEventCard(ev))}
+                </div>
+              )}
+            </div>
           </div>
+        ) : (
+          /* Desktop Month View */
+          <div className="glass-panel" style={{ padding: '16px', borderRadius: '16px' }}>
+            {/* Weekday headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '8px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              {weekDaysHeader.map(day => <div key={day}>{day}</div>)}
+            </div>
 
-          {/* Days grid */}
-          <div className="calendar-month-grid">
-            {getMonthDays().map((day, idx) => {
+            {/* Days grid */}
+            <div className="calendar-month-grid">
+              {getMonthDays().map((day, idx) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
+                const isToday = isSameDay(day, new Date());
+                const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+
+                return (
+                  <div
+                    key={idx}
+                    className={`calendar-month-day ${isToday ? 'is-today' : ''} ${dayEvents.length === 0 ? 'is-empty' : ''}`}
+                    style={{ opacity: isCurrentMonth ? 1 : 0.35 }}
+                  >
+                    <span style={{
+                      fontSize: '0.85rem',
+                      fontWeight: isToday ? '700' : '500',
+                      color: isToday ? 'var(--accent)' : 'var(--text-main)',
+                      alignSelf: 'flex-start',
+                      marginBottom: '6px'
+                    }}>
+                      {day.getDate()}
+                    </span>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, overflowY: 'auto' }}>
+                      {groupDayEvents(dayEvents).map(ev => {
+                        const isWatched = ev.isWatched;
+                        return (
+                          <div
+                            key={ev.id}
+                            onClick={() => handleOpenDetails(ev)}
+                            style={{
+                              padding: '4px 6px',
+                              background: ev.type === 'tv'
+                                ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.15)')
+                                : 'rgba(167, 139, 250, 0.15)',
+                              border: ev.type === 'tv'
+                                ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(59,130,246,0.2)')
+                                : '1px solid rgba(167,139,250,0.2)',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : '#60a5fa') : '#c084fc',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                            title={ev.type === 'tv'
+                              ? `${ev.localTimeStr ? `[${ev.localTimeStr}] ` : ''}${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`
+                              : ev.title}
+                          >
+                            {ev.type === 'tv' ? <Tv size={10} /> : <Film size={10} />}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {ev.type === 'tv' ? (
+                                <>
+                                  {ev.localTimeStr && <span style={{ color: 'var(--text-muted)', marginRight: '4px', fontSize: '0.7rem' }}>[{ev.localTimeStr}]</span>}
+                                  {ev.showTitle} ({ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`})
+                                </>
+                              ) : ev.title}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* -------------------- WEEK VIEW -------------------- */}
+      {viewMode === 'week' && (
+        isMobile ? (
+          /* Mobile Week View: Single Unified Agenda Feed with readable headers, empty days removed */
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {getWeekDays().map((day, idx) => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
-              const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+
+              // Agenda View: Hide empty days except if it's today
+              if (dayEvents.length === 0 && !isToday) return null;
 
               return (
-                <div
-                  key={idx}
-                  className={`calendar-month-day ${isToday ? 'is-today' : ''} ${dayEvents.length === 0 ? 'is-empty' : ''}`}
-                  style={{ opacity: isCurrentMonth ? 1 : 0.35 }}
-                >
-                  <span style={{
-                    fontSize: '0.85rem',
-                    fontWeight: isToday ? '700' : '500',
-                    color: isToday ? 'var(--accent)' : 'var(--text-main)',
-                    alignSelf: 'flex-start',
-                    marginBottom: '6px'
-                  }}>
-                    {day.getDate()}
-                  </span>
+                <div key={idx} style={{ marginBottom: '16px' }}>
+                  {/* Clean readable header: Mon, 8th June */}
+                  <div className={`mobile-agenda-day-header ${isToday ? 'is-today' : ''}`}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>
+                      {format(day, 'EEE, do MMMM')}
+                    </span>
+                    {isToday && <span className="mobile-agenda-today-badge">Today</span>}
+                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, overflowY: 'auto' }}>
-                    {groupDayEvents(dayEvents).map(ev => {
-                      const isWatched = ev.isWatched;
-                      return (
-                        <div
-                          key={ev.id}
-                          onClick={() => handleOpenDetails(ev)}
-                          style={{
-                            padding: '4px 6px',
-                            background: ev.type === 'tv'
-                              ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.15)')
-                              : 'rgba(167, 139, 250, 0.15)',
-                            border: ev.type === 'tv'
-                              ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(59,130,246,0.2)')
-                              : '1px solid rgba(167,139,250,0.2)',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: '500',
-                            color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : '#60a5fa') : '#c084fc',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}
-                          title={ev.type === 'tv'
-                            ? `${ev.localTimeStr ? `[${ev.localTimeStr}] ` : ''}${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`
-                            : ev.title}
-                        >
-                          {ev.type === 'tv' ? <Tv size={10} /> : <Film size={10} />}
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {ev.type === 'tv' ? (
-                              <>
-                                {ev.localTimeStr && <span style={{ color: 'var(--text-muted)', marginRight: '4px', fontSize: '0.7rem' }}>[{ev.localTimeStr}]</span>}
-                                {ev.showTitle} ({ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`})
-                              </>
-                            ) : ev.title}
-                          </span>
-                        </div>
-                      );
-                    })}
+                  <div className="mobile-agenda-events-list">
+                    {dayEvents.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', padding: '8px 12px' }}>
+                        No Releases Scheduled
+                      </div>
+                    ) : (
+                      groupDayEvents(dayEvents).map(ev => renderEventCard(ev))
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          /* Desktop Week View */
+          <div className="calendar-week-grid">
+            {getWeekDays().map((day, idx) => {
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
+              const isToday = isSameDay(day, new Date());
 
-      {/* -------------------- WEEK VIEW GRID -------------------- */}
-      {viewMode === 'week' && (
-        <div className="calendar-week-grid">
-          {getWeekDays().map((day, idx) => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
-            const isToday = isSameDay(day, new Date());
-
-            return (
-              <div
-                key={idx}
-                className={`calendar-week-column ${isToday ? 'is-today' : ''} ${dayEvents.length === 0 ? 'is-empty' : ''}`}
-              >
-                {/* Column header */}
-                <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>
-                    {weekDaysHeader[idx]}
-                  </div>
-                  <div style={{
-                    fontSize: '1.25rem',
-                    fontWeight: '700',
-                    color: isToday ? 'var(--accent)' : 'var(--text-main)',
-                    marginTop: '4px',
-                    display: 'inline-flex',
-                    width: '32px',
-                    height: '32px',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '50%',
-                    background: isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent'
-                  }}>
-                    {day.getDate()}
-                  </div>
-                </div>
-
-                {/* Event listings inside column */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                  {dayEvents.length === 0 ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
-                      No Airings
+              return (
+                <div
+                  key={idx}
+                  className={`calendar-week-column ${isToday ? 'is-today' : ''} ${dayEvents.length === 0 ? 'is-empty' : ''}`}
+                >
+                  {/* Column header */}
+                  <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>
+                      {weekDaysHeader[idx]}
                     </div>
-                  ) : (
-                    groupDayEvents(dayEvents).map(ev => {
-                      const isWatched = ev.isWatched;
-                      const poster = ev.type === 'tv' ? ev.showPoster : ev.posterPath;
-                      const title = ev.type === 'tv' ? ev.showTitle : ev.title;
+                    <div style={{
+                      fontSize: '1.25rem',
+                      fontWeight: '700',
+                      color: isToday ? 'var(--accent)' : 'var(--text-main)',
+                      marginTop: '4px',
+                      display: 'inline-flex',
+                      width: '32px',
+                      height: '32px',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      background: isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent'
+                    }}>
+                      {day.getDate()}
+                    </div>
+                  </div>
 
-                      const totalCount = ev.isStacked ? ev.originalEpisodes.length : 1;
-                      const watchedCount = ev.isStacked ? ev.originalEpisodes.filter(e => e.isWatched).length : (ev.isWatched ? 1 : 0);
-                      const collectedCount = ev.isStacked ? ev.originalEpisodes.filter(e => e.isCollected).length : (ev.isCollected ? 1 : 0);
-
-                      // Button labels
-                      let collectLabel = 'Collect';
-                      if (ev.isStacked) {
-                        if (collectedCount === totalCount) {
-                          collectLabel = 'Collected All';
-                        } else if (collectedCount === 0) {
-                          collectLabel = 'Collect All';
-                        } else {
-                          collectLabel = `Collected ${collectedCount}/${totalCount}`;
-                        }
-                      } else {
-                        collectLabel = ev.isCollected ? 'Collected' : 'Collect';
-                      }
-
-                      let watchLabel = 'Watch';
-                      if (ev.isStacked) {
-                        if (watchedCount === totalCount) {
-                          watchLabel = 'Watched All';
-                        } else if (watchedCount === 0) {
-                          watchLabel = 'Watch All';
-                        } else {
-                          watchLabel = `Watched ${watchedCount}/${totalCount}`;
-                        }
-                      } else {
-                        watchLabel = ev.isWatched ? 'Watched' : 'Watch';
-                      }
-
-                      return (
-                        <div
-                          key={ev.id}
-                          className={`glass-panel ${ev.isStacked ? 'calendar-card-stacked' : ''}`}
-                          onClick={() => {
-                            if (ev.isStacked) {
-                              toggleStackExpand(ev.id);
-                            } else {
-                              handleOpenDetails(ev);
-                            }
-                          }}
-                          style={{
-                            padding: '10px',
-                            fontSize: '0.8rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                            cursor: 'pointer',
-                            background: isWatched ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '8px',
-                            marginRight: '0px',
-                            marginBottom: ev.isStacked ? '8px' : '0px',
-                            minWidth: '280px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
-                            {poster ? (
-                              <img
-                                src={`https://image.tmdb.org/t/p/w185${poster}`}
-                                alt={title}
-                                style={{ width: '80px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
-                              />
-                            ) : (
-                              <div style={{ width: '40px', height: '60px', background: '#333', borderRadius: '4px' }}></div>
-                            )}
-                            <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
-                              <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {title}
-                              </div>
-                              {ev.type === 'tv' ? (
-                                <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.75rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
-                                  {ev.localTimeStr && (
-                                    <>
-                                      <span style={{ color: 'var(--text-muted)' }}>•</span>
-                                      <span style={{ color: 'var(--text-muted)' }}>{ev.localTimeStr}</span>
-                                    </>
-                                  )}
-                                </div>
-                              ) : (
-                                <div style={{ color: '#c084fc', fontWeight: '500', fontSize: '0.75rem', marginTop: '2px' }}>
-                                  Movie Release
-                                </div>
-                              )}
-                            </div>
-                            {ev.isStacked && (
-                              <Layers size={14} style={{ color: 'var(--text-muted)', position: 'absolute', top: 0, right: 0 }} />
-                            )}
-                          </div>
-
-                          {ev.isStacked && expandedStacks[ev.id] && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
-                              {ev.originalEpisodes.map(subEv => (
-                                <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => handleOpenDetails(subEv)}>
-                                    S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
-                                  </span>
-                                  <div style={{ display: 'flex', gap: '6px' }}>
-                                    <button
-                                      onClick={() => handleToggleCollect('collect', subEv)}
-                                      className="btn btn-secondary"
-                                      style={{
-                                        padding: '4px 6px',
-                                        fontSize: '0.8rem',
-                                        background: subEv.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                                        color: subEv.isCollected ? 'var(--success)' : 'var(--text-muted)'
-                                      }}
-                                    >
-                                      {subEv.isCollected ? 'Collected' : 'Collect'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleToggleWatch('watch', subEv)}
-                                      className="btn btn-secondary"
-                                      style={{
-                                        padding: '4px 6px',
-                                        fontSize: '0.8rem',
-                                        background: subEv.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
-                                        color: subEv.isWatched ? 'var(--accent)' : 'var(--text-muted)'
-                                      }}
-                                    >
-                                      {subEv.isWatched ? 'Watched' : 'Watch'}
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', justifySelf: 'flex-end', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              onClick={() => handleToggleCollect('collect', ev)}
-                              className="btn btn-secondary"
-                              style={{
-                                padding: '6px 8px',
-                                fontSize: '0.9rem',
-                                background: ev.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                                color: ev.isCollected ? 'var(--success)' : 'var(--text-muted)',
-                                flex: 1,
-                                justifyContent: 'center'
-                              }}
-                            >
-                              {collectLabel}
-                            </button>
-                            <button
-                              onClick={() => handleToggleWatch('watch', ev)}
-                              className="btn btn-secondary"
-                              style={{
-                                padding: '6px 8px',
-                                fontSize: '0.9rem',
-                                background: ev.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
-                                color: ev.isWatched ? 'var(--accent)' : 'var(--text-muted)',
-                                flex: 1,
-                                justifyContent: 'center'
-                              }}
-                            >
-                              {watchLabel}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                  {/* Event listings inside column */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+                    {dayEvents.length === 0 ? (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
+                        No Airings
+                      </div>
+                    ) : (
+                      groupDayEvents(dayEvents).map(ev => renderEventCard(ev))
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       )}
 
     </div>

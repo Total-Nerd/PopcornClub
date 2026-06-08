@@ -1,17 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from '../api';
-import { RefreshCw, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, HardDrive, Download, Wifi, Folder, FolderOpen, Trash2, Play, ChevronRight, Check, X, Palette } from 'lucide-react';
+import { 
+  RefreshCw, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, HardDrive, 
+  Download, Wifi, Folder, FolderOpen, Trash2, Play, ChevronRight, Check, X, 
+  Palette, User, UserPlus, LogOut, Copy, ShieldAlert, Key, Lock, Mail
+} from 'lucide-react';
 import { syncCalendarOffline, getCachedEventsCount, registerInstallListener, triggerInstallPrompt } from '../utils/pwaHelper';
 import { useModal } from '../context/ModalContext';
+import { AuthContext } from '../context/AuthContext';
 
 const SettingsPage = () => {
   const { showConfirm } = useModal();
-  const [plexUser, setPlexUser] = useState('');
-  const [tmdbApiKey, setTmdbApiKey] = useState('');
-  const [traktUsername, setTraktUsername] = useState('');
-  const [traktClientId, setTraktClientId] = useState('');
+  const { user, setUser, logout } = useContext(AuthContext);
 
-  // Local Library Folders state
+  // Tab navigation states
+  const [activeTab, setActiveTab] = useState('profile');
+  const [mobileSubViewOpen, setMobileSubViewOpen] = useState(false);
+
+  // Profile states
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileEmail, setProfileEmail] = useState(user?.email || '');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(user?.avatarPath || '');
+
+  // Plex states
+  const [plexUser, setPlexUser] = useState(user?.plexUser || '');
+  const [copied, setCopied] = useState(false);
+
+  // Trakt states
+  const [traktUsername, setTraktUsername] = useState(user?.traktUsername || '');
+  const [traktClientId, setTraktClientId] = useState(user?.traktClientId || '');
+
+  // System states (Admin only)
+  const [tmdbApiKey, setTmdbApiKey] = useState(user?.tmdbApiKey || '');
+
+  // User management states (Admin only)
+  const [usersList, setUsersList] = useState([]);
+  const [newUsername, setNewUsername] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState('user');
+  const [userActionMessage, setUserActionMessage] = useState('');
+  const [isUserActionError, setIsUserActionError] = useState(false);
+
+  // Folders and Scanner states (Admin only)
   const [folders, setFolders] = useState([]);
   const [folderPath, setFolderPath] = useState('');
   const [folderType, setFolderType] = useState('movie');
@@ -26,29 +60,88 @@ const SettingsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [drives, setDrives] = useState([]);
 
-
+  // Save/Sync messages
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
-
-  // Sync state
   const [syncing, setSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState('');
   const [syncProgress, setSyncProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // PWA & Offline state
+  // PWA & Offline states
   const [isInstallable, setIsInstallable] = useState(false);
   const [cachedCount, setCachedCount] = useState(0);
   const [lastSyncTime, setLastSyncTime] = useState(localStorage.getItem('pwa_last_sync_time'));
   const [syncingOffline, setSyncingOffline] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
-  const handleThemeChange = (newTheme) => {
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.className = 'theme-' + newTheme;
+  // Synchronize values from AuthContext when user changes
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.name || '');
+      setProfileEmail(user.email || '');
+      setPlexUser(user.plexUser || '');
+      setTraktUsername(user.traktUsername || '');
+      setTraktClientId(user.traktClientId || '');
+      setAvatarPreview(user.avatarPath || '');
+      setTmdbApiKey(user.tmdbApiKey || '');
+    }
+  }, [user]);
+
+  // Load configured library folders (Admin only)
+  const loadFolders = async () => {
+    if (user?.role !== 'admin') return;
+    try {
+      const res = await api.get('/folders');
+      setFolders(res.data.folders || []);
+      setScannerStatus(res.data.status || { isScanning: false, lastScanTime: null, currentProgress: 'Idle' });
+    } catch (err) {
+      console.error('Failed to load folders', err);
+    }
   };
 
+  // Poll library scanner status (Admin only)
+  useEffect(() => {
+    let interval;
+    if (user?.role === 'admin' && scannerStatus.isScanning) {
+      interval = setInterval(async () => {
+        try {
+          const res = await api.get('/folders');
+          setScannerStatus(res.data.status);
+        } catch (err) {
+          console.error('Failed to poll scanner status', err);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [scannerStatus.isScanning, user]);
+
+  // Load standard folders on setup
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      loadFolders();
+    }
+  }, [user]);
+
+  // Fetch all users list (Admin only)
+  const fetchUsers = async () => {
+    if (user?.role !== 'admin') return;
+    try {
+      const res = await api.get('/settings/users');
+      setUsersList(res.data);
+    } catch (err) {
+      console.error('Failed to fetch users', err);
+    }
+  };
+
+  // Fetch users when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'users' && user?.role === 'admin') {
+      fetchUsers();
+    }
+  }, [activeTab, user]);
+
+  // Hook for PWA installation and cache count
   useEffect(() => {
     registerInstallListener((eligible) => {
       setIsInstallable(eligible);
@@ -65,78 +158,196 @@ const SettingsPage = () => {
     fetchStats();
   }, []);
 
-  const loadFolders = async () => {
-    try {
-      const res = await api.get('/folders');
-      setFolders(res.data.folders || []);
-      setScannerStatus(res.data.status || { isScanning: false, lastScanTime: null, currentProgress: 'Idle' });
-    } catch (err) {
-      console.error('Failed to load folders', err);
+  const selectTab = (tabId) => {
+    setActiveTab(tabId);
+    setMobileSubViewOpen(true);
+  };
+
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.className = 'theme-' + newTheme;
+  };
+
+  // COPY Webhook URL Helper
+  const handleCopyWebhookUrl = () => {
+    const url = `${window.location.protocol}//${window.location.host}/api/webhook/plex/${user.plexWebhookToken}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Avatar Upload / Preview handler
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
     }
   };
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await api.get('/auth/me');
-        setPlexUser(res.data.plexUser || '');
-        setTmdbApiKey(res.data.tmdbApiKey || '');
-        setTraktUsername(res.data.traktUsername || '');
-        setTraktClientId(res.data.traktClientId || '');
-      } catch (err) {
-        console.error('Failed to load settings', err);
-      }
-    };
-    fetchSettings();
-    loadFolders();
-  }, []);
+  const handleRevertAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreview(user?.avatarPath || '');
+  };
 
-  useEffect(() => {
-    let interval;
-    if (scannerStatus.isScanning) {
-      interval = setInterval(async () => {
-        try {
-          const res = await api.get('/folders');
-          setScannerStatus(res.data.status);
-        } catch (err) {
-          console.error('Failed to poll scanner status', err);
-        }
-      }, 2000);
+  // Save profile settings (Name, Email, Password, Avatar file)
+  const handleProfileSave = async (e) => {
+    e.preventDefault();
+    setIsError(false);
+    setMessage('');
+
+    if (profilePassword && profilePassword !== profileConfirmPassword) {
+      setIsError(true);
+      setMessage('Passwords do not match.');
+      return;
     }
-    return () => clearInterval(interval);
-  }, [scannerStatus.isScanning]);
 
-  const handleSave = async (e) => {
+    try {
+      const formData = new FormData();
+      formData.append('name', profileName);
+      formData.append('email', profileEmail);
+      if (profilePassword) {
+        formData.append('password', profilePassword);
+      }
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
+      }
+
+      const res = await api.put('/settings/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data.success) {
+        setUser(res.data.user);
+        setMessage('Profile updated successfully!');
+        setProfilePassword('');
+        setProfileConfirmPassword('');
+        setAvatarFile(null);
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      setIsError(true);
+      setMessage(err.response?.data?.error || 'Failed to update profile.');
+    }
+  };
+
+  // Save Plex connection details
+  const handlePlexSave = async (e) => {
     e.preventDefault();
     setIsError(false);
     setMessage('');
     try {
-      await api.put('/settings', {
-        plexUser,
-        tmdbApiKey,
-        traktUsername,
-        traktClientId,
-
-      });
-      setMessage('Settings saved successfully!');
-      setTimeout(() => setMessage(''), 3000);
+      const res = await api.put('/settings/profile', { plexUser });
+      if (res.data.success) {
+        setUser(res.data.user);
+        setMessage('Plex connection details saved successfully!');
+        setTimeout(() => setMessage(''), 3000);
+      }
     } catch (err) {
       setIsError(true);
-      setMessage('Failed to save settings.');
+      setMessage(err.response?.data?.error || 'Failed to save Plex details.');
     }
   };
 
+  // Save Trakt connection details
+  const handleTraktSave = async (e) => {
+    e.preventDefault();
+    setIsError(false);
+    setMessage('');
+    try {
+      const res = await api.put('/settings/profile', { traktUsername, traktClientId });
+      if (res.data.success) {
+        setUser(res.data.user);
+        setMessage('Trakt connection details saved successfully!');
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      setIsError(true);
+      setMessage(err.response?.data?.error || 'Failed to save Trakt details.');
+    }
+  };
+
+  // Save system-wide configurations (Admin only)
+  const handleSystemSave = async (e) => {
+    e.preventDefault();
+    setIsError(false);
+    setMessage('');
+    try {
+      const res = await api.put('/settings/system', { tmdbApiKey });
+      if (res.data.success) {
+        setMessage('Global system settings saved successfully!');
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (err) {
+      setIsError(true);
+      setMessage(err.response?.data?.error || 'Failed to save global settings.');
+    }
+  };
+
+  // Add user account (Admin only)
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setIsUserActionError(false);
+    setUserActionMessage('');
+    if (!newUsername || !newEmail) {
+      setIsUserActionError(true);
+      setUserActionMessage('Username and Email are required.');
+      return;
+    }
+    try {
+      const res = await api.post('/settings/users', {
+        username: newUsername,
+        name: newName,
+        email: newEmail,
+        role: newRole
+      });
+      if (res.data.success) {
+        setUserActionMessage(`User '${newUsername}' created successfully! Invitation link printed to console logs or emailed.`);
+        setNewUsername('');
+        setNewName('');
+        setNewEmail('');
+        setNewRole('user');
+        fetchUsers();
+        setTimeout(() => setUserActionMessage(''), 5000);
+      }
+    } catch (err) {
+      setIsUserActionError(true);
+      setUserActionMessage(err.response?.data?.error || 'Failed to create user.');
+    }
+  };
+
+  // Delete user account (Admin only)
+  const handleDeleteUser = async (userId, usernameToDelete) => {
+    const confirmed = await showConfirm(`Are you sure you want to delete user '${usernameToDelete}'? All their collection items and custom lists will be permanently deleted.`);
+    if (!confirmed) return;
+
+    setIsUserActionError(false);
+    setUserActionMessage('');
+    try {
+      const res = await api.delete(`/settings/users/${userId}`);
+      if (res.data.success) {
+        setUserActionMessage(`User '${usernameToDelete}' deleted successfully.`);
+        fetchUsers();
+        setTimeout(() => setUserActionMessage(''), 3000);
+      }
+    } catch (err) {
+      setIsUserActionError(true);
+      setUserActionMessage(err.response?.data?.error || 'Failed to delete user.');
+    }
+  };
+
+  // Trakt Sync trigger
   const handleTraktSync = async (mode) => {
     setSyncing(true);
     setSyncProgress(10);
     setIsError(false);
     setMessage('');
 
-    // Real Trakt TV API import
     if (!traktUsername) {
       setSyncing(false);
       setIsError(true);
-      setMessage('Trakt Username is required for real sync.');
+      setMessage('Trakt Username is required for sync.');
       return;
     }
     setSyncStep(`Syncing ${mode === 'collected' ? 'collected items' : 'watched status'} with Trakt.tv...`);
@@ -167,6 +378,7 @@ const SettingsPage = () => {
     }
   };
 
+  // Library folder scanner triggers (Admin only)
   const handleAddFolder = async (e) => {
     e.preventDefault();
     setFolderError('');
@@ -202,9 +414,7 @@ const SettingsPage = () => {
 
   const handleDeleteFolder = async (id) => {
     const confirmed = await showConfirm('Are you sure you want to remove this folder? All associated file references will be deleted.');
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
     try {
       await api.delete(`/folders/${id}`);
       loadFolders();
@@ -231,6 +441,7 @@ const SettingsPage = () => {
     }
   };
 
+  // Browse Directory Dialog handlers
   const handleBrowseOpen = async (startPath = '/') => {
     setIsBrowserOpen(true);
     setBrowseLoading(true);
@@ -269,8 +480,7 @@ const SettingsPage = () => {
     setIsBrowserOpen(false);
   };
 
-
-
+  // Offline pre-caching calendar sync
   const handleOfflineSync = async () => {
     setSyncingOffline(true);
     setIsError(false);
@@ -295,6 +505,7 @@ const SettingsPage = () => {
     }
   };
 
+  // PWA trigger install prompt
   const handleInstallApp = async () => {
     try {
       const accepted = await triggerInstallPrompt();
@@ -308,11 +519,23 @@ const SettingsPage = () => {
     }
   };
 
+  // Tab definitions
+  const tabs = [
+    { id: 'profile', name: 'Profile Settings', icon: User },
+    { id: 'plex', name: 'Plex Webhook', icon: Wifi },
+    { id: 'trakt', name: 'Trakt TV Integration', icon: RefreshCw },
+    ...(user?.role === 'admin' ? [
+      { id: 'users', name: 'User Management', icon: UserPlus },
+      { id: 'system', name: 'Library & Folders', icon: HardDrive }
+    ] : []),
+    { id: 'theme', name: 'Theme & Options', icon: Palette }
+  ];
+
   return (
-    <div style={{ margin: '0 auto' }}>
+    <div style={{ margin: '0 auto', width: '100%' }}>
       <h1 style={{ marginBottom: '8px' }}>Settings</h1>
       <p style={{ color: 'var(--text-muted)', marginBottom: '32px' }}>
-        Configure external metadata sources, media servers, and sync your watch history.
+        Manage your user profile, connection tokens, sync databases, and application preferences.
       </p>
 
       {message && (
@@ -347,432 +570,896 @@ const SettingsPage = () => {
         </div>
       )}
 
-      <div className="settings-grid">
+      <div className={`settings-container ${mobileSubViewOpen ? 'mobile-subview-open' : ''}`}>
+        
+        {/* Left tabs menu / Sidebar */}
+        <div className="settings-sidebar">
+          {tabs.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => selectTab(t.id)}
+                className={`settings-tab-btn ${activeTab === t.id ? 'active' : ''}`}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Icon size={18} />
+                  {t.name}
+                </span>
+                <ChevronRight size={16} style={{ opacity: 0.6 }} />
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Left Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          {/* Core & API Config Card */}
-          <div className="glass-panel" style={{ height: 'fit-content' }}>
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              Connection Profiles
-            </h2>
-            <form onSubmit={handleSave}>
-              <div className="input-group">
-                <label>Plex Username</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={plexUser}
-                  onChange={e => setPlexUser(e.target.value)}
-                  placeholder="e.g. PlexUsername"
-                />
-                <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Used to filter and match incoming Plex webhooks.
-                </small>
+        {/* Right Tab Content area */}
+        <div className="settings-content">
+          
+          {/* Back button for Mobile subviews */}
+          <button 
+            className="settings-back-header" 
+            onClick={() => setMobileSubViewOpen(false)}
+          >
+            <ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} />
+            <span>Back to Settings</span>
+          </button>
+
+          {/* TAB: PROFILE SETTINGS */}
+          {activeTab === 'profile' && (
+            <div className="glass-panel">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <User size={20} style={{ color: 'var(--accent)' }} />
+                <span>My Profile</span>
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                Update your account avatar, name, email address, or change your password.
+              </p>
+
+              <form onSubmit={handleProfileSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
+                  
+                  {/* Large Profile circle preview */}
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', overflow: 'hidden', border: '3px solid var(--accent)', background: 'var(--overlay-strong)', display: 'flex', alignItems: 'center', justifyItems: 'center' }}>
+                      {avatarPreview ? (
+                        <img src={avatarPreview} alt="Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ fontSize: '1.75rem', fontWeight: 'bold', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}>
+                          {(profileName || user?.username || '').substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{
+                      padding: '8px 16px',
+                      background: 'var(--overlay-medium)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      color: 'var(--text-main)',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = 'var(--overlay-strong)'}
+                    onMouseLeave={(e) => e.target.style.background = 'var(--overlay-medium)'}
+                    >
+                      Choose Avatar Image
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleAvatarChange} 
+                        style={{ display: 'none' }} 
+                      />
+                    </label>
+                    {avatarFile && (
+                      <button 
+                        type="button" 
+                        onClick={handleRevertAvatar} 
+                        style={{ fontSize: '0.75rem', color: 'var(--danger)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        Revert Avatar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label>Account Username</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={user?.username || ''}
+                    disabled
+                    style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Your primary username cannot be modified.
+                  </small>
+                </div>
+
+                <div className="input-group">
+                  <label>Display Name</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={profileName}
+                    onChange={e => setProfileName(e.target.value)}
+                    placeholder="Enter your name"
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    className="input-field"
+                    value={profileEmail}
+                    onChange={e => setProfileEmail(e.target.value)}
+                    placeholder="e.g. you@example.com"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <div className="input-group" style={{ flex: '1 1 200px' }}>
+                    <label>New Password</label>
+                    <input
+                      type="password"
+                      className="input-field"
+                      value={profilePassword}
+                      onChange={e => setProfilePassword(e.target.value)}
+                      placeholder="Leave blank to keep current"
+                    />
+                  </div>
+
+                  <div className="input-group" style={{ flex: '1 1 200px' }}>
+                    <label>Confirm New Password</label>
+                    <input
+                      type="password"
+                      className="input-field"
+                      value={profileConfirmPassword}
+                      onChange={e => setProfileConfirmPassword(e.target.value)}
+                      placeholder="Confirm password"
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
+                  Update Profile Details
+                </button>
+              </form>
+
+              <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={logout} className="btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px 20px', fontSize: '0.9rem' }}>
+                  <LogOut size={16} />
+                  <span>Logout of Session</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PLEX CONFIGURATION */}
+          {activeTab === 'plex' && (
+            <div className="glass-panel">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Wifi size={20} style={{ color: 'var(--accent)' }} />
+                <span>Plex Scrobble & Webhook</span>
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                Link your TVTracker account to a Plex Media Server to record play/pause events and track watch histories in real-time.
+              </p>
+
+              {/* Plex connection status notification */}
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  borderRadius: '12px',
+                  marginBottom: '24px',
+                  border: user?.plexLastWebhookAt 
+                    ? '1px solid rgba(16, 185, 129, 0.25)' 
+                    : '1px solid rgba(245, 158, 11, 0.25)',
+                  background: user?.plexLastWebhookAt 
+                    ? 'rgba(16, 185, 129, 0.08)' 
+                    : 'rgba(245, 158, 11, 0.08)',
+                }}
+              >
+                {/* Status Dot with pulse effect */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div 
+                    style={{ 
+                      width: '10px', 
+                      height: '10px', 
+                      borderRadius: '50%', 
+                      background: user?.plexLastWebhookAt ? 'var(--success)' : '#fbbf24' 
+                    }} 
+                  />
+                  <div 
+                    style={{ 
+                      position: 'absolute',
+                      width: '18px', 
+                      height: '18px', 
+                      borderRadius: '50%', 
+                      background: user?.plexLastWebhookAt ? 'var(--success)' : '#fbbf24',
+                      opacity: 0.35,
+                      animation: 'pulse-border 2s infinite ease-in-out'
+                    }} 
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1 }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.9rem', color: user?.plexLastWebhookAt ? 'var(--success)' : '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Plex Webhook Connection {user?.plexLastWebhookAt ? 'Active' : 'Inactive / Pending'}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    {user?.plexLastWebhookAt ? (
+                      <>
+                        Last successful sync event received on: <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{new Date(user.plexLastWebhookAt).toLocaleString()}</span>
+                      </>
+                    ) : (
+                      'No webhook events received yet. TVTracker is waiting to receive its first scrobble playback status from your Plex server.'
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="input-group" style={{ marginTop: '20px' }}>
-                <label>TMDB API Key</label>
-                <input
-                  type="password"
-                  className="input-field"
-                  value={tmdbApiKey}
-                  onChange={e => setTmdbApiKey(e.target.value)}
-                  placeholder="Paste v3 API Key..."
-                />
-                <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Crucial for rich cover posters, cast lists, and airing schedules.
-                </small>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: 'var(--overlay-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px 20px' }}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldAlert size={16} style={{ color: '#fbbf24' }} />
+                    Your Plex Webhook URL
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '12px' }}>
+                    Add this uniquely generated webhook URL in your Plex server settings (Settings &gt; Webhooks &gt; Add Webhook) to route playing status to your profile.
+                  </p>
+                  
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px' }}>
+                    <span style={{ flexGrow: 1, fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-main)', wordBreak: 'break-all' }}>
+                      {`${window.location.protocol}//${window.location.host}/api/webhook/plex/${user?.plexWebhookToken}`}
+                    </span>
+                    <button 
+                      onClick={handleCopyWebhookUrl}
+                      className="btn" 
+                      style={{ padding: '6px', background: 'var(--overlay-medium)', color: 'var(--text-main)', borderRadius: '6px' }}
+                      title="Copy webhook URL"
+                    >
+                      {copied ? <Check size={16} style={{ color: 'var(--success)' }} /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                  {copied && (
+                    <small style={{ color: 'var(--success)', marginTop: '4px', display: 'block' }}>
+                      Webhook URL copied to clipboard!
+                    </small>
+                  )}
+                </div>
+
+                <form onSubmit={handlePlexSave}>
+                  <div className="input-group">
+                    <label>Plex Username Filter</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={plexUser}
+                      onChange={e => setPlexUser(e.target.value)}
+                      placeholder="e.g. MyPlexAccountName"
+                    />
+                    <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Webhook requests will only update your collection if they are triggered from this Plex account username.
+                    </small>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
+                    Save Plex Connection
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: TRAKT TV INTEGRATION */}
+          {activeTab === 'trakt' && (
+            <div className="glass-panel">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <RefreshCw size={20} style={{ color: 'var(--accent)' }} />
+                <span>Trakt TV Sync</span>
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                Pull collections and histories from your Trakt TV profile directly into your custom TVTracker library lists.
+              </p>
+
+              <form onSubmit={handleTraktSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div className="input-group">
+                  <label>Trakt Username</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={traktUsername}
+                    onChange={e => setTraktUsername(e.target.value)}
+                    placeholder="e.g. trakt_account"
+                  />
+                </div>
+
+                {/* Advanced Trakt client ID collapsible */}
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '16px' }}>
+                  <div
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      padding: '4px 0'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Advanced Client configuration {(!traktClientId && !showAdvanced) ? '(Optional)' : ''}
+                    </span>
+                    {showAdvanced ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />}
+                  </div>
+
+                  {showAdvanced && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div className="input-group">
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Custom Trakt Client ID (API Application Key)</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={traktClientId}
+                          onChange={e => setTraktClientId(e.target.value)}
+                          placeholder="Paste 64-char client id..."
+                        />
+                        <small style={{ color: 'var(--text-muted)', marginTop: '6px', display: 'block', lineHeight: '1.4', fontSize: '0.75rem' }}>
+                          If the system default api keys trigger rate limits, construct a free application on <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Trakt.tv Developers page</a> and link its client ID.
+                        </small>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                  Save Trakt Sync Details
+                </button>
+              </form>
+
+              <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '24px' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>Sync Operations</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  <button
+                    onClick={() => handleTraktSync('collected')}
+                    disabled={syncing}
+                    className="btn btn-secondary"
+                    style={{ justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
+                  >
+                    <RefreshCw size={18} style={{ color: 'var(--accent)' }} className={syncing ? 'spin' : ''} />
+                    <span>Sync Collected Titles</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleTraktSync('watched')}
+                    disabled={syncing}
+                    className="btn btn-secondary"
+                    style={{ justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
+                  >
+                    <RefreshCw size={18} style={{ color: 'var(--accent)' }} className={syncing ? 'spin' : ''} />
+                    <span>Sync Watched History</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: USER MANAGEMENT (Admin-only) */}
+          {activeTab === 'users' && user?.role === 'admin' && (
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <UserPlus size={20} style={{ color: 'var(--accent)' }} />
+                  <span>User Accounts</span>
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Create, view, and manage user accounts and system access roles.
+                </p>
               </div>
 
-              <div className="input-group" style={{ marginTop: '20px' }}>
-                <label>Trakt Username</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={traktUsername}
-                  onChange={e => setTraktUsername(e.target.value)}
-                  placeholder="e.g. trakt_dev"
-                />
-              </div>
-
-
-
-              {/* Advanced API Settings Collapsible */}
-              <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '16px' }}>
+              {userActionMessage && (
                 <div
-                  onClick={() => setShowAdvanced(!showAdvanced)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    padding: '4px 0'
+                    gap: '12px',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid ' + (isUserActionError ? 'var(--danger)' : 'var(--success)'),
+                    background: isUserActionError ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                    fontSize: '0.85rem'
                   }}
                 >
-                  <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    Advanced API Settings {(!traktClientId && !showAdvanced) ? '(Optional)' : ''}
-                  </span>
-                  {showAdvanced ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />}
+                  {isUserActionError ? <AlertCircle style={{ color: 'var(--danger)' }} /> : <CheckCircle2 style={{ color: 'var(--success)' }} />}
+                  <span style={{ color: isUserActionError ? 'var(--danger)' : 'var(--success)' }}>{userActionMessage}</span>
                 </div>
+              )}
 
-                {showAdvanced && (
-                  <div style={{ marginTop: '12px' }}>
-                    <div className="input-group">
-                      <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Trakt Client ID (API Key)</label>
-                      <input
-                        type="text"
-                        className="input-field"
-                        value={traktClientId}
-                        onChange={e => setTraktClientId(e.target.value)}
-                        placeholder="Paste 64-char Client ID..."
-                      />
-                      <small style={{ color: 'var(--text-muted)', marginTop: '6px', display: 'block', lineHeight: '1.4', fontSize: '0.75rem' }}>
-                        Required if the default API key fails or experiences rate-limits. Go to your <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Trakt API Apps</a>, register a free application (Redirect URI: <code>urn:ietf:wg:oauth:2.0:oob</code>), and paste its Client ID here.
-                      </small>
-                    </div>
+              {/* Form to add a new account */}
+              <form onSubmit={handleAddUser} style={{ background: 'var(--overlay-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '16px', color: 'var(--text-main)' }}>Create User Account</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                  <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
+                    <label>Username</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={newUsername}
+                      onChange={e => setNewUsername(e.target.value)}
+                      placeholder="e.g. nerd_watcher"
+                      style={{ fontSize: '0.85rem', padding: '10px 14px' }}
+                      required
+                    />
                   </div>
-                )}
-              </div>
 
-              <div style={{ marginTop: '24px' }}>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                  Save Connection Details
-                </button>
-              </div>
-            </form>
-          </div>
+                  <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
+                    <label>Display Name (Optional)</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      placeholder="e.g. Thomas Anderson"
+                      style={{ fontSize: '0.85rem', padding: '10px 14px' }}
+                    />
+                  </div>
 
-          {/* PWA & Offline Access Card */}
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 'fit-content' }}>
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HardDrive size={20} style={{ color: 'var(--accent)' }} />
-                <span>PWA & Offline Access</span>
-              </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.6' }}>
-                Install the TVTracker application on your device for a standalone, app-like experience. Cache the Releases Calendar for the next 6 months to enable browse-capability and offline loading without an active internet connection.
-              </p>
+                  <div className="input-group" style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                    <label>Email Address</label>
+                    <input
+                      type="email"
+                      className="input-field"
+                      value={newEmail}
+                      onChange={e => setNewEmail(e.target.value)}
+                      placeholder="e.g. neo@thematrix.com"
+                      style={{ fontSize: '0.85rem', padding: '10px 14px' }}
+                      required
+                    />
+                  </div>
 
-              {/* Cache Stats Table */}
-              <div style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Offline Cache Status:</span>
-                  <span style={{ fontWeight: '600', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle2 size={14} /> Active
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Cached Release Events:</span>
-                  <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{cachedCount} items</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Last Offline Sync:</span>
-                  <span style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.8rem' }}>
-                    {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'Never'}
-                  </span>
-                </div>
-              </div>
+                  <div className="input-group" style={{ flex: '1 1 120px', marginBottom: 0 }}>
+                    <label>Access Role</label>
+                    <select
+                      className="input-field"
+                      value={newRole}
+                      onChange={e => setNewRole(e.target.value)}
+                      style={{ cursor: 'pointer', fontSize: '0.85rem', padding: '10px 14px' }}
+                    >
+                      <option value="user">Standard User</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <button
-                  onClick={handleOfflineSync}
-                  disabled={syncingOffline}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
-                >
-                  <RefreshCw size={18} className={syncingOffline ? 'spin' : ''} style={{ color: 'var(--accent)' }} />
-                  <span>{syncingOffline ? 'Caching Releases Offline...' : 'Sync Calendar Offline'}</span>
-                </button>
-
-                {isInstallable && (
-                  <button
-                    onClick={handleInstallApp}
-                    className="btn btn-primary"
-                    style={{ width: '100%', justifyContent: 'flex-start' }}
-                  >
-                    <Download size={18} />
-                    <span>Install TVTracker Web App</span>
+                  <button type="submit" className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '0.85rem', height: '42px' }}>
+                    Create Account
                   </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Theme Settings Card */}
-          <div className="glass-panel" style={{ height: 'fit-content' }}>
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Palette size={20} style={{ color: 'var(--accent)' }} />
-              <span>Theme Customization</span>
-            </h2>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.6' }}>
-              Personalize the appearance of TVTracker. Select your preferred color mode.
-            </p>
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label>Select Theme</label>
-              <select
-                className="input-field"
-                value={theme}
-                onChange={e => handleThemeChange(e.target.value)}
-                style={{ cursor: 'pointer' }}
-              >
-                <option value="dark">Dark Mode (Default)</option>
-                <option value="light">Light Mode</option>
-                <option value="oled">OLED Mode (Pure Black)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column with Trakt and Sonarr cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-
-          {/* Trakt Sync Card */}
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 'fit-content' }}>
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Trakt TV Integration
-              </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.6' }}>
-                Import and consolidate your shows and movies lists. Trakt integration syncs collected titles and maps watch history to calculate detailed, episode-level completion rates.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
-                <button
-                  onClick={() => handleTraktSync('collected')}
-                  disabled={syncing}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
-                >
-                  <RefreshCw size={18} style={{ color: 'var(--accent)' }} />
-                  <span>Sync Collected Items</span>
-                </button>
-
-                <button
-                  onClick={() => handleTraktSync('watched')}
-                  disabled={syncing}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
-                >
-                  <RefreshCw size={18} style={{ color: 'var(--accent)' }} />
-                  <span>Sync Watched Status</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Local Library Folders Card */}
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: 'fit-content' }}>
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Folder size={20} style={{ color: 'var(--accent)' }} />
-                <span>Local Library Folders</span>
-              </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.6' }}>
-                Map local Movie or TV Show folders from the machine running this application. The folders will be recursively scanned for video files and matched on TMDB.
-              </p>
-
-              {/* Status Header */}
-              <div style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', padding: '12px 16px', border: '1px solid var(--border-color)', marginBottom: '24px', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Scan Status:</span>
-                  <span style={{ fontWeight: '600', color: scannerStatus.isScanning ? 'var(--accent)' : 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {scannerStatus.isScanning ? (
-                      <>
-                        <RefreshCw size={14} className="spin" /> Scanning
-                      </>
-                    ) : (
-                      'Idle'
-                    )}
-                  </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Last Scanned:</span>
-                  <span style={{ fontWeight: '500', color: 'var(--text-main)' }}>
-                    {scannerStatus.lastScanTime ? new Date(scannerStatus.lastScanTime).toLocaleString() : 'Never'}
-                  </span>
-                </div>
-                {scannerStatus.isScanning && (
-                  <div style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', wordBreak: 'break-all' }}>
-                    {scannerStatus.currentProgress}
-                  </div>
-                )}
-                <button
-                  onClick={handleScanNow}
-                  disabled={scannerStatus.isScanning}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', marginTop: '12px', padding: '8px', fontSize: '0.8rem', justifyContent: 'center' }}
-                >
-                  <Play size={14} style={{ marginRight: '6px' }} />
-                  Scan All Folders Now
-                </button>
-              </div>
+              </form>
 
-              {/* List of existing folders */}
-              {folders.length > 0 && (
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '10px', color: 'var(--text-main)' }}>Configured Folders</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {folders.map(f => (
-                      <div
-                        key={f.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          background: 'var(--overlay-subtle)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '8px',
-                          padding: '10px 12px',
-                          fontSize: '0.8rem'
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '70%', overflow: 'hidden' }}>
-                          <span style={{ color: 'var(--text-main)', fontWeight: '500', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={f.path}>
-                            {f.path}
+              {/* List of active users */}
+              <div>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>Existing User Accounts</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {usersList.map(u => (
+                    <div
+                      key={u.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 18px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--overlay-subtle)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', background: 'var(--overlay-strong)', display: 'flex', alignItems: 'center', justifyItems: 'center', border: '2px solid ' + (u.role === 'admin' ? 'var(--accent)' : 'transparent') }}>
+                          {u.avatarPath ? (
+                            <img src={u.avatarPath} alt={u.name || u.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                              {(u.name || u.username).substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)' }}>
+                            {u.name ? `${u.name} (${u.username})` : u.username}
                           </span>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <span style={{
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '0.7rem',
-                              fontWeight: '600',
-                              background: f.type === 'movie' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                              color: f.type === 'movie' ? '#34d399' : '#60a5fa'
-                            }}>
-                              {f.type === 'movie' ? 'Movies' : 'TV Shows'}
+                          {u.email && (
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Mail size={12} />
+                              {u.email}
                             </span>
-                            <span
-                              onClick={() => handleToggleWatch(f.id, f.watch)}
-                              style={{
+                          )}
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            Joined: {new Date(u.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            textTransform: 'uppercase',
+                            background: u.role === 'admin' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                            color: u.role === 'admin' ? '#60a5fa' : 'var(--text-muted)',
+                            border: '1px solid ' + (u.role === 'admin' ? 'rgba(59, 130, 246, 0.2)' : 'var(--border-color)')
+                          }}
+                        >
+                          {u.role}
+                        </span>
+
+                        <button
+                          onClick={() => handleDeleteUser(u.id, u.username)}
+                          disabled={u.id === user?.id || u.username === user?.username}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            cursor: (u.id === user?.id || u.username === user?.username) ? 'not-allowed' : 'pointer',
+                            opacity: (u.id === user?.id || u.username === user?.username) ? 0.3 : 0.8,
+                            padding: '6px'
+                          }}
+                          title={(u.id === user?.id || u.username === user?.username) ? 'Cannot delete active account' : 'Delete user account'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: LIBRARY & CONFIGURATION (Admin-only) */}
+          {activeTab === 'system' && user?.role === 'admin' && (
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <HardDrive size={20} style={{ color: 'var(--accent)' }} />
+                  <span>Library & Server Configuration</span>
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Modify global TVTracker connections, API keys, and monitor library folders.
+                </p>
+              </div>
+
+              {/* Global system configuration */}
+              <form onSubmit={handleSystemSave} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '32px' }}>
+                <div className="input-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Key size={14} />
+                    <span>Global TMDB API Key</span>
+                  </label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={tmdbApiKey}
+                    onChange={e => setTmdbApiKey(e.target.value)}
+                    placeholder="Enter TMDB v3 API Key..."
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                    This TMDB API key is used globally to parse video file matches, download covers, and map schedules.
+                  </small>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
+                  Save Global Key
+                </button>
+              </form>
+
+              {/* Folder monitor */}
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Folder size={18} style={{ color: 'var(--accent)' }} />
+                  <span>Configured Library Folders</span>
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                  Map folders containing Movies or TV Shows. TVTracker monitors these directories, scans for media titles, and pulls TMDB entries automatically.
+                </p>
+
+                {/* Scanner progress banner */}
+                <div style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-color)', marginBottom: '24px', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Scanner Status:</span>
+                    <span style={{ fontWeight: '600', color: scannerStatus.isScanning ? 'var(--accent)' : 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {scannerStatus.isScanning ? (
+                        <>
+                          <RefreshCw size={14} className="spin" /> Scanning Folders
+                        </>
+                      ) : (
+                        'Idle'
+                      )}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Last Full Scan:</span>
+                    <span style={{ fontWeight: '500', color: 'var(--text-main)' }}>
+                      {scannerStatus.lastScanTime ? new Date(scannerStatus.lastScanTime).toLocaleString() : 'Never'}
+                    </span>
+                  </div>
+                  {scannerStatus.isScanning && (
+                    <div style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', wordBreak: 'break-all' }}>
+                      {scannerStatus.currentProgress}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleScanNow}
+                    disabled={scannerStatus.isScanning}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: '12px', padding: '8px', fontSize: '0.8rem', justifyContent: 'center' }}
+                  >
+                    <Play size={14} style={{ marginRight: '6px' }} />
+                    Trigger System Library Scan
+                  </button>
+                </div>
+
+                {/* Configured directories */}
+                {folders.length > 0 && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '10px', color: 'var(--text-main)' }}>Configured Folders</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {folders.map(f => (
+                        <div
+                          key={f.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: 'var(--overlay-subtle)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '0.8rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '70%', overflow: 'hidden' }}>
+                            <span style={{ color: 'var(--text-main)', fontWeight: '500', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={f.path}>
+                              {f.path}
+                            </span>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <span style={{
                                 padding: '2px 6px',
                                 borderRadius: '4px',
                                 fontSize: '0.7rem',
                                 fontWeight: '600',
-                                cursor: 'pointer',
-                                background: f.watch ? 'rgba(139, 92, 246, 0.15)' : 'var(--overlay-subtle)',
-                                color: f.watch ? '#a78bfa' : 'var(--text-muted)',
-                                border: '1px solid ' + (f.watch ? 'rgba(139, 92, 246, 0.3)' : 'var(--border-color)')
+                                background: f.type === 'movie' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                color: f.type === 'movie' ? '#34d399' : '#60a5fa'
+                              }}>
+                                {f.type === 'movie' ? 'Movies' : 'TV Shows'}
+                              </span>
+                              <span
+                                onClick={() => handleToggleWatch(f.id, f.watch)}
+                                style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  background: f.watch ? 'rgba(139, 92, 246, 0.15)' : 'var(--overlay-subtle)',
+                                  color: f.watch ? '#a78bfa' : 'var(--text-muted)',
+                                  border: '1px solid ' + (f.watch ? 'rgba(139, 92, 246, 0.3)' : 'var(--border-color)')
+                                }}
+                                title="Click to toggle active change monitoring"
+                              >
+                                {f.watch ? 'Monitoring' : 'Poll Only'}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleScanFolder(f.id)}
+                              disabled={scannerStatus.isScanning}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--accent)',
+                                cursor: scannerStatus.isScanning ? 'default' : 'pointer',
+                                padding: '6px',
+                                opacity: scannerStatus.isScanning ? 0.5 : 0.8
                               }}
-                              title="Click to toggle active change monitoring"
+                              title="Scan folder"
                             >
-                              {f.watch ? 'Monitoring' : 'Poll Only'}
-                            </span>
+                              <Play size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFolder(f.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--danger)',
+                                cursor: 'pointer',
+                                padding: '6px',
+                                opacity: 0.8
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => handleScanFolder(f.id)}
-                            disabled={scannerStatus.isScanning}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--accent)',
-                              cursor: scannerStatus.isScanning ? 'default' : 'pointer',
-                              padding: '6px',
-                              opacity: scannerStatus.isScanning ? 0.5 : 0.8
-                            }}
-                            title="Scan this folder now"
-                          >
-                            <Play size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFolder(f.id)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--danger)',
-                              cursor: 'pointer',
-                              padding: '6px',
-                              opacity: 0.8
-                            }}
-                            onMouseEnter={(e) => e.target.style.opacity = 1}
-                            onMouseLeave={(e) => e.target.style.opacity = 0.8}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Add folder form */}
-              <form onSubmit={handleAddFolder} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>Add Library Folder</h4>
-
-                {folderError && (
-                  <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertCircle size={14} />
-                    <span>{folderError}</span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                <div className="input-group" style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '0.8rem' }}>Folder Path</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      type="text"
-                      className="input-field"
-                      value={folderPath}
-                      onChange={e => setFolderPath(e.target.value)}
-                      placeholder="e.g. /media/movies"
-                      style={{ fontSize: '0.8rem' }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => handleBrowseOpen('/')}
-                      style={{ padding: '0 12px', fontSize: '0.8rem' }}
-                    >
-                      Browse...
-                    </button>
-                  </div>
-                </div>
+                {/* Add new folder path */}
+                <form onSubmit={handleAddFolder} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>Add Library Folder</h4>
 
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.8rem' }}>Media Type</label>
-                    <select
-                      className="input-field"
-                      value={folderType}
-                      onChange={e => setFolderType(e.target.value)}
-                      style={{ fontSize: '0.8rem', cursor: 'pointer' }}
-                    >
-                      <option value="movie">Movies</option>
-                      <option value="tv">TV Shows</option>
-                    </select>
+                  {folderError && (
+                    <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={14} />
+                      <span>{folderError}</span>
+                    </div>
+                  )}
+
+                  <div className="input-group" style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '0.8rem' }}>Folder Path</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        className="input-field"
+                        value={folderPath}
+                        onChange={e => setFolderPath(e.target.value)}
+                        placeholder="e.g. /media/movies"
+                        style={{ fontSize: '0.8rem', flexGrow: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleBrowseOpen('/')}
+                        style={{ padding: '0 12px', fontSize: '0.8rem' }}
+                      >
+                        Browse...
+                      </button>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: '16px', gap: '8px' }}>
-                    <input
-                      type="checkbox"
-                      id="watch-toggle"
-                      checked={folderWatch}
-                      onChange={e => setFolderWatch(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <label htmlFor="watch-toggle" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer', margin: 0 }}>
-                      Active Monitoring
-                    </label>
-                  </div>
-                </div>
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                    <div className="input-group" style={{ flex: 1 }}>
+                      <label style={{ fontSize: '0.8rem' }}>Media Type</label>
+                      <select
+                        className="input-field"
+                        value={folderType}
+                        onChange={e => setFolderType(e.target.value)}
+                        style={{ fontSize: '0.8rem', cursor: 'pointer' }}
+                      >
+                        <option value="movie">Movies</option>
+                        <option value="tv">TV Shows</option>
+                      </select>
+                    </div>
 
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', fontSize: '0.85rem' }}>
-                  Add Folder Configuration
-                </button>
-              </form>
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '16px', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        id="watch-toggle"
+                        checked={folderWatch}
+                        onChange={e => setFolderWatch(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label htmlFor="watch-toggle" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer', margin: 0 }}>
+                        Active Monitoring
+                      </label>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', fontSize: '0.85rem' }}>
+                    Configure Monitor Path
+                  </button>
+                </form>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB: THEME, OPTIONS & PWA */}
+          {activeTab === 'theme' && (
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Palette size={20} style={{ color: 'var(--accent)' }} />
+                  <span>Theme & Application Preferences</span>
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Manage color profiles, cache pages offline, or install standalone desktop/mobile applications.
+                </p>
+              </div>
+
+              {/* Theme customizer */}
+              <div>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '12px', color: 'var(--text-main)' }}>Custom Theme Mode</h3>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Select active theme</label>
+                  <select
+                    className="input-field"
+                    value={theme}
+                    onChange={e => handleThemeChange(e.target.value)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <option value="dark">Dark Mode (Sleek Slate)</option>
+                    <option value="light">Light Mode (Clean Harmonious)</option>
+                    <option value="oled">OLED Mode (Pure Ink Black)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* PWA offline options */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HardDrive size={16} style={{ color: 'var(--accent)' }} />
+                  <span>PWA & Offline Calendar Sync</span>
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '20px' }}>
+                  TVTracker can cache upcoming movie and show release dates for the next 6 months locally. This enables offline access to the release calendar when disconnected.
+                </p>
+
+                <div style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-color)', marginBottom: '20px', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyItems: 'space-between', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Offline Cache status:</span>
+                    <span style={{ fontWeight: '600', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={14} /> Active
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyItems: 'space-between', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Cached Releases:</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{cachedCount} events</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyItems: 'space-between', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Last Caching Sync:</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.8rem' }}>
+                      {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'Never'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    onClick={handleOfflineSync}
+                    disabled={syncingOffline}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', justifyContent: 'flex-start', border: '1px solid var(--border-color)' }}
+                  >
+                    <RefreshCw size={18} className={syncingOffline ? 'spin' : ''} style={{ color: 'var(--accent)' }} />
+                    <span>{syncingOffline ? 'Caching Releases Offline...' : 'Sync Calendar Offline Now'}</span>
+                  </button>
+
+                  {isInstallable && (
+                    <button
+                      onClick={handleInstallApp}
+                      className="btn btn-primary"
+                      style={{ width: '100%', justifyContent: 'flex-start' }}
+                    >
+                      <Download size={18} />
+                      <span>Install Standalone PWA App</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
-
       </div>
 
-      {/* Directory Browser Modal */}
-      {isBrowserOpen && (
+      {/* Directory Browser Modal dialog (Admin only) */}
+      {isBrowserOpen && user?.role === 'admin' && (
         <div
           style={{
             position: 'fixed',

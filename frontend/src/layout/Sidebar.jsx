@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle } from 'lucide-react';
+import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
+import { AuthContext } from '../context/AuthContext';
 
 const Sidebar = ({ isCollapsed, onToggle }) => {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const { user, logout } = useContext(AuthContext);
 
   const handleLinkClick = () => {
     setIsMoreOpen(false);
@@ -18,37 +20,43 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       </div>
 
       <nav className="sidebar-nav">
-        <NavLink to="/" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+        <NavLink to="/" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} data-tooltip="Calendar">
           <Calendar size={20} />
           <span>Calendar</span>
         </NavLink>
-        <NavLink to="/discover" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+        <NavLink to="/discover" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} data-tooltip="Discover">
           <Search size={20} />
           <span>Discover</span>
         </NavLink>
-        <NavLink to="/shows" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+        <NavLink to="/shows" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} data-tooltip="Shows">
           <Tv size={20} />
           <span>Shows</span>
         </NavLink>
-        <NavLink to="/movies" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+        <NavLink to="/movies" onClick={handleLinkClick} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} data-tooltip="Movies">
           <Film size={20} />
           <span>Movies</span>
         </NavLink>
-        <NavLink to="/lists" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`}>
+        <NavLink to="/lists" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Lists">
           <List size={20} />
           <span>Lists</span>
         </NavLink>
-        <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`}>
+        <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="History">
           <History size={20} />
           <span>History</span>
         </NavLink>
-        <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`}>
+        <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
           <AlertTriangle size={20} />
           <span>Conflicts</span>
         </NavLink>
-        <NavLink to="/settings" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only nav-link-settings ${isActive ? 'active' : ''}`}>
-          <Settings size={20} />
-          <span>Settings</span>
+        <NavLink to="/settings" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only nav-link-settings ${isActive ? 'active' : ''}`} data-tooltip={user?.name || user?.username || 'Settings'}>
+          <div className="sidebar-avatar-wrapper">
+            {user?.avatarPath ? (
+              <img src={user.avatarPath} alt="Profile" className="sidebar-avatar-img" />
+            ) : (
+              <User size={20} />
+            )}
+          </div>
+          <span>{user?.name || user?.username || 'Settings'}</span>
         </NavLink>
         
         {/* Mobile-only More trigger */}
@@ -56,7 +64,13 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           onClick={() => setIsMoreOpen(!isMoreOpen)} 
           className={`nav-link mobile-only ${isMoreOpen ? 'active' : ''}`}
         >
-          <User size={20} />
+          <div className="sidebar-avatar-wrapper">
+            {user?.avatarPath ? (
+              <img src={user.avatarPath} alt="Profile" className="sidebar-avatar-img" />
+            ) : (
+              <User size={20} />
+            )}
+          </div>
           <span>More</span>
         </button>
       </nav>

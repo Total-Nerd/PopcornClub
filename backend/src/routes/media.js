@@ -66,7 +66,7 @@ async function getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDa
 }
 
 // Reusable helper to dynamically self-heal a media record by fetching missing data from TMDB (cached locally)
-async function healMediaRecordIfMissingDetails(media, userApiKey) {
+async function healMediaRecordIfMissingDetails(media, userApiKey, userId) {
   if (!media) return media;
   const needsUpdate = !media.posterPath || 
                       !media.overview || 
@@ -83,16 +83,17 @@ async function healMediaRecordIfMissingDetails(media, userApiKey) {
           where: { id: media.id },
           data: {
             posterPath: media.posterPath || data.poster_path || null,
+            backdropPath: media.backdropPath || data.backdrop_path || null,
             overview: media.overview || data.overview || '',
             releaseDate: media.releaseDate || (data.release_date || data.first_air_date ? new Date(data.release_date || data.first_air_date) : null),
             title: media.title && media.title.startsWith(`${media.type} #`) ? (data.title || data.name) : media.title,
             genres: media.genres || (data.genres ? data.genres.map(g => g.name).join(', ') : null)
           },
           include: {
-            collections: true,
-            watchHistory: true,
-            episodeWatchHistory: true,
-            episodeCollections: true
+            collections: { where: { userId } },
+            watchHistory: { where: { userId } },
+            episodeWatchHistory: { where: { userId } },
+            episodeCollections: { where: { userId } }
           }
         });
         return updated;
@@ -105,33 +106,33 @@ async function healMediaRecordIfMissingDetails(media, userApiKey) {
 }
 
 // Automatically update show-level watch history based on whether all episodes are watched
-async function syncShowWatchHistory(mediaId, tmdbId, tmdbApiKey) {
-  if (!tmdbApiKey) return;
+async function syncShowWatchHistory(mediaId, tmdbId, tmdbApiKey, userId) {
+  if (!tmdbApiKey || !userId) return;
   try {
     const tmdbRes = await fetchTMDB(`/3/tv/${tmdbId}`, tmdbApiKey);
     const totalEpisodes = tmdbRes.number_of_episodes || 0;
     if (totalEpisodes === 0) return;
 
-    // Get current watched episodes count
+    // Get current watched episodes count for this user
     const watchedEpisodesCount = await prisma.episodeWatchHistory.count({
-      where: { mediaId }
+      where: { userId, mediaId }
     });
 
     if (watchedEpisodesCount === totalEpisodes) {
       // All episodes are watched! Create a WatchHistory record for the show if not already exists
       const existing = await prisma.watchHistory.findFirst({
-        where: { mediaId }
+        where: { userId, mediaId }
       });
       if (!existing) {
         await prisma.watchHistory.create({
-          data: { mediaId }
+          data: { userId, mediaId }
         });
-        console.log(`Automatically marked TV Show (mediaId: ${mediaId}, tmdbId: ${tmdbId}) as watched.`);
+        console.log(`Automatically marked TV Show (mediaId: ${mediaId}, tmdbId: ${tmdbId}) as watched for user ${userId}.`);
       }
     } else {
       // Not all episodes are watched. Delete show-level WatchHistory record if exists
       await prisma.watchHistory.deleteMany({
-        where: { mediaId }
+        where: { userId, mediaId }
       });
     }
   } catch (err) {
@@ -151,14 +152,14 @@ router.get('/search', async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Query is required' });
 
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
     const response = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
       params: {
-        api_key: user.tmdbApiKey,
+        api_key: systemSettings.tmdbApiKey,
         query,
         page: 1,
         include_adult: false
@@ -173,9 +174,9 @@ router.get('/search', async (req, res) => {
     const localMediaList = await prisma.media.findMany({
       where: { tmdbId: { in: tmdbIds } },
       include: {
-        collections: true,
-        watchHistory: true,
-        episodeWatchHistory: true
+        collections: { where: { userId: req.user.id } },
+        watchHistory: { where: { userId: req.user.id } },
+        episodeWatchHistory: { where: { userId: req.user.id } }
       }
     });
     
@@ -214,15 +215,16 @@ router.post('/import-trakt', async (req, res) => {
     if (!username) {
       return res.status(400).json({ error: 'Trakt username is required' });
     }
-    const settings = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    const traktApiKey = clientId || settings?.traktClientId || process.env.TRAKT_CLIENT_ID || 'd83a151b72cccd41c88806283db87cc4f56f1837ff44821815b3e24e10b14643';
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const traktApiKey = clientId || user?.traktClientId || process.env.TRAKT_CLIENT_ID || 'd83a151b72cccd41c88806283db87cc4f56f1837ff44821815b3e24e10b14643';
     const headers = {
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
       'trakt-api-key': traktApiKey,
       'User-Agent': 'TVTracker/1.0'
     };
-    const tmdbApiKey = settings?.tmdbApiKey;
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
 
     const getMediaData = async (tmdbId, type) => {
       if (!tmdbApiKey) return { title: `${type} #${tmdbId}` };
@@ -249,7 +251,7 @@ router.post('/import-trakt', async (req, res) => {
         
         // Skip if already in collection
         const existingCollection = await prisma.collection.findFirst({
-          where: { media: { tmdbId, type: 'movie' } }
+          where: { userId: req.user.id, media: { tmdbId, type: 'movie' } }
         });
         if (existingCollection) continue;
 
@@ -263,9 +265,9 @@ router.post('/import-trakt', async (req, res) => {
           });
         }
         await prisma.collection.upsert({
-          where: { mediaId: media.id },
+          where: { userId_mediaId: { userId: req.user.id, mediaId: media.id } },
           update: { collectedAt: item.collected_at ? new Date(item.collected_at) : new Date() },
-          create: { mediaId: media.id, collectedAt: item.collected_at ? new Date(item.collected_at) : new Date() }
+          create: { userId: req.user.id, mediaId: media.id, collectedAt: item.collected_at ? new Date(item.collected_at) : new Date() }
         });
       }
 
@@ -277,7 +279,7 @@ router.post('/import-trakt', async (req, res) => {
 
         // Skip if already in collection
         const existingCollection = await prisma.collection.findFirst({
-          where: { media: { tmdbId, type: 'tv' } }
+          where: { userId: req.user.id, media: { tmdbId, type: 'tv' } }
         });
         if (existingCollection) continue;
 
@@ -291,17 +293,17 @@ router.post('/import-trakt', async (req, res) => {
           });
         }
         await prisma.collection.upsert({
-          where: { mediaId: media.id },
+          where: { userId_mediaId: { userId: req.user.id, mediaId: media.id } },
           update: { collectedAt: new Date() },
-          create: { mediaId: media.id, collectedAt: new Date() }
+          create: { userId: req.user.id, mediaId: media.id, collectedAt: new Date() }
         });
 
         for (const season of item.seasons) {
           for (const ep of season.episodes) {
             await prisma.episodeCollection.upsert({
-              where: { mediaId_season_episode: { mediaId: media.id, season: season.number, episode: ep.number } },
+              where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season: season.number, episode: ep.number } },
               update: { collectedAt: ep.collected_at ? new Date(ep.collected_at) : new Date() },
-              create: { mediaId: media.id, season: season.number, episode: ep.number, collectedAt: ep.collected_at ? new Date(ep.collected_at) : new Date() }
+              create: { userId: req.user.id, mediaId: media.id, season: season.number, episode: ep.number, collectedAt: ep.collected_at ? new Date(ep.collected_at) : new Date() }
             });
           }
         }
@@ -324,16 +326,16 @@ router.post('/import-trakt', async (req, res) => {
         if (!media) continue;
 
         const existingWatch = await prisma.watchHistory.findFirst({
-          where: { mediaId: media.id }
+          where: { userId: req.user.id, mediaId: media.id }
         });
         if (!existingWatch) {
           await prisma.watchHistory.create({
-            data: { mediaId: media.id, watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date() }
+            data: { userId: req.user.id, mediaId: media.id, watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date() }
           });
         }
 
         const existingLog = await prisma.watchHistoryLog.findFirst({
-          where: { mediaId: media.id, type: 'movie', isCompleted: true }
+          where: { userId: req.user.id, mediaId: media.id, type: 'movie', isCompleted: true }
         });
         if (!existingLog) {
           const runtime = await resolveDuration({
@@ -344,6 +346,7 @@ router.post('/import-trakt', async (req, res) => {
           const durationSec = runtime * 60;
           await prisma.watchHistoryLog.create({
             data: {
+              userId: req.user.id,
               mediaId: media.id,
               type: 'movie',
               watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date(),
@@ -367,13 +370,13 @@ router.post('/import-trakt', async (req, res) => {
         for (const season of item.seasons) {
           for (const ep of season.episodes) {
             await prisma.episodeWatchHistory.upsert({
-              where: { mediaId_season_episode: { mediaId: media.id, season: season.number, episode: ep.number } },
+              where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season: season.number, episode: ep.number } },
               update: { watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date() },
-              create: { mediaId: media.id, season: season.number, episode: ep.number, watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date() }
+              create: { userId: req.user.id, mediaId: media.id, season: season.number, episode: ep.number, watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date() }
             });
 
             const existingLog = await prisma.watchHistoryLog.findFirst({
-              where: { mediaId: media.id, type: 'tv', season: season.number, episode: ep.number, isCompleted: true }
+              where: { userId: req.user.id, mediaId: media.id, type: 'tv', season: season.number, episode: ep.number, isCompleted: true }
             });
             if (!existingLog) {
               const runtime = await resolveDuration({
@@ -386,6 +389,7 @@ router.post('/import-trakt', async (req, res) => {
               const durationSec = runtime * 60;
               await prisma.watchHistoryLog.create({
                 data: {
+                  userId: req.user.id,
                   mediaId: media.id,
                   type: 'tv',
                   season: season.number,
@@ -400,7 +404,7 @@ router.post('/import-trakt', async (req, res) => {
           }
         }
         if (tmdbApiKey) {
-          await syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey);
+          await syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey, req.user.id);
         }
       }
 
@@ -623,32 +627,38 @@ router.get('/conflicts', async (req, res) => {
 // GET collected movies
 router.get('/movies', async (req, res) => {
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    const tmdbApiKey = user?.tmdbApiKey;
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
     const mediaList = await prisma.media.findMany({
       where: {
         type: 'movie',
         OR: [
-          { collections: { some: {} } },
-          { listItems: { some: {} } }
+          { collections: { some: { userId: req.user.id } } },
+          { listItems: { some: { list: { userId: req.user.id } } } }
         ]
       },
       include: {
-        collections: true,
-        watchHistory: true
+        collections: { where: { userId: req.user.id } },
+        watchHistory: { where: { userId: req.user.id } }
       }
     });
 
     const movies = await Promise.all(mediaList.map(async (m) => {
-      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey);
+      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey, req.user.id);
       const isWatched = healedMedia.watchHistory.length > 0;
       const collectionEntry = healedMedia.collections[0];
       
-      let backdropPath = null;
-      if (tmdbApiKey) {
+      let backdropPath = healedMedia.backdropPath;
+      if (!backdropPath && tmdbApiKey) {
         try {
           const data = await fetchTMDB(`/3/movie/${m.tmdbId}`, tmdbApiKey);
-          if (data) backdropPath = data.backdrop_path;
+          if (data && data.backdrop_path) {
+            backdropPath = data.backdrop_path;
+            await prisma.media.update({
+              where: { id: healedMedia.id },
+              data: { backdropPath }
+            });
+          }
         } catch (err) {
           console.error(`Failed to fetch cached backdrop for movie ${m.tmdbId}:`, err.message);
         }
@@ -674,35 +684,41 @@ router.get('/movies', async (req, res) => {
 // GET collected shows
 router.get('/shows', async (req, res) => {
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    const tmdbApiKey = user?.tmdbApiKey;
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
     const mediaList = await prisma.media.findMany({
       where: {
         type: 'tv',
         OR: [
-          { collections: { some: {} } },
-          { listItems: { some: {} } }
+          { collections: { some: { userId: req.user.id } } },
+          { listItems: { some: { list: { userId: req.user.id } } } }
         ]
       },
       include: {
-        collections: true,
-        episodeWatchHistory: true,
-        episodeCollections: true
+        collections: { where: { userId: req.user.id } },
+        episodeWatchHistory: { where: { userId: req.user.id } },
+        episodeCollections: { where: { userId: req.user.id } }
       }
     });
 
     const shows = await Promise.all(mediaList.map(async (m) => {
-      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey);
+      const healedMedia = await healMediaRecordIfMissingDetails(m, tmdbApiKey, req.user.id);
       let totalEpisodes = 0;
       let totalSeasons = 0;
-      let backdropPath = null;
+      let backdropPath = healedMedia.backdropPath;
 
       if (tmdbApiKey) {
         try {
           const tmdbRes = await fetchTMDB(`/3/tv/${healedMedia.tmdbId}`, tmdbApiKey);
           totalEpisodes = tmdbRes.number_of_episodes || 0;
           totalSeasons = tmdbRes.number_of_seasons || 0;
-          backdropPath = tmdbRes.backdrop_path;
+          if (!backdropPath && tmdbRes.backdrop_path) {
+            backdropPath = tmdbRes.backdrop_path;
+            await prisma.media.update({
+              where: { id: healedMedia.id },
+              data: { backdropPath }
+            });
+          }
         } catch (err) {
           console.error(`Failed to fetch TMDB details for TV show ${healedMedia.tmdbId}:`, err.message);
         }
@@ -737,23 +753,23 @@ router.get('/tv/:tmdbId', async (req, res) => {
   const parsedId = parseInt(tmdbId);
 
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
     const [tmdbData, creditsData, externalIdsData] = await Promise.all([
-      fetchTMDB(`/3/tv/${parsedId}`, user.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/credits`, user.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/external_ids`, user.tmdbApiKey)
+      fetchTMDB(`/3/tv/${parsedId}`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/credits`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey)
     ]);
 
     const media = await prisma.media.findFirst({
       where: { tmdbId: parsedId, type: 'tv' },
       include: {
-        collections: true,
-        episodeCollections: true,
-        episodeWatchHistory: true
+        collections: { where: { userId: req.user.id } },
+        episodeCollections: { where: { userId: req.user.id } },
+        episodeWatchHistory: { where: { userId: req.user.id } }
       }
     });
 
@@ -763,6 +779,8 @@ router.get('/tv/:tmdbId', async (req, res) => {
 
     res.json({
       ...tmdbData,
+      poster_path: media?.posterPath || tmdbData.poster_path,
+      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
       cast: creditsData.cast?.slice(0, 10) || [],
       external_ids: externalIdsData || {},
       isCollected,
@@ -782,21 +800,21 @@ router.get('/movie/:tmdbId', async (req, res) => {
   const parsedId = parseInt(tmdbId);
 
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
     const [tmdbData, creditsData] = await Promise.all([
-      fetchTMDB(`/3/movie/${parsedId}`, user.tmdbApiKey),
-      fetchTMDB(`/3/movie/${parsedId}/credits`, user.tmdbApiKey)
+      fetchTMDB(`/3/movie/${parsedId}`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/movie/${parsedId}/credits`, systemSettings.tmdbApiKey)
     ]);
 
     const media = await prisma.media.findFirst({
       where: { tmdbId: parsedId, type: 'movie' },
       include: {
-        collections: true,
-        watchHistory: true
+        collections: { where: { userId: req.user.id } },
+        watchHistory: { where: { userId: req.user.id } }
       }
     });
 
@@ -805,6 +823,8 @@ router.get('/movie/:tmdbId', async (req, res) => {
 
     res.json({
       ...tmdbData,
+      poster_path: media?.posterPath || tmdbData.poster_path,
+      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
       cast: creditsData.cast?.slice(0, 10) || [],
       isCollected,
       isWatched,
@@ -823,18 +843,18 @@ router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
   const parsedSeason = parseInt(seasonNumber);
 
   try {
-    const user = await prisma.settings.findUnique({ where: { id: req.user.id } });
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
-    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}`, user.tmdbApiKey);
+    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}`, systemSettings.tmdbApiKey);
 
     const media = await prisma.media.findFirst({
       where: { tmdbId: parsedId, type: 'tv' },
       include: {
-        episodeCollections: { where: { season: parsedSeason } },
-        episodeWatchHistory: { where: { season: parsedSeason } }
+        episodeCollections: { where: { userId: req.user.id, season: parsedSeason } },
+        episodeWatchHistory: { where: { userId: req.user.id, season: parsedSeason } }
       }
     });
 
@@ -877,24 +897,25 @@ router.post('/episode/watch', async (req, res) => {
 
   try {
     const media = await getOrCreateMediaRecord({ tmdbId, type: 'tv', title, posterPath });
-    const user = await prisma.settings.findFirst();
+    const systemSettings = await prisma.systemSettings.findFirst();
 
     if (watched) {
       const history = await prisma.episodeWatchHistory.upsert({
-        where: { mediaId_season_episode: { mediaId: media.id, season, episode } },
+        where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season, episode } },
         update: { watchedAt: new Date() },
-        create: { mediaId: media.id, season, episode, watchedAt: new Date() }
+        create: { userId: req.user.id, mediaId: media.id, season, episode, watchedAt: new Date() }
       });
       const runtime = await resolveDuration({
         tmdbId: media.tmdbId,
         type: 'tv',
         season,
         episode,
-        apiKey: user?.tmdbApiKey
+        apiKey: systemSettings?.tmdbApiKey
       });
       const durationSec = runtime * 60;
       await prisma.watchHistoryLog.create({
         data: {
+          userId: req.user.id,
           mediaId: media.id,
           type: 'tv',
           season,
@@ -905,19 +926,19 @@ router.post('/episode/watch', async (req, res) => {
           viewOffset: durationSec
         }
       });
-      if (user?.tmdbApiKey) {
-        await syncShowWatchHistory(media.id, media.tmdbId, user.tmdbApiKey);
+      if (systemSettings?.tmdbApiKey) {
+        await syncShowWatchHistory(media.id, media.tmdbId, systemSettings.tmdbApiKey, req.user.id);
       }
       res.json({ success: true, history });
     } else {
       await prisma.episodeWatchHistory.deleteMany({
-        where: { mediaId: media.id, season, episode }
+        where: { userId: req.user.id, mediaId: media.id, season, episode }
       });
       await prisma.watchHistoryLog.deleteMany({
-        where: { mediaId: media.id, season, episode }
+        where: { userId: req.user.id, mediaId: media.id, season, episode }
       });
-      if (user?.tmdbApiKey) {
-        await syncShowWatchHistory(media.id, media.tmdbId, user.tmdbApiKey);
+      if (systemSettings?.tmdbApiKey) {
+        await syncShowWatchHistory(media.id, media.tmdbId, systemSettings.tmdbApiKey, req.user.id);
       }
       res.json({ success: true, removed: true });
     }
@@ -939,14 +960,14 @@ router.post('/episode/collect', async (req, res) => {
 
     if (collected) {
       const coll = await prisma.episodeCollection.upsert({
-        where: { mediaId_season_episode: { mediaId: media.id, season, episode } },
+        where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season, episode } },
         update: { collectedAt: new Date() },
-        create: { mediaId: media.id, season, episode, collectedAt: new Date() }
+        create: { userId: req.user.id, mediaId: media.id, season, episode, collectedAt: new Date() }
       });
       res.json({ success: true, collection: coll });
     } else {
       await prisma.episodeCollection.deleteMany({
-        where: { mediaId: media.id, season, episode }
+        where: { userId: req.user.id, mediaId: media.id, season, episode }
       });
       res.json({ success: true, removed: true });
     }
@@ -965,13 +986,13 @@ router.post('/collect', async (req, res) => {
     const media = await getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath });
 
     if (remove) {
-      await prisma.collection.deleteMany({ where: { mediaId: media.id } });
+      await prisma.collection.deleteMany({ where: { userId: req.user.id, mediaId: media.id } });
       res.json({ removed: true });
     } else {
       const collection = await prisma.collection.upsert({
-        where: { mediaId: media.id },
+        where: { userId_mediaId: { userId: req.user.id, mediaId: media.id } },
         update: { collectedAt: collectedAt ? new Date(collectedAt) : new Date() },
-        create: { mediaId: media.id, collectedAt: collectedAt ? new Date(collectedAt) : new Date() }
+        create: { userId: req.user.id, mediaId: media.id, collectedAt: collectedAt ? new Date(collectedAt) : new Date() }
       });
       res.json(collection);
     }
@@ -989,22 +1010,23 @@ router.post('/watch', async (req, res) => {
     const media = await getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath });
 
     if (remove) {
-      await prisma.watchHistory.deleteMany({ where: { mediaId: media.id } });
-      await prisma.watchHistoryLog.deleteMany({ where: { mediaId: media.id } });
+      await prisma.watchHistory.deleteMany({ where: { userId: req.user.id, mediaId: media.id } });
+      await prisma.watchHistoryLog.deleteMany({ where: { userId: req.user.id, mediaId: media.id } });
       res.json({ removed: true });
     } else {
       const history = await prisma.watchHistory.create({
-        data: { mediaId: media.id, watchedAt: watchedAt ? new Date(watchedAt) : new Date() }
+        data: { userId: req.user.id, mediaId: media.id, watchedAt: watchedAt ? new Date(watchedAt) : new Date() }
       });
-      const settings = await prisma.settings.findFirst();
+      const systemSettings = await prisma.systemSettings.findFirst();
       const runtime = await resolveDuration({
         tmdbId: media.tmdbId,
         type: type,
-        apiKey: settings?.tmdbApiKey
+        apiKey: systemSettings?.tmdbApiKey
       });
       const durationSec = runtime * 60;
       await prisma.watchHistoryLog.create({
         data: {
+          userId: req.user.id,
           mediaId: media.id,
           type: type,
           watchedAt: watchedAt ? new Date(watchedAt) : new Date(),
@@ -1060,7 +1082,7 @@ router.post('/force-remove', async (req, res) => {
 router.get('/plex-session', (req, res) => {
   try {
     const plexStore = require('../utils/plexStore');
-    res.json({ session: plexStore.getActiveSession() });
+    res.json({ session: plexStore.getActiveSession(req.user.id) });
   } catch (error) {
     console.error('Failed to get Plex session:', error);
     res.status(500).json({ error: 'Failed to get Plex session' });
@@ -1101,11 +1123,11 @@ router.post('/correct', async (req, res) => {
   }
 
   try {
-    const user = await prisma.settings.findFirst();
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
-    const apiKey = user.tmdbApiKey;
+    const apiKey = systemSettings.tmdbApiKey;
 
     let targetTmdbId = newTmdbId ? parseInt(newTmdbId) : null;
 
@@ -1187,23 +1209,30 @@ router.post('/correct', async (req, res) => {
       });
 
       // Move Collections
-      const oldColl = await prisma.collection.findUnique({ where: { mediaId: oldMedia.id } });
-      if (oldColl) {
-        const newColl = await prisma.collection.findUnique({ where: { mediaId: newMedia.id } });
+      const oldColls = await prisma.collection.findMany({ where: { mediaId: oldMedia.id } });
+      for (const oldColl of oldColls) {
+        const newColl = await prisma.collection.findFirst({
+          where: { userId: oldColl.userId, mediaId: newMedia.id }
+        });
         if (!newColl) {
           await prisma.collection.create({
-            data: { mediaId: newMedia.id, collectedAt: oldColl.collectedAt }
+            data: { userId: oldColl.userId, mediaId: newMedia.id, collectedAt: oldColl.collectedAt }
           });
         }
-        await prisma.collection.delete({ where: { id: oldColl.id } });
       }
+      await prisma.collection.deleteMany({ where: { mediaId: oldMedia.id } });
 
       // Move WatchHistory
       const oldWatchHistories = await prisma.watchHistory.findMany({ where: { mediaId: oldMedia.id } });
       for (const wh of oldWatchHistories) {
-        await prisma.watchHistory.create({
-          data: { mediaId: newMedia.id, watchedAt: wh.watchedAt }
+        const exists = await prisma.watchHistory.findFirst({
+          where: { userId: wh.userId, mediaId: newMedia.id, watchedAt: wh.watchedAt }
         });
+        if (!exists) {
+          await prisma.watchHistory.create({
+            data: { userId: wh.userId, mediaId: newMedia.id, watchedAt: wh.watchedAt }
+          });
+        }
       }
       if (oldWatchHistories.length > 0) {
         await prisma.watchHistory.deleteMany({ where: { mediaId: oldMedia.id } });
@@ -1233,7 +1262,8 @@ router.post('/correct', async (req, res) => {
         for (const ec of oldEpisodeCollections) {
           const exists = await prisma.episodeCollection.findUnique({
             where: {
-              mediaId_season_episode: {
+              userId_mediaId_season_episode: {
+                userId: ec.userId,
                 mediaId: newMedia.id,
                 season: ec.season,
                 episode: ec.episode
@@ -1254,7 +1284,8 @@ router.post('/correct', async (req, res) => {
         for (const ewh of oldEpisodeWatchHistories) {
           const exists = await prisma.episodeWatchHistory.findUnique({
             where: {
-              mediaId_season_episode: {
+              userId_mediaId_season_episode: {
+                userId: ewh.userId,
                 mediaId: newMedia.id,
                 season: ewh.season,
                 episode: ewh.episode
@@ -1288,10 +1319,10 @@ router.post('/correct', async (req, res) => {
       
       // Sync watch history for the new show
       if (type === 'tv') {
-        await syncShowWatchHistory(newMedia.id, newMedia.tmdbId, apiKey);
+        await syncShowWatchHistory(newMedia.id, newMedia.tmdbId, apiKey, req.user.id);
       }
       
-      await recreateCollectionsFromLocalFiles(newMedia.id, type);
+      await recreateCollectionsFromLocalFiles(newMedia.id, type, 1);
       
       return res.json({ success: true, message: `Successfully matched and merged files into existing show "${newTitle}".`, media: newMedia });
     } else {
@@ -1315,7 +1346,7 @@ router.post('/correct', async (req, res) => {
 
       // Keep existing episode collections, watch history, and logs so they follow the metadata correction
 
-      await recreateCollectionsFromLocalFiles(updatedMedia.id, type);
+      await recreateCollectionsFromLocalFiles(updatedMedia.id, type, 1);
 
       return res.json({ success: true, message: `Successfully updated match to "${newTitle}".`, media: updatedMedia });
     }
@@ -1333,11 +1364,11 @@ router.post('/correct-file', async (req, res) => {
   }
 
   try {
-    const user = await prisma.settings.findFirst();
-    if (!user || !user.tmdbApiKey) {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
-    const apiKey = user.tmdbApiKey;
+    const apiKey = systemSettings.tmdbApiKey;
 
     let targetTmdbId = newTmdbId ? parseInt(newTmdbId) : null;
 
@@ -1478,10 +1509,11 @@ router.post('/correct-file', async (req, res) => {
     });
 
     if (type === 'tv' && season !== null && episode !== null) {
-      // Migrate specific EpisodeCollection if it exists
+      // Migrate specific EpisodeCollection if it exists for admin (userId 1)
       const oldEc = await prisma.episodeCollection.findUnique({
         where: {
-          mediaId_season_episode: {
+          userId_mediaId_season_episode: {
+            userId: 1,
             mediaId: oldMediaId,
             season,
             episode
@@ -1491,7 +1523,8 @@ router.post('/correct-file', async (req, res) => {
       if (oldEc) {
         const exists = await prisma.episodeCollection.findUnique({
           where: {
-            mediaId_season_episode: {
+            userId_mediaId_season_episode: {
+              userId: 1,
               mediaId: targetMedia.id,
               season,
               episode
@@ -1508,10 +1541,11 @@ router.post('/correct-file', async (req, res) => {
         }
       }
 
-      // Migrate specific EpisodeWatchHistory if it exists
+      // Migrate specific EpisodeWatchHistory if it exists for admin (userId 1)
       const oldEwh = await prisma.episodeWatchHistory.findUnique({
         where: {
-          mediaId_season_episode: {
+          userId_mediaId_season_episode: {
+            userId: 1,
             mediaId: oldMediaId,
             season,
             episode
@@ -1521,7 +1555,8 @@ router.post('/correct-file', async (req, res) => {
       if (oldEwh) {
         const exists = await prisma.episodeWatchHistory.findUnique({
           where: {
-            mediaId_season_episode: {
+            userId_mediaId_season_episode: {
+              userId: 1,
               mediaId: targetMedia.id,
               season,
               episode
@@ -1553,15 +1588,15 @@ router.post('/correct-file', async (req, res) => {
     }
 
     // 7. Update collection statuses for both old and target media
-    await recreateCollectionsFromLocalFiles(oldMediaId, oldMedia.type);
-    await recreateCollectionsFromLocalFiles(targetMedia.id, type);
+    await recreateCollectionsFromLocalFiles(oldMediaId, oldMedia.type, 1);
+    await recreateCollectionsFromLocalFiles(targetMedia.id, type, 1);
 
     // Sync watch histories
     if (type === 'tv') {
-      await syncShowWatchHistory(targetMedia.id, targetMedia.tmdbId, apiKey);
+      await syncShowWatchHistory(targetMedia.id, targetMedia.tmdbId, apiKey, req.user.id);
     }
     if (oldMedia.type === 'tv') {
-      await syncShowWatchHistory(oldMediaId, oldMedia.tmdbId, apiKey);
+      await syncShowWatchHistory(oldMediaId, oldMedia.tmdbId, apiKey, req.user.id);
     }
 
     // 8. Auto-cleanup: if old media has no local files left AND no watch logs and no collections, delete it!
@@ -1596,7 +1631,7 @@ router.get('/watch-history', async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const where = {};
+    const where = { userId: req.user.id };
     if (type !== 'all') {
       where.type = type;
     }
@@ -1704,7 +1739,9 @@ router.delete('/watch-history/:id', async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
-    const log = await prisma.watchHistoryLog.findUnique({ where: { id } });
+    const log = await prisma.watchHistoryLog.findFirst({
+      where: { id, userId: req.user.id }
+    });
     if (!log) return res.status(404).json({ error: 'Watch history entry not found' });
 
     // Delete from WatchHistoryLog first
@@ -1715,6 +1752,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       // Find a matching WatchHistory record close to the log's watchedAt
       let match = await prisma.watchHistory.findFirst({
         where: {
+          userId: req.user.id,
           mediaId: log.mediaId,
           watchedAt: {
             gte: new Date(log.watchedAt.getTime() - 60000),
@@ -1725,7 +1763,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       // Fallback: find the one closest in time
       if (!match) {
         const allHistories = await prisma.watchHistory.findMany({
-          where: { mediaId: log.mediaId }
+          where: { userId: req.user.id, mediaId: log.mediaId }
         });
         if (allHistories.length > 0) {
           allHistories.sort((a, b) => Math.abs(a.watchedAt.getTime() - log.watchedAt.getTime()) - Math.abs(b.watchedAt.getTime() - log.watchedAt.getTime()));
@@ -1740,6 +1778,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       // Check if there are other completed watch logs for this episode
       const otherLogs = await prisma.watchHistoryLog.findFirst({
         where: {
+          userId: req.user.id,
           mediaId: log.mediaId,
           type: 'tv',
           season: log.season,
@@ -1751,6 +1790,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       if (!otherLogs) {
         await prisma.episodeWatchHistory.deleteMany({
           where: {
+            userId: req.user.id,
             mediaId: log.mediaId,
             season: log.season,
             episode: log.episode
@@ -1772,14 +1812,20 @@ router.get('/:tmdbId', async (req, res) => {
   const { tmdbId } = req.params;
   const media = await prisma.media.findFirst({
     where: { tmdbId: parseInt(tmdbId) },
-    include: { collections: true, watchHistory: { orderBy: { watchedAt: 'desc' } } }
+    include: {
+      collections: { where: { userId: req.user.id } },
+      watchHistory: {
+        where: { userId: req.user.id },
+        orderBy: { watchedAt: 'desc' }
+      }
+    }
   });
   
   if (!media) return res.json(null);
   res.json(media);
 });
 
-async function recreateCollectionsFromLocalFiles(mediaId, type) {
+async function recreateCollectionsFromLocalFiles(mediaId, type, userId = 1) {
   try {
     const files = await prisma.localFile.findMany({
       where: { mediaId }
@@ -1789,9 +1835,9 @@ async function recreateCollectionsFromLocalFiles(mediaId, type) {
 
     // Ensure the main Collection entry exists
     await prisma.collection.upsert({
-      where: { mediaId },
+      where: { userId_mediaId: { userId, mediaId } },
       update: {},
-      create: { mediaId }
+      create: { userId, mediaId }
     });
 
     if (type === 'tv') {
@@ -1799,7 +1845,8 @@ async function recreateCollectionsFromLocalFiles(mediaId, type) {
         if (file.season !== null && file.episode !== null) {
           await prisma.episodeCollection.upsert({
             where: {
-              mediaId_season_episode: {
+              userId_mediaId_season_episode: {
+                userId,
                 mediaId,
                 season: file.season,
                 episode: file.episode
@@ -1807,6 +1854,7 @@ async function recreateCollectionsFromLocalFiles(mediaId, type) {
             },
             update: {},
             create: {
+              userId,
               mediaId,
               season: file.season,
               episode: file.episode
@@ -1819,5 +1867,84 @@ async function recreateCollectionsFromLocalFiles(mediaId, type) {
     console.error(`Failed to recreate collections from local files for mediaId ${mediaId}:`, err);
   }
 }
+
+// GET media alternative images
+router.get('/:type/:tmdbId/images', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId, 10);
+  const tmdbType = type === 'movie' ? 'movie' : 'tv';
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const images = await fetchTMDB(`/3/${tmdbType}/${parsedId}/images`, systemSettings.tmdbApiKey);
+    res.json(images);
+  } catch (error) {
+    console.error('Failed to fetch media images:', error.message);
+    res.status(500).json({ error: 'Failed to fetch media images' });
+  }
+});
+
+// PUT update media custom poster or backdrop
+router.put('/:type/:tmdbId/images', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId, 10);
+  const { posterPath, backdropPath } = req.body;
+
+  try {
+    let media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type }
+    });
+
+    if (!media) {
+      const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+      const tmdbApiKey = systemSettings?.tmdbApiKey;
+      let title = `${type} #${parsedId}`;
+      let overview = '';
+      let releaseDate = null;
+      let originalPoster = null;
+
+      if (tmdbApiKey) {
+        try {
+          const data = await fetchTMDB(`/3/${type}/${parsedId}`, tmdbApiKey);
+          title = data.title || data.name || title;
+          overview = data.overview || '';
+          releaseDate = data.release_date || data.first_air_date || null;
+          originalPoster = data.poster_path || null;
+        } catch (err) {
+          console.error('Failed to fetch TMDB data for image update:', err.message);
+        }
+      }
+
+      media = await prisma.media.create({
+        data: {
+          tmdbId: parsedId,
+          type,
+          title,
+          overview,
+          releaseDate: releaseDate ? new Date(releaseDate) : null,
+          posterPath: originalPoster
+        }
+      });
+    }
+
+    const updateData = {};
+    if (posterPath !== undefined) updateData.posterPath = posterPath;
+    if (backdropPath !== undefined) updateData.backdropPath = backdropPath;
+
+    const updatedMedia = await prisma.media.update({
+      where: { id: media.id },
+      data: updateData
+    });
+
+    res.json({ success: true, media: updatedMedia });
+  } catch (error) {
+    console.error('Failed to update media images:', error.message);
+    res.status(500).json({ error: 'Failed to update media images' });
+  }
+});
 
 module.exports = router;

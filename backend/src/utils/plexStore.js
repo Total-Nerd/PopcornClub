@@ -1,11 +1,11 @@
-let activeSession = null;
+const sessions = {};
 
 module.exports = {
-  getActiveSession: () => activeSession,
-  setActiveSession: (session) => {
-    activeSession = session;
+  getActiveSession: (userId) => sessions[userId] || null,
+  setActiveSession: (userId, session) => {
+    sessions[userId] = session;
   },
-  clearActiveSession: () => {
-    activeSession = null;
+  clearActiveSession: (userId) => {
+    delete sessions[userId];
   }
 };

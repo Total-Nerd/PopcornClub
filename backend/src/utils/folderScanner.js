@@ -242,14 +242,15 @@ async function processSingleFile(filePath, folderType, apiKey) {
     if (parsed.type === 'tv' && parsed.season !== undefined && parsed.episode !== undefined) {
       // Mark TV Show collected
       await prisma.collection.upsert({
-        where: { mediaId: media.id },
+        where: { userId_mediaId: { userId: 1, mediaId: media.id } },
         update: {},
-        create: { mediaId: media.id }
+        create: { userId: 1, mediaId: media.id }
       });
       // Mark Episode collected
       await prisma.episodeCollection.upsert({
         where: {
-          mediaId_season_episode: {
+          userId_mediaId_season_episode: {
+            userId: 1,
             mediaId: media.id,
             season: parsed.season,
             episode: parsed.episode
@@ -257,6 +258,7 @@ async function processSingleFile(filePath, folderType, apiKey) {
         },
         update: {},
         create: {
+          userId: 1,
           mediaId: media.id,
           season: parsed.season,
           episode: parsed.episode
@@ -265,9 +267,9 @@ async function processSingleFile(filePath, folderType, apiKey) {
     } else {
       // Mark Movie collected
       await prisma.collection.upsert({
-        where: { mediaId: media.id },
+        where: { userId_mediaId: { userId: 1, mediaId: media.id } },
         update: {},
-        create: { mediaId: media.id }
+        create: { userId: 1, mediaId: media.id }
       });
     }
 
@@ -389,7 +391,7 @@ async function scanAllFolders() {
   isScanning = true;
   currentProgress = 'Loading settings...';
   try {
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.systemSettings.findFirst();
     const apiKey = settings?.tmdbApiKey;
     if (!apiKey) {
       currentProgress = 'Scan skipped: TMDB API Key is not configured under settings.';
@@ -424,7 +426,7 @@ async function scanSingleFolder(folderRecord) {
   isScanning = true;
   currentProgress = 'Loading settings...';
   try {
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.systemSettings.findFirst();
     const apiKey = settings?.tmdbApiKey;
     if (!apiKey) {
       currentProgress = 'Scan skipped: TMDB API Key is not configured under settings.';
@@ -548,7 +550,7 @@ function startWatcher(folderRecord) {
 
   watcher.on('add', async (filePath) => {
     console.log(`[Watcher] File added: ${filePath}`);
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.systemSettings.findFirst();
     const apiKey = settings?.tmdbApiKey;
     if (apiKey) {
       await processSingleFile(filePath, folderType, apiKey);
@@ -557,7 +559,7 @@ function startWatcher(folderRecord) {
 
   watcher.on('change', async (filePath) => {
     console.log(`[Watcher] File changed: ${filePath}`);
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.systemSettings.findFirst();
     const apiKey = settings?.tmdbApiKey;
     if (apiKey) {
       await processSingleFile(filePath, folderType, apiKey);
@@ -655,10 +657,10 @@ async function initFolderScanner() {
   try {
     const envApiKey = process.env.TMDB_API_KEY;
     if (envApiKey) {
-      const settings = await prisma.settings.findFirst();
+      const settings = await prisma.systemSettings.findFirst();
       if (settings && settings.tmdbApiKey !== envApiKey) {
         console.log('[Folder Scanner] Automatically updating TMDB API Key from environment variable.');
-        await prisma.settings.update({
+        await prisma.systemSettings.update({
           where: { id: settings.id },
           data: { tmdbApiKey: envApiKey }
         });

@@ -3,23 +3,11 @@ const { fetchTMDB } = require('./tmdb');
 
 async function seedWatchHistoryLogs() {
   try {
-    let settings = await prisma.settings.findFirst();
-    if (settings && settings.hasRunHistoryMigration) {
-      console.log('[Migration] WatchHistoryLog migration already completed. Skipping migration.');
-      return;
-    }
-
     const currentCount = await prisma.watchHistoryLog.count();
     const totalOldCount = (await prisma.watchHistory.count()) + (await prisma.episodeWatchHistory.count());
 
     if (currentCount > 0 && currentCount >= totalOldCount) {
       console.log('[Migration] WatchHistoryLog already has data. Skipping migration.');
-      if (settings) {
-        await prisma.settings.update({
-          where: { id: settings.id },
-          data: { hasRunHistoryMigration: true }
-        });
-      }
       return;
     }
 
@@ -39,7 +27,8 @@ async function seedWatchHistoryLogs() {
       watchedAt: record.watchedAt,
       duration: 0,
       viewOffset: 0,
-      isCompleted: true
+      isCompleted: true,
+      userId: record.userId || 1
     }));
 
     if (movieData.length > 0) {
@@ -60,7 +49,8 @@ async function seedWatchHistoryLogs() {
       watchedAt: record.watchedAt,
       duration: 0,
       viewOffset: 0,
-      isCompleted: true
+      isCompleted: true,
+      userId: record.userId || 1
     }));
 
     if (tvData.length > 0) {
@@ -70,18 +60,6 @@ async function seedWatchHistoryLogs() {
     }
 
     console.log(`[Migration] Completed! Migrated ${movieData.length} movies and ${tvData.length} episodes watch history logs.`);
-
-    // Set flag in settings
-    if (!settings) {
-      await prisma.settings.create({
-        data: { hasRunHistoryMigration: true }
-      });
-    } else {
-      await prisma.settings.update({
-        where: { id: settings.id },
-        data: { hasRunHistoryMigration: true }
-      });
-    }
   } catch (error) {
     console.error('[Migration] Error migrating watch history to logs:', error);
   }
@@ -89,7 +67,7 @@ async function seedWatchHistoryLogs() {
 
 async function backfillMediaGenres() {
   try {
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.systemSettings.findFirst();
     if (!settings || !settings.tmdbApiKey) {
       console.log('[Backfill Genres] TMDB API Key not found. Skipping genres backfill.');
       return;

@@ -20,10 +20,16 @@ services:
     ports:
       - "3002:3001"
     environment:
-      DATABASE_URL: "postgresql://tvtracker:tvtracker_password@db:5432/tvtracker?schema=public"
+      DATABASE_URL: "${DATABASE_URL}"
       PORT: 3001
-      JWT_SECRET: "supersecretkey_change_in_production"
-      TMDB_API_KEY: "7edc57c4c9b73aa990f5b4230d569014"
+      JWT_SECRET: "${JWT_SECRET}"
+      TMDB_API_KEY: "${TMDB_API_KEY}"
+      APP_DOMAIN: "${APP_DOMAIN}"
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_PORT: "${SMTP_PORT}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASS: "${SMTP_PASS}"
+      SMTP_FROM: "${SMTP_FROM}"
     depends_on:
       - db
     volumes:

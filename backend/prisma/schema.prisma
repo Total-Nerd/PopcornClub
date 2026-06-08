@@ -8,14 +8,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Settings {
+model User {
+  id               Int                  @id @default(autoincrement())
+  username         String               @unique
+  passwordHash     String
+  name             String?
+  email            String?
+  avatarPath       String?
+  role             String               @default("user") // "admin" or "user"
+  plexUser         String?
+  plexWebhookToken String?              @unique
+  traktUsername    String?
+  traktClientId    String?
+  plexLastWebhookAt DateTime?
+
+  collections          Collection[]
+  watchHistory        WatchHistory[]
+  episodeCollections  EpisodeCollection[]
+  episodeWatchHistory EpisodeWatchHistory[]
+  watchHistoryLogs    WatchHistoryLog[]
+  customLists         CustomList[]
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model SystemSettings {
   id             Int      @id @default(1)
-  username       String   @unique
-  passwordHash   String
-  plexUser       String?
   tmdbApiKey     String?
-  traktUsername  String?
-  traktClientId  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -28,6 +48,7 @@ model Media {
   overview            String?
   releaseDate         DateTime?
   posterPath          String?
+  backdropPath        String?
   genres              String?
   
   collections         Collection[]
@@ -55,22 +76,30 @@ model WatchHistoryLog {
   duration    Int      @default(0) // total duration in seconds
   viewOffset  Int      @default(0) // offset/progress in seconds
   isCompleted Boolean  @default(true) // true = full watch, false = partial watch
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
 model Collection {
-  id         Int      @id @default(autoincrement())
-  mediaId    Int      @unique
-  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  mediaId     Int
+  media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   collectedAt DateTime @default(now())
+
+  @@unique([userId, mediaId])
 }
 
 model WatchHistory {
   id         Int      @id @default(autoincrement())
   mediaId    Int
   media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchedAt  DateTime @default(now())
 }
 
@@ -80,9 +109,11 @@ model EpisodeCollection {
   media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   season      Int
   episode     Int
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   collectedAt DateTime @default(now())
 
-  @@unique([mediaId, season, episode])
+  @@unique([userId, mediaId, season, episode])
 }
 
 model EpisodeWatchHistory {
@@ -91,17 +122,23 @@ model EpisodeWatchHistory {
   media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   season    Int
   episode   Int
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchedAt DateTime @default(now())
 
-  @@unique([mediaId, season, episode])
+  @@unique([userId, mediaId, season, episode])
 }
 
 model CustomList {
   id        Int        @id @default(autoincrement())
-  name      String     @unique
+  name      String
+  userId    Int?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     ListItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  @@unique([userId, name])
 }
 
 model ListItem {
@@ -113,12 +150,6 @@ model ListItem {
   addedAt      DateTime   @default(now())
 
   @@unique([listId, mediaId])
-}
-
-model TMDBCache {
-  key       String   @id
-  data      Json
-  updatedAt DateTime @updatedAt
 }
 
 model LocalFolder {
@@ -143,4 +174,11 @@ model LocalFile {
   manuallyCorrected Boolean      @default(false)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+}
+
+model TMDBCache {
+  key       String   @id
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

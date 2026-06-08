@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search } from 'lucide-react';
+import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
+import ImageSelectorModal from '../components/ImageSelectorModal';
 
 const ShowDetails = () => {
   const { tmdbId } = useParams();
@@ -33,6 +34,29 @@ const ShowDetails = () => {
   const [lists, setLists] = useState([]);
   const [listMemberships, setListMemberships] = useState({});
   const [isListDropdownOpen, setIsListDropdownOpen] = useState(false);
+
+  const [scrollY, setScrollY] = useState(0);
+  const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
+  const [imageSelectorType, setImageSelectorType] = useState('poster'); // 'poster' or 'backdrop'
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const handleImageSelected = (newPath) => {
+    setShowDetails(prev => {
+      if (!prev) return prev;
+      if (imageSelectorType === 'poster') {
+        return { ...prev, poster_path: newPath };
+      } else {
+        return { ...prev, backdrop_path: newPath };
+      }
+    });
+  };
 
   const fetchLists = async () => {
     try {
@@ -451,12 +475,14 @@ const ShowDetails = () => {
   return (
     <div style={{ paddingBottom: '40px' }}>
       {/* Back Button & Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-        <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)' }}>
-          <ArrowLeft size={18} />
-          <span>Back</span>
-        </button>
-      </div>
+      {!showDetails && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)' }}>
+            <ArrowLeft size={18} />
+            <span>Back</span>
+          </button>
+        </div>
+      )}
 
       {!showDetails ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '48px 24px', margin: '24px auto', maxWidth: '600px' }}>
@@ -489,20 +515,40 @@ const ShowDetails = () => {
       ) : (
         <>
           {/* Backdrop Area */}
-          <div
-            className="details-banner"
-            style={{
-              backgroundImage: showDetails.backdrop_path ? `url(https://image.tmdb.org/t/p/w1280${showDetails.backdrop_path})` : 'none'
-            }}
-          >
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'linear-gradient(to bottom, rgba(15,23,42,0.1) 0%, var(--bg-dark) 100%)'
-            }}></div>
+          <div className="details-backdrop-bg">
+            <div 
+              className="details-backdrop-image"
+              style={{
+                backgroundImage: showDetails.backdrop_path ? `url(https://image.tmdb.org/t/p/w1280${showDetails.backdrop_path})` : 'none',
+                filter: `blur(${Math.min(10, scrollY / 30)}px)`,
+                transform: `scale(${1 + Math.min(10, scrollY / 30) / 100})`
+              }}
+            />
+            <div 
+              className="details-backdrop-overlay"
+              style={{
+                opacity: Math.min(0.8, scrollY / 250)
+              }}
+            />
+            <div className="details-backdrop-gradient" />
+          </div>
+
+          <div className="details-banner-spacer">
+            <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)', backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.5)' }}>
+              <ArrowLeft size={18} />
+              <span>Back</span>
+            </button>
+
+            <button 
+              className="edit-backdrop-btn" 
+              onClick={() => {
+                setImageSelectorType('backdrop');
+                setImageSelectorOpen(true);
+              }}
+            >
+              <Edit size={16} />
+              <span>Change Backdrop</span>
+            </button>
           </div>
 
           {/* Content Layout */}
@@ -511,14 +557,26 @@ const ShowDetails = () => {
 
               {/* Left Column: Poster */}
               <div className="details-left-col">
-                <div className="details-poster-card">
-                  {showDetails.poster_path ? (
-                    <img src={`https://image.tmdb.org/t/p/w500${showDetails.poster_path}`} alt={showDetails.name} style={{ width: '100%', height: 'auto', display: 'block' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '330px', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                      No Cover
-                    </div>
-                  )}
+                <div 
+                  className="details-poster-container"
+                  onClick={() => {
+                    setImageSelectorType('poster');
+                    setImageSelectorOpen(true);
+                  }}
+                >
+                  <div className="details-poster-card">
+                    {showDetails.poster_path ? (
+                      <img src={`https://image.tmdb.org/t/p/w500${showDetails.poster_path}`} alt={showDetails.name} style={{ width: '100%', height: 'auto', display: 'block' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '330px', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                        No Cover
+                      </div>
+                    )}
+                  </div>
+                  <div className="details-poster-edit-overlay">
+                    <Edit size={24} />
+                    <span>Change Poster</span>
+                  </div>
                 </div>
               </div>
 
@@ -1439,6 +1497,18 @@ const ShowDetails = () => {
           100% { transform: rotate(360deg); }
         }
       `}</style>
+
+      {showDetails && (
+        <ImageSelectorModal
+          isOpen={imageSelectorOpen}
+          onClose={() => setImageSelectorOpen(false)}
+          mediaType="tv"
+          tmdbId={showDetails.id}
+          imageType={imageSelectorType}
+          currentPath={imageSelectorType === 'poster' ? showDetails.poster_path : showDetails.backdrop_path}
+          onSelect={handleImageSelected}
+        />
+      )}
     </div>
   );
 };

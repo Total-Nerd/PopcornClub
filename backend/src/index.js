@@ -13,6 +13,9 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
+const path = require('path');
+const fs = require('fs');
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 const authRoutes = require('./routes/auth');
 const settingsRoutes = require('./routes/settings');
@@ -47,12 +50,22 @@ app.listen(PORT, async () => {
     backfillMediaGenres().catch(err => console.error('Failed to backfill media genres:', err));
     
     const prisma = require('./prismaClient');
-    await prisma.customList.upsert({
-      where: { name: 'Watchlist' },
-      update: {},
-      create: { name: 'Watchlist' }
-    });
-    console.log('Ensured default Watchlist exists.');
+    
+    // Ensure uploads folders exist
+    const uploadsDir = path.join(__dirname, '../uploads');
+    const avatarsDir = path.join(__dirname, '../uploads/avatars');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+    if (!fs.existsSync(avatarsDir)) fs.mkdirSync(avatarsDir);
+
+    const adminUser = await prisma.user.findFirst({ where: { role: 'admin' } });
+    if (adminUser) {
+      await prisma.customList.upsert({
+        where: { userId_name: { userId: adminUser.id, name: 'Watchlist' } },
+        update: {},
+        create: { name: 'Watchlist', userId: adminUser.id }
+      });
+      console.log('Ensured default Watchlist exists for admin.');
+    }
   } catch (err) {
     console.error('Failed to run watch history migration:', err);
   }
