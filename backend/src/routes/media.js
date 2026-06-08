@@ -336,14 +336,20 @@ router.post('/import-trakt', async (req, res) => {
           where: { mediaId: media.id, type: 'movie', isCompleted: true }
         });
         if (!existingLog) {
+          const runtime = await resolveDuration({
+            tmdbId: media.tmdbId,
+            type: 'movie',
+            apiKey: tmdbApiKey
+          });
+          const durationSec = runtime * 60;
           await prisma.watchHistoryLog.create({
             data: {
               mediaId: media.id,
               type: 'movie',
               watchedAt: item.last_watched_at ? new Date(item.last_watched_at) : new Date(),
               isCompleted: true,
-              duration: 0,
-              viewOffset: 0
+              duration: durationSec,
+              viewOffset: durationSec
             }
           });
         }
@@ -370,6 +376,14 @@ router.post('/import-trakt', async (req, res) => {
               where: { mediaId: media.id, type: 'tv', season: season.number, episode: ep.number, isCompleted: true }
             });
             if (!existingLog) {
+              const runtime = await resolveDuration({
+                tmdbId: media.tmdbId,
+                type: 'tv',
+                season: season.number,
+                episode: ep.number,
+                apiKey: tmdbApiKey
+              });
+              const durationSec = runtime * 60;
               await prisma.watchHistoryLog.create({
                 data: {
                   mediaId: media.id,
@@ -378,8 +392,8 @@ router.post('/import-trakt', async (req, res) => {
                   episode: ep.number,
                   watchedAt: ep.last_watched_at ? new Date(ep.last_watched_at) : new Date(),
                   isCompleted: true,
-                  duration: 0,
-                  viewOffset: 0
+                  duration: durationSec,
+                  viewOffset: durationSec
                 }
               });
             }
@@ -871,6 +885,14 @@ router.post('/episode/watch', async (req, res) => {
         update: { watchedAt: new Date() },
         create: { mediaId: media.id, season, episode, watchedAt: new Date() }
       });
+      const runtime = await resolveDuration({
+        tmdbId: media.tmdbId,
+        type: 'tv',
+        season,
+        episode,
+        apiKey: user?.tmdbApiKey
+      });
+      const durationSec = runtime * 60;
       await prisma.watchHistoryLog.create({
         data: {
           mediaId: media.id,
@@ -879,8 +901,8 @@ router.post('/episode/watch', async (req, res) => {
           episode,
           watchedAt: new Date(),
           isCompleted: true,
-          duration: 0,
-          viewOffset: 0
+          duration: durationSec,
+          viewOffset: durationSec
         }
       });
       if (user?.tmdbApiKey) {
@@ -974,14 +996,21 @@ router.post('/watch', async (req, res) => {
       const history = await prisma.watchHistory.create({
         data: { mediaId: media.id, watchedAt: watchedAt ? new Date(watchedAt) : new Date() }
       });
+      const settings = await prisma.settings.findFirst();
+      const runtime = await resolveDuration({
+        tmdbId: media.tmdbId,
+        type: type,
+        apiKey: settings?.tmdbApiKey
+      });
+      const durationSec = runtime * 60;
       await prisma.watchHistoryLog.create({
         data: {
           mediaId: media.id,
           type: type,
           watchedAt: watchedAt ? new Date(watchedAt) : new Date(),
           isCompleted: true,
-          duration: 0,
-          viewOffset: 0
+          duration: durationSec,
+          viewOffset: durationSec
         }
       });
       res.json(history);

@@ -432,7 +432,7 @@ const WatchHistory = () => {
                         ) : (
                           <span className="badge badge-warning">
                             <Play size={12} />
-                            In Progress
+                            Partial
                           </span>
                         )}
                       </td>
