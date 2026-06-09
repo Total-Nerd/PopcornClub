@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import api from '../api';
 import { Tv, Search, Star, Play, Check, Trash2, X, ChevronRight, Eye, Plus, Calendar, Sliders, LayoutGrid, List as ListIcon } from 'lucide-react';
@@ -58,6 +58,53 @@ const MyShows = () => {
   const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem('shows_search_query') || '');
   const [filterType, setFilterType] = useState(() => localStorage.getItem('shows_filter_type') || 'all'); // 'all', 'completed', 'progress'
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('shows_sort_by') || 'alphabetical'); // 'alphabetical', 'releaseDate', 'collectedAt'
+
+  const containerRef = useRef(null);
+  const headerRef = useRef(null);
+  const searchBarRef = useRef(null);
+  const lastScrollY = useRef(0);
+  const currentTranslation = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const deltaY = currentScrollY - lastScrollY.current;
+
+      // Determine the sliding limit
+      let limitY = 0;
+      const isSearchActive = searchQuery.trim() !== '';
+      if (isSearchActive) {
+        limitY = searchBarRef.current ? Math.max(0, searchBarRef.current.offsetTop - 16) : 80;
+      } else {
+        limitY = containerRef.current ? containerRef.current.offsetHeight : 140;
+      }
+
+      if (currentScrollY <= 0) {
+        currentTranslation.current = 0;
+      } else {
+        let nextTranslation = currentTranslation.current - deltaY;
+        if (nextTranslation < -limitY) nextTranslation = -limitY;
+        if (nextTranslation > 0) nextTranslation = 0;
+        currentTranslation.current = nextTranslation;
+      }
+
+      if (containerRef.current) {
+        containerRef.current.style.transform = `translateY(${currentTranslation.current}px)`;
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    currentTranslation.current = 0;
+    if (containerRef.current) {
+      containerRef.current.style.transform = 'translateY(0px)';
+    }
+  }, [searchQuery]);
 
   // Display options states
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('shows_view_mode') || 'grid');
@@ -253,12 +300,11 @@ const MyShows = () => {
       <div className="display-options-container" style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
         <button 
           type="button"
-          className="btn btn-secondary" 
+          className="btn btn-secondary display-options-btn" 
           onClick={() => setIsDisplayMenuOpen(prev => !prev)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', fontWeight: '600' }}
         >
           <Sliders size={16} />
-          <span>Display Options</span>
+          <span className="display-options-text">Display Options</span>
         </button>
 
         {isDisplayMenuOpen && (
@@ -558,29 +604,29 @@ const MyShows = () => {
 
   return (
     <div className={`media-page-container ${sortBy === 'alphabetical' && sortedFilteredShows.length > 0 ? 'has-alphabet-sidebar' : ''}`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div ref={containerRef} className="sticky-header-container">
+        <div ref={headerRef} className="page-header">
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: 0 }}>
             <Tv style={{ color: 'var(--accent)' }} size={28} />
             My TV Shows
           </h1>
+
+          {renderDisplayOptions()}
         </div>
 
-        {renderDisplayOptions()}
-      </div>
-
-      {/* Sticky Search Input */}
-      <div className="sticky-search-container">
-        <div style={{ position: 'relative' }}>
-          <input
-            type="text"
-            placeholder="Search TV show titles..."
-            className="input-field"
-            style={{ width: '100%', paddingLeft: '48px' }}
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-          <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        {/* Sticky Search Input */}
+        <div ref={searchBarRef} className="sticky-search-container">
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search TV show titles..."
+              className="input-field"
+              style={{ width: '100%', paddingLeft: '48px' }}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          </div>
         </div>
       </div>
 

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers, Sliders, Check } from 'lucide-react';
 import { getEventsFromIndexedDB } from '../utils/pwaHelper';
+import MobileBottomSheet from '../components/MobileBottomSheet';
 
 const pad = (num) => String(num).padStart(2, '0');
 
@@ -62,6 +63,161 @@ const CalendarView = () => {
   const [expandedStacks, setExpandedStacks] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [selectedMobileDate, setSelectedMobileDate] = useState(new Date());
+  const [isDisplayMenuOpen, setIsDisplayMenuOpen] = useState(false);
+  const containerRef = useRef(null);
+  const headerRef = useRef(null);
+  const navigationRef = useRef(null);
+  const lastScrollY = useRef(0);
+  const currentTranslation = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const deltaY = currentScrollY - lastScrollY.current;
+
+      let limitY = 0;
+      if (isMobile) {
+        limitY = navigationRef.current ? Math.max(0, navigationRef.current.offsetTop - 16) : 80;
+      } else {
+        limitY = containerRef.current ? containerRef.current.offsetHeight : 140;
+      }
+
+      if (currentScrollY <= 0) {
+        currentTranslation.current = 0;
+      } else {
+        let nextTranslation = currentTranslation.current - deltaY;
+        if (nextTranslation < -limitY) nextTranslation = -limitY;
+        if (nextTranslation > 0) nextTranslation = 0;
+        currentTranslation.current = nextTranslation;
+      }
+
+      if (containerRef.current) {
+        containerRef.current.style.transform = `translateY(${currentTranslation.current}px)`;
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isMobile]);
+
+  useEffect(() => {
+    currentTranslation.current = 0;
+    if (containerRef.current) {
+      containerRef.current.style.transform = 'translateY(0px)';
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    const handleClose = () => {
+      setIsDisplayMenuOpen(false);
+    };
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, []);
+
+  // Filtering & Toggles state
+  const [hideCollected, setHideCollected] = useState(() => localStorage.getItem('calendar_hide_collected') === 'true');
+  const [hideWatched, setHideWatched] = useState(() => localStorage.getItem('calendar_hide_watched') === 'true');
+
+  const renderDisplayOptionsContent = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Layout</div>
+          <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('month')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'month' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('week')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'week' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              Week
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Visibility</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label className="custom-checkbox-container" onClick={e => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                className="custom-checkbox-input"
+                checked={hideCollected}
+                onChange={() => setHideCollected(prev => !prev)}
+              />
+              <span className="custom-checkbox-box">
+                <Check className="custom-checkbox-icon" size={12} strokeWidth={3} />
+              </span>
+              <span className="custom-checkbox-label">Hide Collected</span>
+            </label>
+            <label className="custom-checkbox-container" onClick={e => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                className="custom-checkbox-input"
+                checked={hideWatched}
+                onChange={() => setHideWatched(prev => !prev)}
+              />
+              <span className="custom-checkbox-box">
+                <Check className="custom-checkbox-icon" size={12} strokeWidth={3} />
+              </span>
+              <span className="custom-checkbox-label">Hide Watched</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDisplayOptions = () => {
+    return (
+      <div className="display-options-container" style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          className="btn btn-secondary display-options-btn"
+          onClick={() => setIsDisplayMenuOpen(prev => !prev)}
+        >
+          <Sliders size={16} />
+          <span className="display-options-text">Display Options</span>
+        </button>
+
+        {isDisplayMenuOpen && (
+          isMobile ? (
+            <MobileBottomSheet title="Display Options" onClose={() => setIsDisplayMenuOpen(false)}>
+              {renderDisplayOptionsContent()}
+            </MobileBottomSheet>
+          ) : (
+            <div style={{
+              position: 'absolute',
+              top: '44px',
+              right: 0,
+              zIndex: 101,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '12px',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+              padding: '20px',
+              minWidth: '300px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              backdropFilter: 'blur(8px)'
+            }}>
+              {renderDisplayOptionsContent()}
+            </div>
+          )
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -78,9 +234,7 @@ const CalendarView = () => {
     }));
   };
 
-  // Filtering & Toggles state
-  const [hideCollected, setHideCollected] = useState(() => localStorage.getItem('calendar_hide_collected') === 'true');
-  const [hideWatched, setHideWatched] = useState(() => localStorage.getItem('calendar_hide_watched') === 'true');
+
 
   const navigate = useNavigate();
 
@@ -391,7 +545,7 @@ const CalendarView = () => {
           flexDirection: 'column',
           gap: '8px',
           cursor: 'pointer',
-          background: isWatched ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)',
+          background: isWatched ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.03)',
           border: '1px solid var(--border-color)',
           borderRadius: '8px',
           marginRight: '0px',
@@ -407,7 +561,7 @@ const CalendarView = () => {
             <img
               src={`https://image.tmdb.org/t/p/w185${poster}`}
               alt={title}
-              style={{ width: '60px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+              style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
             />
           ) : (
             <div style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -526,109 +680,31 @@ const CalendarView = () => {
       )}
 
       {/* Calendar Header Panel */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div ref={containerRef} className="sticky-header-container">
+        <div ref={headerRef} className="page-header">
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: 0 }}>
             <CalendarIcon style={{ color: 'var(--accent)' }} size={28} />
             Calendar
           </h1>
+          {renderDisplayOptions()}
         </div>
 
-        {/* View Controls (Prev, Today, Next + Month/Week switches) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-
-          {/* Filter Toggles */}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setHideCollected(prev => !prev)}
-              className="btn"
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.85rem',
-                borderRadius: '8px',
-                background: hideCollected ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                color: hideCollected ? 'var(--accent)' : 'var(--text-muted)',
-                border: hideCollected ? '1px solid var(--accent)' : '1px solid var(--border-color)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <EyeOff size={14} style={{ opacity: hideCollected ? 1 : 0.6 }} />
-              <span>Hide Collected</span>
-            </button>
-            <button
-              onClick={() => setHideWatched(prev => !prev)}
-              className="btn"
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.85rem',
-                borderRadius: '8px',
-                background: hideWatched ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                color: hideWatched ? 'var(--accent)' : 'var(--text-muted)',
-                border: hideWatched ? '1px solid var(--accent)' : '1px solid var(--border-color)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <EyeOff size={14} style={{ opacity: hideWatched ? 1 : 0.6 }} />
-              <span>Hide Watched</span>
-            </button>
-          </div>
-
-          {/* Month/Week Switch */}
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <button
-              onClick={() => setViewMode('month')}
-              className="btn"
-              style={{
-                padding: '6px 16px',
-                fontSize: '0.85rem',
-                borderRadius: '6px',
-                background: viewMode === 'month' ? 'var(--accent)' : 'transparent',
-                color: viewMode === 'month' ? '#fff' : 'var(--text-muted)'
-              }}
-            >
-              Month
-            </button>
-            <button
-              onClick={() => setViewMode('week')}
-              className="btn"
-              style={{
-                padding: '6px 16px',
-                fontSize: '0.85rem',
-                borderRadius: '6px',
-                background: viewMode === 'week' ? 'var(--accent)' : 'transparent',
-                color: viewMode === 'week' ? '#fff' : 'var(--text-muted)'
-              }}
-            >
-              Week
-            </button>
-          </div>
-
-          {/* Navigation selectors */}
-          <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <button onClick={() => handleNavigate('prev')} className="btn btn-secondary" style={{ padding: '8px 12px', border: 'none', background: 'transparent' }}>
+        {/* View Controls & Navigation */}
+        <div ref={navigationRef} className="calendar-navigation-container">
+          <h2 className="calendar-navigation-title">
+            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : `Week of ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d, yyyy')}`}
+          </h2>
+          <div className="calendar-navigation-controls">
+            <button onClick={() => handleNavigate('prev')} className="nav-arrow-btn">
               <ChevronLeft size={18} />
             </button>
-            <button onClick={() => setCurrentDate(new Date())} className="btn" style={{ padding: '8px 16px', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+            <button onClick={() => setCurrentDate(new Date())} className="nav-today-btn">
               Today
             </button>
-            <button onClick={() => handleNavigate('next')} className="btn btn-secondary" style={{ padding: '8px 12px', border: 'none', background: 'transparent' }}>
+            <button onClick={() => handleNavigate('next')} className="nav-arrow-btn">
               <ChevronRight size={18} />
             </button>
           </div>
-
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', minWidth: '150px', textAlign: 'center' }}>
-            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : `Week of ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d, yyyy')}`}
-          </h2>
         </div>
       </div>
 

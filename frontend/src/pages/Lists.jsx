@@ -294,12 +294,11 @@ const Lists = () => {
       <div className="display-options-container" style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
         <button 
           type="button"
-          className="btn btn-secondary" 
+          className="btn btn-secondary display-options-btn" 
           onClick={() => setIsDisplayMenuOpen(prev => !prev)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', fontWeight: '600' }}
         >
           <Sliders size={16} />
-          <span>Display Options</span>
+          <span className="display-options-text">Display Options</span>
         </button>
 
         {isDisplayMenuOpen && (
@@ -334,8 +333,8 @@ const Lists = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <h1 style={{ margin: 0 }}>My Lists</h1>
+      <div className="page-header">
+        <h1 className="page-title" style={{ margin: 0 }}>My Lists</h1>
         
         {renderDisplayOptions()}
       </div>

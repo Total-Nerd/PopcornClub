@@ -146,9 +146,127 @@ router.healMediaRecordIfMissingDetails = healMediaRecordIfMissingDetails;
 router.syncShowWatchHistory = syncShowWatchHistory;
 
 
+// Helper to enrich search/discover results with local collection/watch status
+async function enrichMediaItems(results, userId) {
+  if (!results || results.length === 0) return [];
+  const tmdbIds = results.map(item => item.id);
+  const localMediaList = await prisma.media.findMany({
+    where: { tmdbId: { in: tmdbIds } },
+    include: {
+      collections: { where: { userId } },
+      watchHistory: { where: { userId } },
+      episodeWatchHistory: { where: { userId } }
+    }
+  });
+  
+  const localMediaMap = {};
+  for (const media of localMediaList) {
+    localMediaMap[media.tmdbId] = {
+      isCollected: media.collections.length > 0,
+      isWatched: media.watchHistory.length > 0,
+      localId: media.id
+    };
+  }
+  
+  return results.map(item => {
+    const local = localMediaMap[item.id] || { isCollected: false, isWatched: false, localId: null };
+    return {
+      ...item,
+      isCollected: local.isCollected,
+      isWatched: local.isWatched,
+      localId: local.localId
+    };
+  });
+}
+
+// Discover TMDB
+router.get('/discover', async (req, res) => {
+  const type = req.query.type || 'all'; // all, movie, tv
+  
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+    const apiKey = systemSettings.tmdbApiKey;
+
+    let upcomingPromise, popularPromise, bestRatedPromise;
+
+    if (type === 'movie') {
+      upcomingPromise = fetchTMDB('/3/movie/upcoming', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+      popularPromise = fetchTMDB('/3/movie/popular', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+      bestRatedPromise = fetchTMDB('/3/movie/top_rated', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+    } else if (type === 'tv') {
+      upcomingPromise = fetchTMDB('/3/tv/on_the_air', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+      popularPromise = fetchTMDB('/3/tv/popular', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+      bestRatedPromise = fetchTMDB('/3/tv/top_rated', apiKey)
+        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+    } else {
+      // all
+      upcomingPromise = Promise.all([
+        fetchTMDB('/3/movie/upcoming', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
+        fetchTMDB('/3/tv/on_the_air', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+      ]).then(([movies, tv]) => {
+        const combined = [...movies, ...tv];
+        combined.sort((a, b) => {
+          const dateA = new Date(a.release_date || a.first_air_date || 0);
+          const dateB = new Date(b.release_date || b.first_air_date || 0);
+          return dateB - dateA;
+        });
+        return combined.slice(0, 20);
+      });
+
+      popularPromise = Promise.all([
+        fetchTMDB('/3/movie/popular', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
+        fetchTMDB('/3/tv/popular', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+      ]).then(([movies, tv]) => {
+        const combined = [...movies, ...tv];
+        combined.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+        return combined.slice(0, 20);
+      });
+
+      bestRatedPromise = Promise.all([
+        fetchTMDB('/3/movie/top_rated', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
+        fetchTMDB('/3/tv/top_rated', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+      ]).then(([movies, tv]) => {
+        const combined = [...movies, ...tv];
+        combined.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+        return combined.slice(0, 20);
+      });
+    }
+
+    const [upcoming, popular, bestRated] = await Promise.all([
+      upcomingPromise,
+      popularPromise,
+      bestRatedPromise
+    ]);
+
+    const [enrichedUpcoming, enrichedPopular, enrichedBestRated] = await Promise.all([
+      enrichMediaItems(upcoming, req.user.id),
+      enrichMediaItems(popular, req.user.id),
+      enrichMediaItems(bestRated, req.user.id)
+    ]);
+
+    res.json({
+      upcoming: enrichedUpcoming,
+      popular: enrichedPopular,
+      bestRated: enrichedBestRated
+    });
+
+  } catch (error) {
+    console.error('TMDB Discover Error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch discover data from TMDB' });
+  }
+});
+
 // Search TMDB
 router.get('/search', async (req, res) => {
-  const { query } = req.query;
+  const { query, type } = req.query;
   if (!query) return res.status(400).json({ error: 'Query is required' });
 
   try {
@@ -157,48 +275,42 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
-    const response = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
-      params: {
-        api_key: systemSettings.tmdbApiKey,
-        query,
-        page: 1,
-        include_adult: false
-      }
-    });
-    
-    // Filter out non-media
-    const results = response.data.results.filter(item => item.media_type === 'movie' || item.media_type === 'tv');
-    
-    // Enrich with local database status (isCollected, isWatched)
-    const tmdbIds = results.map(item => item.id);
-    const localMediaList = await prisma.media.findMany({
-      where: { tmdbId: { in: tmdbIds } },
-      include: {
-        collections: { where: { userId: req.user.id } },
-        watchHistory: { where: { userId: req.user.id } },
-        episodeWatchHistory: { where: { userId: req.user.id } }
-      }
-    });
-    
-    const localMediaMap = {};
-    for (const media of localMediaList) {
-      localMediaMap[media.tmdbId] = {
-        isCollected: media.collections.length > 0,
-        isWatched: media.watchHistory.length > 0,
-        localId: media.id
-      };
+    let results = [];
+    const searchType = type || 'all';
+
+    if (searchType === 'movie') {
+      const response = await axios.get(`https://api.themoviedb.org/3/search/movie`, {
+        params: {
+          api_key: systemSettings.tmdbApiKey,
+          query,
+          page: 1,
+          include_adult: false
+        }
+      });
+      results = (response.data.results || []).map(item => ({ ...item, media_type: 'movie' }));
+    } else if (searchType === 'tv') {
+      const response = await axios.get(`https://api.themoviedb.org/3/search/tv`, {
+        params: {
+          api_key: systemSettings.tmdbApiKey,
+          query,
+          page: 1,
+          include_adult: false
+        }
+      });
+      results = (response.data.results || []).map(item => ({ ...item, media_type: 'tv' }));
+    } else {
+      const response = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
+        params: {
+          api_key: systemSettings.tmdbApiKey,
+          query,
+          page: 1,
+          include_adult: false
+        }
+      });
+      results = (response.data.results || []).filter(item => item.media_type === 'movie' || item.media_type === 'tv');
     }
     
-    const enrichedResults = results.map(item => {
-      const local = localMediaMap[item.id] || { isCollected: false, isWatched: false, localId: null };
-      return {
-        ...item,
-        isCollected: local.isCollected,
-        isWatched: local.isWatched,
-        localId: local.localId
-      };
-    });
-    
+    const enrichedResults = await enrichMediaItems(results, req.user.id);
     res.json(enrichedResults);
   } catch (error) {
     console.error('TMDB Search Error:', error.message);

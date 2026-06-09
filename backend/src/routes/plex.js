@@ -3,6 +3,7 @@ const multer = require('multer');
 const prisma = require('../prismaClient');
 const { fetchTMDB } = require('../utils/tmdb');
 const plexStore = require('../utils/plexStore');
+const { resolveDuration } = require('../utils/durationResolver');
 
 const router = express.Router();
 const upload = multer(); // Plex sends multipart/form-data
@@ -208,6 +209,17 @@ async function handlePlexWebhook(payload, user, res) {
         }
 
         if (shouldLog) {
+          let finalDurationSec = durationSec;
+          if (finalDurationSec <= 0) {
+            const runtime = await resolveDuration({
+              tmdbId: media.tmdbId,
+              type: 'movie',
+              apiKey: tmdbApiKey
+            });
+            finalDurationSec = runtime * 60;
+          }
+          const finalViewOffsetSec = isCompleted ? finalDurationSec : (viewOffsetSec > finalDurationSec ? finalDurationSec : viewOffsetSec);
+
           const recentIncomplete = await prisma.watchHistoryLog.findFirst({
             where: {
               mediaId: media.id,
@@ -223,8 +235,8 @@ async function handlePlexWebhook(payload, user, res) {
             await prisma.watchHistoryLog.update({
               where: { id: recentIncomplete.id },
               data: {
-                viewOffset: viewOffsetSec,
-                duration: durationSec,
+                viewOffset: finalViewOffsetSec,
+                duration: finalDurationSec,
                 isCompleted: isCompleted,
                 watchedAt: new Date()
               }
@@ -235,8 +247,8 @@ async function handlePlexWebhook(payload, user, res) {
               data: {
                 mediaId: media.id,
                 type: 'movie',
-                duration: durationSec,
-                viewOffset: viewOffsetSec,
+                duration: finalDurationSec,
+                viewOffset: finalViewOffsetSec,
                 isCompleted: isCompleted,
                 userId: user.id,
                 watchedAt: new Date()
@@ -325,6 +337,19 @@ async function handlePlexWebhook(payload, user, res) {
             }
 
             if (shouldLog) {
+              let finalDurationSec = durationSec;
+              if (finalDurationSec <= 0) {
+                const runtime = await resolveDuration({
+                  tmdbId: media.tmdbId,
+                  type: 'tv',
+                  season,
+                  episode,
+                  apiKey: tmdbApiKey
+                });
+                finalDurationSec = runtime * 60;
+              }
+              const finalViewOffsetSec = isCompleted ? finalDurationSec : (viewOffsetSec > finalDurationSec ? finalDurationSec : viewOffsetSec);
+
               const recentIncomplete = await prisma.watchHistoryLog.findFirst({
                 where: {
                   mediaId: media.id,
@@ -342,8 +367,8 @@ async function handlePlexWebhook(payload, user, res) {
                 await prisma.watchHistoryLog.update({
                   where: { id: recentIncomplete.id },
                   data: {
-                    viewOffset: viewOffsetSec,
-                    duration: durationSec,
+                    viewOffset: finalViewOffsetSec,
+                    duration: finalDurationSec,
                     isCompleted: isCompleted,
                     watchedAt: new Date()
                   }
@@ -356,8 +381,8 @@ async function handlePlexWebhook(payload, user, res) {
                     type: 'tv',
                     season,
                     episode,
-                    duration: durationSec,
-                    viewOffset: viewOffsetSec,
+                    duration: finalDurationSec,
+                    viewOffset: finalViewOffsetSec,
                     isCompleted: isCompleted,
                     userId: user.id,
                     watchedAt: new Date()

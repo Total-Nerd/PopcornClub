@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/icon-square.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0f172a" />
     <script>
@@ -12,6 +12,64 @@
       })();
     </script>
     
+    <style>
+      .app-loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #0f172a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.3s ease-out;
+      }
+      .theme-light .app-loading-screen {
+        background-color: #f1f5f9;
+      }
+      .theme-oled .app-loading-screen {
+        background-color: #000000;
+      }
+      .app-loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      .app-loading-logo {
+        width: 120px;
+        height: 120px;
+        object-fit: contain;
+        animation: app-logo-pulse 2s infinite ease-in-out;
+      }
+      .app-loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(59, 130, 246, 0.1);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: app-loading-spin 1s infinite linear;
+      }
+      @keyframes app-logo-pulse {
+        0%, 100% {
+          transform: scale(1);
+          opacity: 0.9;
+        }
+        50% {
+          transform: scale(1.04);
+          opacity: 1;
+          filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.35));
+        }
+      }
+      @keyframes app-loading-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    
     <!-- PWA primary link -->
     <link rel="manifest" href="/manifest.json" />
     
@@ -19,12 +77,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TVTracker" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-square.png" />
     
     <title>TVTracker</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Loading Screen / Splash Screen -->
+      <div class="app-loading-screen">
+        <div class="app-loading-container">
+          <img src="/icon-round.png" alt="TVTracker Logo" class="app-loading-logo" />
+          <div class="app-loading-spinner"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

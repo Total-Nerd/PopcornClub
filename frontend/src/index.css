@@ -937,9 +937,11 @@ button {
     left: 0;
     height: 50vh;
   }
+
   .details-banner-spacer {
     height: 25vh;
   }
+
   .edit-backdrop-btn {
     opacity: 1;
   }
@@ -1627,7 +1629,7 @@ body.sheet-open {
   .app-container.sidebar-collapsed .nav-link {
     position: relative;
   }
-  
+
   .app-container.sidebar-collapsed .nav-link::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -1648,7 +1650,7 @@ body.sheet-open {
     border: 1px solid rgba(255, 255, 255, 0.08);
     z-index: 9999;
   }
-  
+
   .app-container.sidebar-collapsed .nav-link:hover::after {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
@@ -2793,4 +2795,503 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Discover Screen Styles */
+.discover-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  margin-top: 24px;
+}
+
+.discover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.discover-section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.discover-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.discover-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.discover-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.discover-row::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.discover-row::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.discover-card-wrapper {
+  flex: 0 0 160px;
+  /* fixed size in horizontal scroll */
+  width: 160px;
+}
+
+/* Rating Overlay styling */
+.media-rating-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffb800;
+  /* gold/orange text */
+  background: rgba(15, 23, 42, 0.85);
+  /* slate bg */
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  /* allow clicking through to card */
+}
+
+/* Toggle Group for Search / Discover filter */
+.type-toggle-group {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  padding: 4px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+
+.type-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .type-toggle-btn {
+    flex: 1;
+  }
+}
+
+.type-toggle-btn:hover {
+  color: var(--text-main);
+}
+
+.type-toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* Override positions of status pills to the top-left */
+.media-status-pills-left {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+/* Page Header Responsive Alignments */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 16px;
+  width: 100%;
+}
+
+/* On mobile views, keep title and Display Options button inline */
+@media (max-width: 768px) {
+  .page-header {
+    flex-wrap: nowrap !important;
+    gap: 8px;
+  }
+
+  .page-header h1 {
+    font-size: 1.4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* For Search page to keep toggle-group below but display options at the top-right inline with title */
+  .page-header-discover {
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title display"
+      "toggle toggle";
+    gap: 12px;
+    align-items: center;
+  }
+
+  .page-header-discover h1 {
+    grid-area: title;
+    margin: 0;
+  }
+
+  .page-header-discover .type-toggle-group {
+    grid-area: toggle;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .page-header-discover .display-options-container {
+    grid-area: display;
+    justify-self: end;
+  }
+}
+
+/* Display Options Button Optimizations */
+.display-options-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  font-weight: 600;
+  border-radius: 8px;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+
+.display-options-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .display-options-btn {
+    padding: 8px !important;
+    gap: 0 !important;
+  }
+
+  .display-options-text {
+    display: none !important;
+  }
+
+  /* Hide search button on mobile and rely on return key */
+  .search-submit-btn {
+    display: none !important;
+  }
+}
+
+/* Search History Dropdown */
+.search-history-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.search-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.search-history-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.theme-light .search-history-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.search-history-item-text-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.search-history-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.search-history-delete-btn:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* Premium Glassmorphic Add To List Popup and Custom Checkbox */
+.add-to-list-popup {
+  position: absolute;
+  z-index: 150;
+  background: var(--bg-card);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.add-to-list-popup-landscape {
+  bottom: 28px;
+  left: 0;
+}
+
+.add-to-list-popup-portrait {
+  bottom: 44px;
+  left: 0;
+}
+
+.add-to-list-popup-list {
+  bottom: 40px;
+  right: 0;
+}
+
+/* Custom Checkbox Design */
+.custom-checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 8px 12px;
+  color: var(--text-main);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  user-select: none;
+  width: 100%;
+}
+
+.custom-checkbox-container:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.theme-light .custom-checkbox-container:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.custom-checkbox-input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.custom-checkbox-box {
+  position: relative;
+  height: 20px;
+  width: 20px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.theme-light .custom-checkbox-box {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.custom-checkbox-container:hover .custom-checkbox-box {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.theme-light .custom-checkbox-container:hover .custom-checkbox-box {
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.custom-checkbox-input:checked~.custom-checkbox-box {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.custom-checkbox-icon {
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-checkbox-input:checked~.custom-checkbox-box .custom-checkbox-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.custom-checkbox-label {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sticky Header Scroll-Up Slide-Down styles */
+.sticky-header-container {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--bg-dark);
+  padding-top: 16px;
+  margin-top: -16px;
+  padding-bottom: 8px;
+}
+
+/* Calendar Navigation Styling */
+.calendar-navigation-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.calendar-navigation-controls {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.nav-arrow-btn {
+  padding: 8px 12px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: var(--text-main) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+.nav-arrow-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.nav-today-btn {
+  padding: 8px 16px !important;
+  font-size: 0.85rem !important;
+  color: var(--text-main) !important;
+  border-radius: 0 !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-left: 1px solid var(--border-color) !important;
+  border-right: 1px solid var(--border-color) !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.nav-today-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.calendar-navigation-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+  min-width: 180px;
+  text-align: left;
+  color: var(--text-main);
+}
+
+@media (max-width: 768px) {
+  .calendar-navigation-container {
+    width: 100% !important;
+    justify-content: space-between;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    background: var(--bg-dark) !important;
+    width: 100% !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .calendar-navigation-title {
+    font-size: 1rem;
+    min-width: unset;
+    text-align: right;
+  }
+}
+
+.sticky-header-container .sticky-search-container {
+  position: static !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding: 8px 0 !important;
 }
