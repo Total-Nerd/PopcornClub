@@ -961,7 +961,7 @@ const ShowDetails = () => {
                                 {ep.airDateTime ? (
                                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }} title={`UTC: ${ep.airDateTime}`}>
                                     <Calendar size={12} />
-                                    <span>{new Date(ep.airDateTime).toLocaleDateString()} at {new Date(ep.airDateTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' })}</span>
+                                    <span>{new Date(ep.airDateTime).toLocaleDateString()} at {new Date(ep.airDateTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                                   </span>
                                 ) : ep.air_date ? (
                                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
