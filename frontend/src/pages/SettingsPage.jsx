@@ -659,7 +659,7 @@ const SettingsPage = () => {
                       <button 
                         type="button" 
                         onClick={handleRevertAvatar} 
-                        style={{ fontSize: '0.75rem', color: 'var(--danger)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+                        style={{ fontSize: '1rem', color: 'var(--danger)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
                       >
                         Revert Avatar
                       </button>

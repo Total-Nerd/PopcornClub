@@ -10,7 +10,6 @@ const PlexSessionWidget = () => {
   const [isDismissed, setIsDismissed] = useState(false);
   
   const lastRatingKey = useRef(null);
-  const pollIntervalRef = useRef(null);
 
   // Helper: Format milliseconds into standard time strings (MM:SS or HH:MM:SS)
   const formatTime = (ms) => {
@@ -28,50 +27,84 @@ const PlexSessionWidget = () => {
     return `${minutes}:${paddedSeconds}`;
   };
 
-  // 1. Poll the backend every 3 seconds for active Plex session
+  // 1. Connect to standard WebSocket for real-time Plex playback events
   useEffect(() => {
     if (!user) {
       setSession(null);
       return;
     }
 
-    const fetchSession = async () => {
-      try {
-        const response = await api.get('/media/plex-session');
-        const active = response.data?.session;
+    let socket = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
 
-        if (active) {
-          // If a brand new item started playing, reset the dismissed flag!
-          if (active.ratingKey !== lastRatingKey.current) {
-            setIsDismissed(false);
-            lastRatingKey.current = active.ratingKey;
+    const connect = () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${encodeURIComponent(token)}`;
+      
+      console.log('[WebSocket] Connecting to:', wsUrl);
+      socket = new WebSocket(wsUrl);
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'plex-session') {
+            const active = data.session;
+            if (active) {
+              // If a brand new item started playing, reset the dismissed flag!
+              if (active.ratingKey !== lastRatingKey.current) {
+                if (isMounted) setIsDismissed(false);
+                lastRatingKey.current = active.ratingKey;
+              }
+              
+              if (isMounted) {
+                setSession(prev => {
+                  // Strictly match deep equality so we don't trigger state change unless something changed
+                  const isIdentical = prev &&
+                                      prev.ratingKey === active.ratingKey &&
+                                      prev.isPlaying === active.isPlaying &&
+                                      prev.viewOffset === active.viewOffset &&
+                                      prev.updatedAt === active.updatedAt;
+                  
+                  return isIdentical ? prev : active;
+                });
+              }
+            } else {
+              if (isMounted) {
+                setSession(null);
+                lastRatingKey.current = null;
+              }
+            }
           }
-          
-          setSession(prev => {
-            // Strictly match deep equality so we don't trigger state change unless something changed
-            const isIdentical = prev &&
-                                prev.ratingKey === active.ratingKey &&
-                                prev.isPlaying === active.isPlaying &&
-                                prev.viewOffset === active.viewOffset &&
-                                prev.updatedAt === active.updatedAt;
-            
-            return isIdentical ? prev : active;
-          });
-        } else {
-          setSession(null);
-          lastRatingKey.current = null;
+        } catch (err) {
+          console.error('[WebSocket] Failed to parse message:', err);
         }
-      } catch (error) {
-        console.error('[PlexWidget] Failed to fetch session:', error);
-      }
+      };
+
+      socket.onclose = (e) => {
+        console.log('[WebSocket] Disconnected. Reconnecting in 5s...', e.reason);
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connect, 5000);
+        }
+      };
+
+      socket.onerror = (err) => {
+        console.error('[WebSocket] WebSocket error:', err);
+      };
     };
 
-    // Initial fetch and start interval
-    fetchSession();
-    pollIntervalRef.current = setInterval(fetchSession, 3000);
+    connect();
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      isMounted = false;
+      if (socket) {
+        socket.onclose = null; // Prevent reconnect on cleanup close
+        socket.close();
+      }
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, [user]);
 

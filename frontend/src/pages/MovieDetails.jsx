@@ -58,7 +58,7 @@ const MovieDetails = () => {
     try {
       const res = await api.get('/lists');
       setLists(res.data);
-      
+
       const memberships = {};
       for (const list of res.data) {
         const itemInList = list.items.find(item => item.media.tmdbId === parseInt(tmdbId, 10));
@@ -97,7 +97,7 @@ const MovieDetails = () => {
           posterPath: movieDetails.poster_path
         };
         const res = await api.post(`/lists/${listId}/items`, payload);
-        
+
         setListMemberships(prev => ({
           ...prev,
           [listId]: { listItemId: res.data.id, mediaId: res.data.mediaId }
@@ -123,7 +123,7 @@ const MovieDetails = () => {
   const parseFilenameFromPath = (filePath) => {
     const filename = filePath.split(/[/\\]/).pop();
     const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
-    
+
     const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
     let year = '';
     let title = nameWithoutExt;
@@ -131,12 +131,12 @@ const MovieDetails = () => {
       year = yearMatch[1];
       title = nameWithoutExt.substring(0, nameWithoutExt.indexOf(yearMatch[0]));
     }
-    
+
     const cleanTitleStr = title.replace(/[._-]/g, ' ')
       .replace(/\b(1080p|720p|2160p|4k|uhd|bluray|brrip|bdrip|dvdrip|webrip|web-dl|h264|x264|h265|x265|hevc|dd5\s*1|aac|dts|remux|xvid|divx)\b/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
-      
+
     return { title: cleanTitleStr, year };
   };
 
@@ -181,7 +181,7 @@ const MovieDetails = () => {
       const payload = {
         type: 'movie'
       };
-      
+
       if (correctingFile) {
         payload.fileId = correctingFile.id;
       } else {
@@ -331,6 +331,22 @@ const MovieDetails = () => {
     }
   };
 
+  const handleScanMedia = async () => {
+    try {
+      showAlert('Scanning folders for this movie...', 'info');
+      const res = await api.post(`/media/scan/movie/${tmdbId}`);
+      if (res.data.success) {
+        showAlert(res.data.message || 'Scan completed successfully.', 'success');
+        // Refresh movie details to display any new file path
+        const detailsRes = await api.get(`/media/movie/${tmdbId}`);
+        setMovieDetails(detailsRes.data);
+      }
+    } catch (err) {
+      console.error('Scan failed:', err);
+      showAlert(`Scan failed: ${err.response?.data?.error || err.message}`, 'error');
+    }
+  };
+
   if (loadingDetails) {
     return (
       <div style={{ display: 'flex', height: '60vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
@@ -384,7 +400,7 @@ const MovieDetails = () => {
         <>
           {/* Backdrop Area */}
           <div className="details-backdrop-bg">
-            <div 
+            <div
               className="details-backdrop-image"
               style={{
                 backgroundImage: movieDetails.backdrop_path ? `url(https://image.tmdb.org/t/p/w1280${movieDetails.backdrop_path})` : 'none',
@@ -392,7 +408,7 @@ const MovieDetails = () => {
                 transform: `scale(${1 + Math.min(10, scrollY / 30) / 100})`
               }}
             />
-            <div 
+            <div
               className="details-backdrop-overlay"
               style={{
                 opacity: Math.min(0.8, scrollY / 250)
@@ -407,8 +423,8 @@ const MovieDetails = () => {
               <span>Back</span>
             </button>
 
-            <button 
-              className="edit-backdrop-btn" 
+            <button
+              className="edit-backdrop-btn"
               onClick={() => {
                 setImageSelectorType('backdrop');
                 setImageSelectorOpen(true);
@@ -422,10 +438,10 @@ const MovieDetails = () => {
           {/* Content Layout */}
           <div className="details-content-wrapper">
             <div className="details-layout">
-              
+
               {/* Left Column: Poster & Links */}
               <div className="details-left-col">
-                <div 
+                <div
                   className="details-poster-container"
                   onClick={() => {
                     setImageSelectorType('poster');
@@ -448,274 +464,292 @@ const MovieDetails = () => {
                 </div>
               </div>
 
-          {/* Right Column: Metadata, Summary, Cast */}
-          <div className="details-right-col">
-            <div>
-              <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '8px', lineHeight: '1.2' }}>{movieDetails.title}</h1>
-              {movieDetails.tagline && (
-                <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '20px' }}>"{movieDetails.tagline}"</p>
-              )}
+              {/* Right Column: Metadata, Summary, Cast */}
+              <div className="details-right-col">
+                <div>
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '8px', lineHeight: '1.2' }}>{movieDetails.title}</h1>
+                  {movieDetails.tagline && (
+                    <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '20px' }}>"{movieDetails.tagline}"</p>
+                  )}
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
-                  <Star size={18} fill="#fbbf24" />
-                  <span style={{ fontWeight: '600', fontSize: '1rem' }}>{movieDetails.vote_average?.toFixed(1) || '0.0'}</span>
-                </div>
-
-                {movieDetails.runtime && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    <Clock size={16} />
-                    <span>{movieDetails.runtime} min</span>
-                  </div>
-                )}
-
-                {movieDetails.release_date && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    <Calendar size={16} />
-                    <span>{new Date(movieDetails.release_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Genres */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
-                {movieDetails.genres?.map(g => (
-                  <span key={g.id} style={{ padding: '6px 14px', background: 'var(--overlay-subtle)', borderRadius: '16px', fontSize: '0.8rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontWeight: '500' }}>
-                    {g.name}
-                  </span>
-                ))}
-              </div>
-
-              {/* Action buttons */}
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <button 
-                  className="btn" 
-                  style={{
-                    background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
-                    color: movieDetails.isWatched ? 'var(--success)' : '#fff',
-                    border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
-                    fontWeight: '600'
-                  }}
-                  onClick={handleToggleWatch}
-                >
-                  {movieDetails.isWatched ? <EyeOff size={18} /> : <Eye size={18} />}
-                  <span>{movieDetails.isWatched ? 'Watched' : 'Watch'}</span>
-                </button>
-
-                <button 
-                  className="btn" 
-                  style={{
-                    background: movieDetails.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
-                    color: movieDetails.isCollected ? 'var(--success)' : '#fff',
-                    border: movieDetails.isCollected ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
-                    fontWeight: '600'
-                  }}
-                  onClick={handleToggleCollection}
-                >
-                  {movieDetails.isCollected ? <Plus size={18} style={{ transform: 'rotate(45deg)', transition: 'transform 0.2s' }} /> : <Plus size={18} />}
-                  <span>{movieDetails.isCollected ? 'Collected' : 'Collect'}</span>
-                </button>
-
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{
-                      fontWeight: '600',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      background: isMovieInAnyList() ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
-                      color: isMovieInAnyList() ? 'rgb(96, 165, 250)' : 'var(--text-main)',
-                      border: isMovieInAnyList() ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent'
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsListDropdownOpen(prev => !prev);
-                    }}
-                  >
-                    <Plus size={18} />
-                    <span>{isMovieInAnyList() ? 'Added to List' : 'Add to List'}</span>
-                  </button>
-                  {isListDropdownOpen && (
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '48px',
-                      left: 0,
-                      zIndex: 10,
-                      background: 'var(--bg-card)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                      padding: '8px',
-                      minWidth: '180px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px'
-                    }} onClick={e => e.stopPropagation()}>
-                      {lists.map(list => {
-                        const inList = listMemberships[list.id];
-                        return (
-                          <label key={list.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', padding: '4px', color: 'var(--text-main)' }}>
-                            <input
-                              type="checkbox"
-                              checked={!!inList}
-                              onChange={() => handleToggleList(list.id)}
-                            />
-                            {list.name}
-                          </label>
-                        );
-                      })}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
+                      <Star size={18} fill="#fbbf24" />
+                      <span style={{ fontWeight: '600', fontSize: '1rem' }}>{movieDetails.vote_average?.toFixed(1) || '0.0'}</span>
                     </div>
-                  )}
-                </div>
 
-                {movieDetails.imdb_id && (
-                  <a 
-                    href={`https://www.imdb.com/title/${movieDetails.imdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn"
-                    style={{  
-                      background: '#f5c518', 
-                      color: '#000000', 
-                      fontWeight: 'bold', 
-                      display: 'inline-flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
-                  </a>
-                )}
-                <a 
-                  href={`https://www.themoviedb.org/movie/${movieDetails.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn"
-                  style={{  
-                    background: '#01b4e4', 
-                    color: '#ffffff', 
-                    fontWeight: 'bold', 
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
-                </a>
-
-                <div className="info-dropdown-container">
-                  <button
-                    className="btn btn-secondary"
-                    style={{ display: 'inline-flex', alignItems: 'center', height: '100%' }}
-                    onClick={() => setIsDropdownOpen(prev => !prev)}
-                    title="More actions"
-                  >
-                    ...
-                  </button>
-                  {isDropdownOpen && (
-                    <>
-                      {/* Desktop Dropdown Menu */}
-                      <div className="info-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className="info-dropdown-item"
-                          onClick={() => {
-                            setIsDropdownOpen(false);
-                            setShowRawModal(true);
-                            fetchRawData();
-                          }}
-                        >
-                          <RefreshCw size={14} /> View Local Data
-                        </button>
-                        <button
-                          className="info-dropdown-item"
-                          onClick={() => {
-                            setIsDropdownOpen(false);
-                            navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
-                          }}
-                        >
-                          <History size={14} /> View Watch History
-                        </button>
+                    {movieDetails.runtime && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        <Clock size={16} />
+                        <span>{movieDetails.runtime} min</span>
                       </div>
+                    )}
 
-                      {/* Mobile Bottom Sheet Menu */}
-                      <MobileBottomSheet title="Movie Options" onClose={() => setIsDropdownOpen(false)}>
-                        <button
-                          className="mobile-sheet-option"
-                          onClick={() => {
-                            setIsDropdownOpen(false);
-                            setShowRawModal(true);
-                            fetchRawData();
-                          }}
-                        >
-                          <RefreshCw size={16} /> View Local Data
-                        </button>
-                        <button
-                          className="mobile-sheet-option"
-                          onClick={() => {
-                            setIsDropdownOpen(false);
-                            navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
-                          }}
-                        >
-                          <History size={16} /> View Watch History
-                        </button>
-                      </MobileBottomSheet>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+                    {movieDetails.release_date && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        <Calendar size={16} />
+                        <span>{new Date(movieDetails.release_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Overview */}
-            <div>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Overview</h3>
-              <p style={{ color: 'var(--text-muted)', lineHeight: '1.7', fontSize: '1.05rem' }}>{movieDetails.overview || 'No overview available.'}</p>
-            </div>
+                  {/* Genres */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
+                    {movieDetails.genres?.map(g => (
+                      <span key={g.id} style={{ padding: '6px 14px', background: 'var(--overlay-subtle)', borderRadius: '16px', fontSize: '0.8rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontWeight: '500' }}>
+                        {g.name}
+                      </span>
+                    ))}
+                  </div>
 
-            {/* Cast Section */}
-            {movieDetails.cast && movieDetails.cast.length > 0 && (
-              <div>
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Key Cast</h3>
-                <div className="details-cast-grid">
-                  {movieDetails.cast.map(actor => (
-                    <div key={actor.id} style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                      {actor.profile_path ? (
-                        <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt={actor.name} style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: '100%', height: '120px', background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>No Profile</div>
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                      className="btn"
+                      style={{
+                        background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
+                        color: movieDetails.isWatched ? 'var(--success)' : '#fff',
+                        border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
+                        fontWeight: '600'
+                      }}
+                      onClick={handleToggleWatch}
+                    >
+                      {movieDetails.isWatched ? <EyeOff size={18} /> : <Eye size={18} />}
+                      <span>{movieDetails.isWatched ? 'Watched' : 'Watch'}</span>
+                    </button>
+
+                    <button
+                      className="btn"
+                      style={{
+                        background: movieDetails.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
+                        color: movieDetails.isCollected ? 'var(--success)' : '#fff',
+                        border: movieDetails.isCollected ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
+                        fontWeight: '600'
+                      }}
+                      onClick={handleToggleCollection}
+                    >
+                      {movieDetails.isCollected ? <Plus size={18} style={{ transform: 'rotate(45deg)', transition: 'transform 0.2s' }} /> : <Plus size={18} />}
+                      <span>{movieDetails.isCollected ? 'Collected' : 'Collect'}</span>
+                    </button>
+
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{
+                          fontWeight: '600',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          background: isMovieInAnyList() ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
+                          color: isMovieInAnyList() ? 'rgb(96, 165, 250)' : 'var(--text-main)',
+                          border: isMovieInAnyList() ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsListDropdownOpen(prev => !prev);
+                        }}
+                      >
+                        <Plus size={18} />
+                        <span>{isMovieInAnyList() ? 'Added to List' : 'Add to List'}</span>
+                      </button>
+                      {isListDropdownOpen && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '48px',
+                          left: 0,
+                          zIndex: 10,
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                          padding: '8px',
+                          minWidth: '180px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }} onClick={e => e.stopPropagation()}>
+                          {lists.map(list => {
+                            const inList = listMemberships[list.id];
+                            return (
+                              <label key={list.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', padding: '4px', color: 'var(--text-main)' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!inList}
+                                  onChange={() => handleToggleList(list.id)}
+                                />
+                                {list.name}
+                              </label>
+                            );
+                          })}
+                        </div>
                       )}
-                      <div style={{ padding: '8px' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.name}>{actor.name}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.character}>{actor.character}</div>
-                      </div>
                     </div>
-                  ))}
+
+                    {movieDetails.imdb_id && (
+                      <a
+                        href={`https://www.imdb.com/title/${movieDetails.imdb_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn"
+                        style={{
+                          background: '#f5c518',
+                          color: '#000000',
+                          fontWeight: 'bold',
+                          display: 'inline-flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+                      </a>
+                    )}
+                    <a
+                      href={`https://www.themoviedb.org/movie/${movieDetails.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn"
+                      style={{
+                        background: '#01b4e4',
+                        color: '#ffffff',
+                        fontWeight: 'bold',
+                        display: 'inline-flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+                    </a>
+
+                    <div className="info-dropdown-container">
+                      <button
+                        className="btn btn-secondary"
+                        style={{ display: 'inline-flex', alignItems: 'center', height: '100%' }}
+                        onClick={() => setIsDropdownOpen(prev => !prev)}
+                        title="More actions"
+                      >
+                        ...
+                      </button>
+                      {isDropdownOpen && (
+                        <>
+                          {/* Desktop Dropdown Menu */}
+                          <div className="info-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              className="info-dropdown-item"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                handleScanMedia();
+                              }}
+                            >
+                              <Search size={14} /> Scan for Media
+                            </button>
+                            <button
+                              className="info-dropdown-item"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                setShowRawModal(true);
+                                fetchRawData();
+                              }}
+                            >
+                              <RefreshCw size={14} /> View Local Data
+                            </button>
+                            <button
+                              className="info-dropdown-item"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
+                              }}
+                            >
+                              <History size={14} /> View Watch History
+                            </button>
+                          </div>
+
+                          {/* Mobile Bottom Sheet Menu */}
+                          <MobileBottomSheet title="Movie Options" onClose={() => setIsDropdownOpen(false)}>
+                            <button
+                              className="mobile-sheet-option"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                handleScanMedia();
+                              }}
+                            >
+                              <Search size={16} /> Scan for Media
+                            </button>
+                            <button
+                              className="mobile-sheet-option"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                setShowRawModal(true);
+                                fetchRawData();
+                              }}
+                            >
+                              <RefreshCw size={16} /> View Local Data
+                            </button>
+                            <button
+                              className="mobile-sheet-option"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
+                              }}
+                            >
+                              <History size={16} /> View Watch History
+                            </button>
+                          </MobileBottomSheet>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Overview */}
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Overview</h3>
+                  <p style={{ color: 'var(--text-muted)', lineHeight: '1.7', fontSize: '1.05rem' }}>{movieDetails.overview || 'No overview available.'}</p>
+                </div>
+
+                {/* Cast Section */}
+                {movieDetails.cast && movieDetails.cast.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Key Cast</h3>
+                    <div className="details-cast-grid">
+                      {movieDetails.cast.map(actor => (
+                        <div key={actor.id} style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                          {actor.profile_path ? (
+                            <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt={actor.name} style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '100%', height: '120px', background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>No Profile</div>
+                          )}
+                          <div style={{ padding: '8px' }}>
+                            <div style={{ fontSize: '0.8rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.name}>{actor.name}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.character}>{actor.character}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               </div>
-            )}
-
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Danger Zone / Remove Button at the bottom */}
-      {movieDetails.isCollected && (
-        <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '24px', display: 'flex', justifyContent: 'center' }}>
-          <button 
-            className="btn" 
-            style={{
-              background: 'rgba(239, 68, 68, 0.15)',
-              color: 'var(--danger)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              padding: '12px 24px',
-              fontSize: '0.95rem',
-              fontWeight: '600'
-            }}
-            onClick={handleToggleCollection}
-          >
-            <Trash2 size={18} />
-            <span>Remove Movie from Collection</span>
-          </button>
-        </div>
-      )}
+          {/* Danger Zone / Remove Button at the bottom */}
+          {movieDetails.isCollected && (
+            <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '24px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                className="btn"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: 'var(--danger)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  padding: '12px 24px',
+                  fontSize: '0.95rem',
+                  fontWeight: '600'
+                }}
+                onClick={handleToggleCollection}
+              >
+                <Trash2 size={18} />
+                <span>Remove Movie from Collection</span>
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -731,7 +765,7 @@ const MovieDetails = () => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="custom-modal-body">
               {loadingRaw ? (
                 <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
@@ -756,7 +790,7 @@ const MovieDetails = () => {
                           <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No local media record found.</div>
                         )}
                       </div>
-                      
+
                       <div>
                         <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Associated Local File Paths</h4>
                         {rawData?.files && rawData.files.length > 0 ? (
@@ -777,7 +811,7 @@ const MovieDetails = () => {
                                     setCorrectMode(true);
                                   }}
                                   className="btn btn-secondary"
-                                  style={{ padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
+                                  style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
                                 >
                                   Re-match Path
                                 </button>
@@ -811,13 +845,13 @@ const MovieDetails = () => {
                           Search TMDB for the correct movie, or enter a target TMDB ID or IMDb ID (ttXXXXXXX) directly below.
                         </p>
                       )}
-                      
+
                       {modalError && (
                         <div style={{ color: 'var(--danger)', padding: '10px 14px', background: 'rgba(239, 68, 68, 0.12)', borderRadius: '8px', fontSize: '0.88rem' }}>
                           {modalError}
                         </div>
                       )}
-                      
+
                       {/* Search fields */}
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <input
@@ -846,7 +880,7 @@ const MovieDetails = () => {
                           <span>Search</span>
                         </button>
                       </div>
-        
+
                       {/* Search Results */}
                       {searchResults.length > 0 && (
                         <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
@@ -870,7 +904,7 @@ const MovieDetails = () => {
                                 <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                                   {result.title || result.name}
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                                   {(result.release_date || result.first_air_date || '').substring(0, 4)}
                                 </div>
                               </div>
@@ -878,7 +912,7 @@ const MovieDetails = () => {
                           ))}
                         </div>
                       )}
-        
+
                       {/* Manual ID Input */}
                       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
                         <h4 style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>Or enter manual TMDB ID or IMDb ID (tt...)</h4>
@@ -906,7 +940,7 @@ const MovieDetails = () => {
                 </>
               )}
             </div>
-            
+
             <div className="custom-modal-footer">
               {!correctMode ? (
                 <>

@@ -1281,7 +1281,6 @@ button {
 /* Enforce same width on watch/collect desktop buttons */
 .episode-button-group button:not(.episode-menu-btn) {
   min-width: 120px;
-  justify-content: center;
 }
 
 /* "..." menu button styling */
@@ -1305,26 +1304,32 @@ button {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  background: var(--bg-dark);
+  background: var(--bg-card);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 6px 0;
+  border-radius: 12px;
+  padding: 8px;
   z-index: 100;
-  min-width: 220px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
+  min-width: 300px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: fadeIn 0.15s ease-out;
 }
 
 .episode-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 12px;
+  padding: 8px 12px;
   font-size: 1rem;
-  color: var(--text-muted);
+  color: var(--text-main);
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
 .episode-dropdown-item:hover {
@@ -1586,35 +1591,42 @@ body.sheet-open {
   top: 100%;
   right: 0;
   margin-top: 6px;
-  background: var(--bg-dark);
+  background: var(--bg-card);
+  -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   z-index: 100;
-  min-width: 230px;
-  overflow: hidden;
+  min-width: 300px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
   animation: fadeIn 0.15s ease-out;
 }
 
 .info-dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 8px 12px;
   background: transparent;
   border: none;
   color: var(--text-main);
-  font-size: 0.875rem;
+  font-size: 1rem;
   text-align: left;
   cursor: pointer;
-  transition: all 0.15s ease;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
 }
 
 .info-dropdown-item:hover {
   background: var(--overlay-subtle);
-  color: var(--accent);
+  color: var(--text-main);
 }
 
 .custom-modal-backdrop {
@@ -3467,11 +3479,13 @@ select option {
 }
 
 .offline-status-bar.offline {
-  background-color: #ef4444; /* bright red */
+  background-color: #ef4444;
+  /* bright red */
 }
 
 .offline-status-bar.online {
-  background-color: #10b981; /* green */
+  background-color: #10b981;
+  /* green */
 }
 
 /* Mobile swipe gesture styling */

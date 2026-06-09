@@ -55,6 +55,8 @@ async function handlePlexWebhook(payload, user, res) {
       const current = plexStore.getActiveSession(user.id);
       if (current && current.ratingKey === ratingKey) {
         plexStore.clearActiveSession(user.id);
+        const { broadcastToUser } = require('../utils/wsManager');
+        broadcastToUser(user.id, { type: 'plex-session', session: null });
         console.log(`[Plex Webhook] Playback session cleared for: ${metadata.title} (User: ${user.username})`);
       }
     } else {
@@ -112,6 +114,8 @@ async function handlePlexWebhook(payload, user, res) {
       };
 
       plexStore.setActiveSession(user.id, session);
+      const { broadcastToUser } = require('../utils/wsManager');
+      broadcastToUser(user.id, { type: 'plex-session', session });
       console.log(`[Plex Webhook] Active session set: ${metadata.title} (${isPlaying ? 'Playing' : 'Paused'}) for User ${user.username}`);
     }
   }

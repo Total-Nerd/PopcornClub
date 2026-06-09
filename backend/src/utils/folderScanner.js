@@ -38,6 +38,13 @@ function parseFilename(filePath) {
 
   const normalizedPath = filePath.replace(/\\/g, '/');
   
+  // Try to extract TMDB ID from anywhere in the path/filename
+  let tmdbId = null;
+  const tmdbMatch = normalizedPath.match(/(?:tmdb|tmdbid)[-:\s]+(\d+)/i) || normalizedPath.match(/\b(?:tmdb|tmdbid)-(\d+)\b/i);
+  if (tmdbMatch) {
+    tmdbId = parseInt(tmdbMatch[1], 10);
+  }
+
   // Determine if it's a TV show or Movie based on path segments
   const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/');
 
@@ -50,11 +57,21 @@ function parseFilename(filePath) {
     } else {
       title = nameWithoutExt;
     }
-    title = cleanTitle(title);
+
+    let year = null;
+    const yearMatch = title.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+    if (yearMatch) {
+      year = parseInt(yearMatch[1], 10);
+    }
+
+    // Clean title of tmdb tags and year tags
+    let cleanedTitle = title;
+    cleanedTitle = cleanedTitle.replace(/[\(\[](?:tmdb|tmdbid)[-:\s]*\d+[\)\]]/gi, '');
+    cleanedTitle = cleanedTitle.replace(/[\(\[]\d{4}[\)\]]/g, '');
+    cleanedTitle = cleanTitle(cleanedTitle);
 
     let season = 1;
     let episode = 1;
-    let year = null;
 
     // Check parent folder for Season number
     if (parts.length >= 2) {
@@ -88,18 +105,21 @@ function parseFilename(filePath) {
       }
     }
 
-    // Check for year in title or filename
-    const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
-    if (yearMatch) {
-      year = parseInt(yearMatch[1], 10);
+    // Check for year in title or filename if not already found in title
+    if (!year) {
+      const yearMatchFn = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+      if (yearMatchFn) {
+        year = parseInt(yearMatchFn[1], 10);
+      }
     }
 
     return {
       type: 'tv',
-      title,
+      title: cleanedTitle,
       season,
       episode,
-      year
+      year,
+      tmdbId
     };
   }
 
@@ -110,12 +130,28 @@ function parseFilename(filePath) {
   if (yearMatch) {
     year = parseInt(yearMatch[1], 10);
     title = nameWithoutExt.substring(0, nameWithoutExt.indexOf(yearMatch[0]));
+  } else {
+    // Check path for year if not in filename
+    const parts = normalizedPath.split('/');
+    if (parts.length >= 2) {
+      const folderName = parts[parts.length - 2];
+      const folderYearMatch = folderName.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+      if (folderYearMatch) {
+        year = parseInt(folderYearMatch[1], 10);
+      }
+    }
   }
+
+  let cleanedTitle = title;
+  cleanedTitle = cleanedTitle.replace(/[\(\[](?:tmdb|tmdbid)[-:\s]*\d+[\)\]]/gi, '');
+  cleanedTitle = cleanedTitle.replace(/[\(\[]\d{4}[\)\]]/g, '');
+  cleanedTitle = cleanTitle(cleanedTitle);
 
   return {
     type: 'movie',
-    title: cleanTitle(title),
-    year
+    title: cleanedTitle,
+    year,
+    tmdbId
   };
 }
 
@@ -207,19 +243,29 @@ async function processSingleFile(filePath, folderType, apiKey) {
 
     // 3. Search and resolve on TMDB
     let tmdbData = null;
-    if (parsed.type === 'tv') {
-      const searchParams = { query: parsed.title };
-      if (parsed.year) searchParams.first_air_date_year = parsed.year;
-      const searchRes = await fetchTMDB('/3/search/tv', apiKey, searchParams);
-      if (searchRes.results && searchRes.results.length > 0) {
-        tmdbData = searchRes.results[0];
+    if (parsed.tmdbId) {
+      try {
+        tmdbData = await fetchTMDB(`/3/${parsed.type}/${parsed.tmdbId}`, apiKey);
+      } catch (err) {
+        console.warn(`[Folder Scanner] Failed to fetch TMDB details directly for ID ${parsed.tmdbId}:`, err.message);
       }
-    } else {
-      const searchParams = { query: parsed.title };
-      if (parsed.year) searchParams.year = parsed.year;
-      const searchRes = await fetchTMDB('/3/search/movie', apiKey, searchParams);
-      if (searchRes.results && searchRes.results.length > 0) {
-        tmdbData = searchRes.results[0];
+    }
+
+    if (!tmdbData) {
+      if (parsed.type === 'tv') {
+        const searchParams = { query: parsed.title };
+        if (parsed.year) searchParams.first_air_date_year = parsed.year;
+        const searchRes = await fetchTMDB('/3/search/tv', apiKey, searchParams);
+        if (searchRes.results && searchRes.results.length > 0) {
+          tmdbData = searchRes.results[0];
+        }
+      } else {
+        const searchParams = { query: parsed.title };
+        if (parsed.year) searchParams.year = parsed.year;
+        const searchRes = await fetchTMDB('/3/search/movie', apiKey, searchParams);
+        if (searchRes.results && searchRes.results.length > 0) {
+          tmdbData = searchRes.results[0];
+        }
       }
     }
 
@@ -279,8 +325,8 @@ async function processSingleFile(filePath, folderType, apiKey) {
         path: filePath,
         type: parsed.type,
         mediaId: media.id,
-        season: parsed.season || null,
-        episode: parsed.episode || null,
+        season: parsed.type === 'tv' ? parsed.season : null,
+        episode: parsed.type === 'tv' ? parsed.episode : null,
         lastSeen: new Date(),
         missingSince: null
       }
@@ -718,12 +764,192 @@ async function initFolderScanner() {
   setTimeout(scanAllFolders, 5000);
 }
 
+function matchDirectoryToMedia(dirName, media) {
+  const name = dirName.replace(/\\/g, '/').split('/').pop();
+
+  // 1. Match by TMDB ID
+  const tmdbMatch = name.match(/(?:tmdb|tmdbid)[-:\s]+(\d+)/i) || name.match(/\b(?:tmdb|tmdbid)-(\d+)\b/i);
+  if (tmdbMatch) {
+    const tmdbId = parseInt(tmdbMatch[1], 10);
+    if (tmdbId === media.tmdbId) return true;
+  }
+
+  // 2. Match by Title (and optional Year)
+  let cleanedName = name;
+  cleanedName = cleanedName.replace(/[\(\[](?:tmdb|tmdbid)[-:\s]*\d+[\)\]]/gi, '');
+  
+  let dirYear = null;
+  const yearMatch = cleanedName.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+  if (yearMatch) {
+    dirYear = parseInt(yearMatch[1], 10);
+  }
+  cleanedName = cleanedName.replace(/[\(\[]\d{4}[\)\]]/g, '');
+
+  const cleanDirTitle = cleanedName.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const cleanMediaTitle = media.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+  if (cleanDirTitle === cleanMediaTitle) {
+    if (dirYear && media.releaseDate) {
+      const mediaYear = new Date(media.releaseDate).getFullYear();
+      if (dirYear === mediaYear) return true;
+    } else {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function scanMediaItem(mediaId, options = {}) {
+  const { season } = options;
+  const settings = await prisma.systemSettings.findFirst();
+  const apiKey = settings?.tmdbApiKey;
+  if (!apiKey) {
+    throw new Error('TMDB API Key is not configured.');
+  }
+
+  // 1. Fetch Media
+  const media = await prisma.media.findUnique({
+    where: { id: mediaId },
+    include: { localFiles: true }
+  });
+  if (!media) throw new Error('Media not found.');
+
+  // 2. Fetch configured folders
+  const folders = await prisma.localFolder.findMany({
+    where: { type: media.type }
+  });
+  if (folders.length === 0) {
+    return { addedCount: 0, totalProcessed: 0, addedFiles: [] };
+  }
+
+  // 3. Resolve target directories to scan
+  const targetDirs = new Set();
+  
+  // Strategy A: Direct subdirectories matching the show/movie name or ID
+  for (const folder of folders) {
+    const rootPath = folder.path;
+    if (!fs.existsSync(rootPath)) continue;
+
+    try {
+      const entries = await fs.promises.readdir(rootPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const dirPath = path.join(rootPath, entry.name);
+          if (matchDirectoryToMedia(entry.name, media)) {
+            targetDirs.add(dirPath);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Folder Scanner] Error listing root folder ${rootPath}:`, err.message);
+    }
+  }
+
+  // Strategy B: Directories of existing files for this media
+  for (const file of media.localFiles) {
+    const dir = path.dirname(file.path);
+    if (fs.existsSync(dir)) {
+      targetDirs.add(dir);
+      const parentDir = path.dirname(dir);
+      if (parentDir && parentDir !== '/' && parentDir.endsWith(media.type === 'tv' ? 'tv' : 'movies') === false) {
+        targetDirs.add(parentDir);
+      }
+    }
+  }
+
+  // Strategy C: Fallback to scanning configured folders in full if no target dirs found
+  if (targetDirs.size === 0) {
+    for (const folder of folders) {
+      targetDirs.add(folder.path);
+    }
+  }
+
+  console.log(`[Folder Scanner] Targeted scan directories for "${media.title}":`, Array.from(targetDirs));
+
+  // 4. Scan all resolved directories recursively
+  const videoFiles = [];
+  for (const dir of targetDirs) {
+    const files = await getFilesInDirectory(dir);
+    for (const file of files) {
+      if (isVideoFile(file) && !videoFiles.includes(file)) {
+        videoFiles.push(file);
+      }
+    }
+  }
+
+  console.log(`[Folder Scanner] Found ${videoFiles.length} video files in target directories.`);
+
+  // 5. Process files and filter for matching ones
+  let addedCount = 0;
+  let totalProcessed = 0;
+  const addedFiles = [];
+
+  for (const filePath of videoFiles) {
+    const existing = await prisma.localFile.findUnique({ where: { path: filePath } });
+    
+    const parsed = parseFilename(filePath);
+    if (!parsed) continue;
+
+    // Check if parsed media matches target media
+    let isMatch = false;
+    if (parsed.tmdbId && parsed.tmdbId === media.tmdbId) {
+      isMatch = true;
+    } else {
+      const cleanParsedTitle = parsed.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      const cleanMediaTitle = media.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      if (cleanParsedTitle === cleanMediaTitle) {
+        isMatch = true;
+      }
+    }
+
+    if (!isMatch) continue;
+
+    // If season filter is provided, check season
+    if (media.type === 'tv' && season !== null && parsed.season !== season) {
+      continue;
+    }
+
+    totalProcessed++;
+
+    if (!existing) {
+      // Delay slightly if it's a new file to avoid rate limits
+      await sleep(250);
+      try {
+        const localFile = await processSingleFile(filePath, media.type, apiKey);
+        if (localFile) {
+          addedCount++;
+          addedFiles.push(filePath);
+        }
+      } catch (err) {
+        console.error(`[Folder Scanner] Error processing target file ${filePath}:`, err.message);
+      }
+    } else {
+      // If it exists but is marked missing, reset missingSince
+      if (existing.missingSince) {
+        await prisma.localFile.update({
+          where: { id: existing.id },
+          data: { missingSince: null }
+        });
+      }
+      // Update lastSeen
+      await prisma.localFile.update({
+        where: { id: existing.id },
+        data: { lastSeen: new Date() }
+      });
+    }
+  }
+
+  return { addedCount, totalProcessed, addedFiles };
+}
+
 module.exports = {
   scanAllFolders,
   scanSingleFolder,
   initFolderScanner,
   startWatcher,
   stopWatcher,
+  scanMediaItem,
   getStatus: () => ({
     isScanning,
     lastScanTime,

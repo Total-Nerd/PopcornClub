@@ -409,6 +409,43 @@ const ShowDetails = () => {
     }
   };
 
+  const handleScanShow = async () => {
+    try {
+      showAlert('Scanning folders for this show...', 'info');
+      const res = await api.post(`/media/scan/tv/${tmdbId}`);
+      if (res.data.success) {
+        showAlert(res.data.message || 'Scan completed successfully.', 'success');
+        // Refresh show details to display any new file path / episodes
+        const detailsRes = await api.get(`/media/tv/${tmdbId}`);
+        setShowDetails(detailsRes.data);
+        if (activeSeason) {
+          handleSelectSeason(activeSeason);
+        }
+      }
+    } catch (err) {
+      console.error('Scan failed:', err);
+      showAlert(`Scan failed: ${err.response?.data?.error || err.message}`, 'error');
+    }
+  };
+
+  const handleScanSeason = async () => {
+    if (!activeSeason) return;
+    try {
+      showAlert(`Scanning folders for Season ${activeSeason}...`, 'info');
+      const res = await api.post(`/media/scan/tv/${tmdbId}?season=${activeSeason}`);
+      if (res.data.success) {
+        showAlert(res.data.message || 'Scan completed successfully.', 'success');
+        // Refresh show details and season episodes
+        const detailsRes = await api.get(`/media/tv/${tmdbId}`);
+        setShowDetails(detailsRes.data);
+        handleSelectSeason(activeSeason);
+      }
+    } catch (err) {
+      console.error('Scan failed:', err);
+      showAlert(`Scan failed: ${err.response?.data?.error || err.message}`, 'error');
+    }
+  };
+
   const handleEpisodeToggle = async (action, episode) => {
     const isWatched = action === 'watch';
     const currentVal = isWatched ? episode.isWatched : episode.isCollected;
@@ -516,7 +553,7 @@ const ShowDetails = () => {
         <>
           {/* Backdrop Area */}
           <div className="details-backdrop-bg">
-            <div 
+            <div
               className="details-backdrop-image"
               style={{
                 backgroundImage: showDetails.backdrop_path ? `url(https://image.tmdb.org/t/p/w1280${showDetails.backdrop_path})` : 'none',
@@ -524,7 +561,7 @@ const ShowDetails = () => {
                 transform: `scale(${1 + Math.min(10, scrollY / 30) / 100})`
               }}
             />
-            <div 
+            <div
               className="details-backdrop-overlay"
               style={{
                 opacity: Math.min(0.8, scrollY / 250)
@@ -539,8 +576,8 @@ const ShowDetails = () => {
               <span>Back</span>
             </button>
 
-            <button 
-              className="edit-backdrop-btn" 
+            <button
+              className="edit-backdrop-btn"
               onClick={() => {
                 setImageSelectorType('backdrop');
                 setImageSelectorOpen(true);
@@ -557,7 +594,7 @@ const ShowDetails = () => {
 
               {/* Left Column: Poster */}
               <div className="details-left-col">
-                <div 
+                <div
                   className="details-poster-container"
                   onClick={() => {
                     setImageSelectorType('poster');
@@ -731,6 +768,15 @@ const ShowDetails = () => {
                               className="info-dropdown-item"
                               onClick={() => {
                                 setIsDropdownOpen(false);
+                                handleScanShow();
+                              }}
+                            >
+                              <Search size={14} /> Scan for Media
+                            </button>
+                            <button
+                              className="info-dropdown-item"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
                                 setShowRawModal(true);
                                 fetchRawData();
                               }}
@@ -750,6 +796,15 @@ const ShowDetails = () => {
 
                           {/* Mobile Bottom Sheet Menu */}
                           <MobileBottomSheet title="Show Options" onClose={() => setIsDropdownOpen(false)}>
+                            <button
+                              className="mobile-sheet-option"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                handleScanShow();
+                              }}
+                            >
+                              <Search size={16} /> Scan for Media
+                            </button>
                             <button
                               className="mobile-sheet-option"
                               onClick={() => {
@@ -813,7 +868,7 @@ const ShowDetails = () => {
                         <div className="info-dropdown-container season-dropdown-container">
                           <button
                             className="btn btn-secondary"
-                            style={{ fontSize: '0.75rem', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', minWidth: '0', height: 'auto', border: '1px solid var(--border-color)' }}
+                            style={{ fontSize: '1rem', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', minWidth: '0', height: 'auto', border: '1px solid var(--border-color)' }}
                             onClick={() => setIsSeasonDropdownOpen(prev => !prev)}
                             title="Season options"
                           >
@@ -823,6 +878,15 @@ const ShowDetails = () => {
                             <>
                               {/* Desktop Dropdown Menu */}
                               <div className="info-dropdown-menu" style={{ right: 0, left: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  className="info-dropdown-item"
+                                  onClick={() => {
+                                    setIsSeasonDropdownOpen(false);
+                                    handleScanSeason();
+                                  }}
+                                >
+                                  <Search size={12} /> Scan Season for Media
+                                </button>
                                 <a
                                   href={`https://www.themoviedb.org/tv/${showDetails.id}/season/${activeSeason}`}
                                   target="_blank"
@@ -855,6 +919,15 @@ const ShowDetails = () => {
 
                               {/* Mobile Bottom Sheet Menu */}
                               <MobileBottomSheet title={`Season ${activeSeason} Options`} onClose={() => setIsSeasonDropdownOpen(false)}>
+                                <button
+                                  className="mobile-sheet-option"
+                                  onClick={() => {
+                                    setIsSeasonDropdownOpen(false);
+                                    handleScanSeason();
+                                  }}
+                                >
+                                  <Search size={16} /> Scan Season for Media
+                                </button>
                                 <a
                                   href={`https://www.themoviedb.org/tv/${showDetails.id}/season/${activeSeason}`}
                                   target="_blank"
@@ -1124,365 +1197,373 @@ const ShowDetails = () => {
           </div>
 
           {/* Danger Zone / Remove Button at the bottom */}
-          {showDetails.isCollected && (
-            <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '24px', display: 'flex', justifyContent: 'center' }}>
-              <button
-                className="btn"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: 'var(--danger)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  padding: '12px 24px',
-                  fontSize: '0.95rem',
-                  fontWeight: '600'
-                }}
-                onClick={handleToggleCollection}
-              >
-                <Trash2 size={18} />
-                <span>Remove Show from Collection</span>
-              </button>
-            </div>
-          )}
+          {
+            showDetails.isCollected && (
+              <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '24px', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  className="btn"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: 'var(--danger)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    padding: '12px 24px',
+                    fontSize: '0.95rem',
+                    fontWeight: '600'
+                  }}
+                  onClick={handleToggleCollection}
+                >
+                  <Trash2 size={18} />
+                  <span>Remove Show from Collection</span>
+                </button>
+              </div>
+            )
+          }
         </>
       )}
 
       {/* Show Local Data / Correct Match Modal */}
-      {showRawModal && (
-        <div className="custom-modal-backdrop" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-          <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="custom-modal-header">
-              <h3 style={{ margin: 0, fontWeight: '700' }}>
-                {correctMode ? 'Correct Match' : 'TV Show Local Data & Correction'}
-              </h3>
-              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                <X size={20} />
-              </button>
-            </div>
+      {
+        showRawModal && (
+          <div className="custom-modal-backdrop" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+              <div className="custom-modal-header">
+                <h3 style={{ margin: 0, fontWeight: '700' }}>
+                  {correctMode ? 'Correct Match' : 'TV Show Local Data & Correction'}
+                </h3>
+                <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                  <X size={20} />
+                </button>
+              </div>
 
-            <div className="custom-modal-body">
-              {loadingRaw ? (
-                <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
-                  <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
-                </div>
-              ) : modalError && !correctMode && !searching ? (
-                <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
-                  {modalError}
-                </div>
-              ) : (
-                <>
-                  {!correctMode ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Local Database Media Record</h4>
-                        {rawData?.media ? (
-                          <pre className="raw-json-box">
-                            {JSON.stringify(rawData.media, null, 2)}
-                          </pre>
-                        ) : (
-                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No local media record found.</div>
-                        )}
+              <div className="custom-modal-body">
+                {loadingRaw ? (
+                  <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
+                    <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
+                  </div>
+                ) : modalError && !correctMode && !searching ? (
+                  <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
+                    {modalError}
+                  </div>
+                ) : (
+                  <>
+                    {!correctMode ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Local Database Media Record</h4>
+                          {rawData?.media ? (
+                            <pre className="raw-json-box">
+                              {JSON.stringify(rawData.media, null, 2)}
+                            </pre>
+                          ) : (
+                            <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No local media record found.</div>
+                          )}
+                        </div>
+
+                        <div>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Associated Local File Paths</h4>
+                          {rawData?.files && rawData.files.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {rawData.files.map(f => (
+                                <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
+                                  <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
+                                    {f.season !== null && `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')} - `}{f.path}
+                                  </code>
+                                  <button
+                                    onClick={() => startFileReMatch(f)}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
+                                  >
+                                    Re-match Path
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
+                              No local files detected for this show in the database.
+                            </div>
+                          )}
+                        </div>
                       </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {correctingFile && (
+                          <div style={{
+                            background: 'var(--overlay-subtle)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            padding: '10px 14px',
+                            fontSize: '0.85rem'
+                          }}>
+                            <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Correcting File Path:</div>
+                            <code style={{ color: 'var(--text-main)', wordBreak: 'break-all' }}>{correctingFile.path}</code>
+                          </div>
+                        )}
 
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Associated Local File Paths</h4>
-                        {rawData?.files && rawData.files.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {rawData.files.map(f => (
-                              <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
-                                <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
-                                  {f.season !== null && `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')} - `}{f.path}
-                                </code>
-                                <button
-                                  onClick={() => startFileReMatch(f)}
-                                  className="btn btn-secondary"
-                                  style={{ padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
-                                >
-                                  Re-match Path
-                                </button>
+                        {!correctingFile && (
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            Search TMDB for the correct TV show, or enter a target TMDB ID or IMDb ID (ttXXXXXXX) directly below.
+                          </p>
+                        )}
+
+                        {modalError && (
+                          <div style={{ color: 'var(--danger)', padding: '10px 14px', background: 'rgba(239, 68, 68, 0.12)', borderRadius: '8px', fontSize: '0.88rem' }}>
+                            {modalError}
+                          </div>
+                        )}
+
+                        {/* Search fields */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            placeholder="Enter TMDB Search Title..."
+                            value={correctTitle}
+                            onChange={e => setCorrectTitle(e.target.value)}
+                            className="input-field"
+                            style={{ flex: 2, minWidth: '200px', padding: '8px 12px', fontSize: '0.9rem' }}
+                          />
+                          <input
+                            type="number"
+                            placeholder="Year (optional)"
+                            value={correctYear}
+                            onChange={e => setCorrectYear(e.target.value)}
+                            className="input-field"
+                            style={{ flex: 1, minWidth: '100px', padding: '8px 12px', fontSize: '0.9rem' }}
+                          />
+                          <button
+                            onClick={handleSearchCorrection}
+                            disabled={searching || correcting}
+                            className="btn btn-primary"
+                            style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                          >
+                            {searching ? <RefreshCw className="spin" size={16} /> : <Search size={16} />}
+                            <span>Search</span>
+                          </button>
+                        </div>
+
+                        {/* Search Results */}
+                        {searchResults.length > 0 && (
+                          <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
+                            {searchResults.map((result) => (
+                              <div
+                                key={result.id}
+                                onClick={() => submitCorrection(result.id)}
+                                style={{ display: 'flex', gap: '12px', padding: '8px', borderRadius: '6px', background: 'var(--overlay-subtle)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
+                                className="hover-bg"
+                              >
+                                <div style={{ width: '40px', height: '60px', borderRadius: '4px', overflow: 'hidden', background: 'var(--bg-input)', flexShrink: 0 }}>
+                                  {result.poster_path && (
+                                    <img
+                                      src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
+                                      alt={result.title || result.name}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  )}
+                                </div>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                  <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '1rem' }}>
+                                    {result.title || result.name}
+                                  </div>
+                                  <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                    {(result.release_date || result.first_air_date || '').substring(0, 4)}
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
-                        ) : (
-                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
-                            No local files detected for this show in the database.
-                          </div>
                         )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {correctingFile && (
-                        <div style={{
-                          background: 'var(--overlay-subtle)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '6px',
-                          padding: '10px 14px',
-                          fontSize: '0.85rem'
-                        }}>
-                          <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Correcting File Path:</div>
-                          <code style={{ color: 'var(--text-main)', wordBreak: 'break-all' }}>{correctingFile.path}</code>
-                        </div>
-                      )}
 
-                      {!correctingFile && (
-                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          Search TMDB for the correct TV show, or enter a target TMDB ID or IMDb ID (ttXXXXXXX) directly below.
-                        </p>
-                      )}
-
-                      {modalError && (
-                        <div style={{ color: 'var(--danger)', padding: '10px 14px', background: 'rgba(239, 68, 68, 0.12)', borderRadius: '8px', fontSize: '0.88rem' }}>
-                          {modalError}
-                        </div>
-                      )}
-
-                      {/* Search fields */}
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <input
-                          type="text"
-                          placeholder="Enter TMDB Search Title..."
-                          value={correctTitle}
-                          onChange={e => setCorrectTitle(e.target.value)}
-                          className="input-field"
-                          style={{ flex: 2, minWidth: '200px', padding: '8px 12px', fontSize: '0.9rem' }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Year (optional)"
-                          value={correctYear}
-                          onChange={e => setCorrectYear(e.target.value)}
-                          className="input-field"
-                          style={{ flex: 1, minWidth: '100px', padding: '8px 12px', fontSize: '0.9rem' }}
-                        />
-                        <button
-                          onClick={handleSearchCorrection}
-                          disabled={searching || correcting}
-                          className="btn btn-primary"
-                          style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
-                        >
-                          {searching ? <RefreshCw className="spin" size={16} /> : <Search size={16} />}
-                          <span>Search</span>
-                        </button>
-                      </div>
-
-                      {/* Search Results */}
-                      {searchResults.length > 0 && (
-                        <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
-                          {searchResults.map((result) => (
-                            <div
-                              key={result.id}
-                              onClick={() => submitCorrection(result.id)}
-                              style={{ display: 'flex', gap: '12px', padding: '8px', borderRadius: '6px', background: 'var(--overlay-subtle)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
-                              className="hover-bg"
+                        {/* Manual ID Input */}
+                        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>Or enter manual TMDB ID or IMDb ID (tt...)</h4>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                              type="text"
+                              placeholder="e.g. 27205 or tt1375666"
+                              value={correctId}
+                              onChange={e => setCorrectId(e.target.value)}
+                              className="input-field"
+                              style={{ flex: 1, padding: '8px 12px', fontSize: '0.9rem' }}
+                            />
+                            <button
+                              onClick={() => submitCorrection()}
+                              disabled={correcting || (!correctId.trim() && !correctTitle.trim())}
+                              className="btn btn-secondary"
+                              style={{ padding: '8px 16px' }}
                             >
-                              <div style={{ width: '40px', height: '60px', borderRadius: '4px', overflow: 'hidden', background: 'var(--bg-input)', flexShrink: 0 }}>
-                                {result.poster_path && (
-                                  <img
-                                    src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                                    alt={result.title || result.name}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                )}
-                              </div>
-                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                  {result.title || result.name}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                  {(result.release_date || result.first_air_date || '').substring(0, 4)}
-                                </div>
-                              </div>
+                              {correcting ? <RefreshCw className="spin" size={16} /> : 'Apply'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="custom-modal-footer">
+                {!correctMode ? (
+                  <>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setCorrectingFile(null);
+                        setCorrectTitle(showDetails?.name || '');
+                        const airYear = showDetails?.first_air_date ? showDetails.first_air_date.substring(0, 4) : '';
+                        setCorrectYear(airYear);
+                        setCorrectId('');
+                        setSearchResults([]);
+                        setModalError('');
+                        setCorrectMode(true);
+                      }}
+                    >
+                      Correct Match
+                    </button>
+                    <button className="btn btn-primary" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                      Close
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn btn-secondary" onClick={() => { setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Season Raw Info Modal */}
+      {
+        showSeasonRawModal && (
+          <div className="custom-modal-backdrop" onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
+            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+              <div className="custom-modal-header">
+                <h3 style={{ margin: 0, fontWeight: '700' }}>Season {activeSeason} Local Data</h3>
+                <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="custom-modal-body">
+                {loadingRaw ? (
+                  <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
+                    <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
+                  </div>
+                ) : modalError ? (
+                  <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
+                    {modalError}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Season {activeSeason} Local File Paths</h4>
+                      {rawData?.files && rawData.files.filter(f => f.season === activeSeason).length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {rawData.files.filter(f => f.season === activeSeason).map(f => (
+                            <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
+                              <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
+                                S{String(f.season).padStart(2, '0')}E{String(f.episode).padStart(2, '0')} - {f.path}
+                              </code>
+                              <button
+                                onClick={() => startFileReMatch(f)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
+                              >
+                                Re-match Path
+                              </button>
                             </div>
                           ))}
                         </div>
-                      )}
-
-                      {/* Manual ID Input */}
-                      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>Or enter manual TMDB ID or IMDb ID (tt...)</h4>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <input
-                            type="text"
-                            placeholder="e.g. 27205 or tt1375666"
-                            value={correctId}
-                            onChange={e => setCorrectId(e.target.value)}
-                            className="input-field"
-                            style={{ flex: 1, padding: '8px 12px', fontSize: '0.9rem' }}
-                          />
-                          <button
-                            onClick={() => submitCorrection()}
-                            disabled={correcting || (!correctId.trim() && !correctTitle.trim())}
-                            className="btn btn-secondary"
-                            style={{ padding: '8px 16px' }}
-                          >
-                            {correcting ? <RefreshCw className="spin" size={16} /> : 'Apply'}
-                          </button>
+                      ) : (
+                        <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
+                          No local files detected for Season {activeSeason} in the database.
                         </div>
-                      </div>
+                      )}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
 
-            <div className="custom-modal-footer">
-              {!correctMode ? (
-                <>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setCorrectingFile(null);
-                      setCorrectTitle(showDetails?.name || '');
-                      const airYear = showDetails?.first_air_date ? showDetails.first_air_date.substring(0, 4) : '';
-                      setCorrectYear(airYear);
-                      setCorrectId('');
-                      setSearchResults([]);
-                      setModalError('');
-                      setCorrectMode(true);
-                    }}
-                  >
-                    Correct Match
-                  </button>
-                  <button className="btn btn-primary" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                    Close
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="btn btn-secondary" onClick={() => { setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                    Cancel
-                  </button>
-                </>
-              )}
+              <div className="custom-modal-footer">
+                <button className="btn btn-primary" onClick={() => setShowSeasonRawModal(false)}>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Season Raw Info Modal */}
-      {showSeasonRawModal && (
-        <div className="custom-modal-backdrop" onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
-          <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="custom-modal-header">
-              <h3 style={{ margin: 0, fontWeight: '700' }}>Season {activeSeason} Local Data</h3>
-              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="custom-modal-body">
-              {loadingRaw ? (
-                <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
-                  <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
-                </div>
-              ) : modalError ? (
-                <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
-                  {modalError}
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Season {activeSeason} Local File Paths</h4>
-                    {rawData?.files && rawData.files.filter(f => f.season === activeSeason).length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {rawData.files.filter(f => f.season === activeSeason).map(f => (
-                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
-                            <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
-                              S{String(f.season).padStart(2, '0')}E{String(f.episode).padStart(2, '0')} - {f.path}
-                            </code>
-                            <button
-                              onClick={() => startFileReMatch(f)}
-                              className="btn btn-secondary"
-                              style={{ padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
-                            >
-                              Re-match Path
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
-                        No local files detected for Season {activeSeason} in the database.
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="custom-modal-footer">
-              <button className="btn btn-primary" onClick={() => setShowSeasonRawModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Episode Local Data Modal */}
-      {rawEpisode && (
-        <div className="custom-modal-backdrop" onClick={() => { setRawEpisode(null); setModalError(''); }}>
-          <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="custom-modal-header">
-              <h3 style={{ margin: 0, fontWeight: '700' }}>
-                S{String(rawEpisode.season_number).padStart(2, '0')}E{String(rawEpisode.episode_number).padStart(2, '0')} Local Data
-              </h3>
-              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setRawEpisode(null); setModalError(''); }}>
-                <X size={20} />
-              </button>
-            </div>
+      {
+        rawEpisode && (
+          <div className="custom-modal-backdrop" onClick={() => { setRawEpisode(null); setModalError(''); }}>
+            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+              <div className="custom-modal-header">
+                <h3 style={{ margin: 0, fontWeight: '700' }}>
+                  S{String(rawEpisode.season_number).padStart(2, '0')}E{String(rawEpisode.episode_number).padStart(2, '0')} Local Data
+                </h3>
+                <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setRawEpisode(null); setModalError(''); }}>
+                  <X size={20} />
+                </button>
+              </div>
 
-            <div className="custom-modal-body">
-              {loadingRaw ? (
-                <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
-                  <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
-                </div>
-              ) : modalError ? (
-                <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
-                  {modalError}
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Local File Paths</h4>
-                    {rawData?.files && rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).map(f => (
-                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
-                            <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
-                              {f.path}
-                            </code>
-                            <button
-                              onClick={() => startFileReMatch(f)}
-                              className="btn btn-secondary"
-                              style={{ padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
-                            >
-                              Re-match Path
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
-                        No local files detected for this episode in the database.
-                      </div>
-                    )}
+              <div className="custom-modal-body">
+                {loadingRaw ? (
+                  <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
+                    <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
                   </div>
-                </>
-              )}
-            </div>
+                ) : modalError ? (
+                  <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
+                    {modalError}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <h4 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Local File Paths</h4>
+                      {rawData?.files && rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).map(f => (
+                            <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
+                              <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
+                                {f.path}
+                              </code>
+                              <button
+                                onClick={() => startFileReMatch(f)}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
+                              >
+                                Re-match Path
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
+                          No local files detected for this episode in the database.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
 
-            <div className="custom-modal-footer">
-              <button className="btn btn-primary" onClick={() => setRawEpisode(null)}>
-                Close
-              </button>
+              <div className="custom-modal-footer">
+                <button className="btn btn-primary" onClick={() => setRawEpisode(null)}>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <style>{`
         .hover-bg:hover {
@@ -1498,18 +1579,20 @@ const ShowDetails = () => {
         }
       `}</style>
 
-      {showDetails && (
-        <ImageSelectorModal
-          isOpen={imageSelectorOpen}
-          onClose={() => setImageSelectorOpen(false)}
-          mediaType="tv"
-          tmdbId={showDetails.id}
-          imageType={imageSelectorType}
-          currentPath={imageSelectorType === 'poster' ? showDetails.poster_path : showDetails.backdrop_path}
-          onSelect={handleImageSelected}
-        />
-      )}
-    </div>
+      {
+        showDetails && (
+          <ImageSelectorModal
+            isOpen={imageSelectorOpen}
+            onClose={() => setImageSelectorOpen(false)}
+            mediaType="tv"
+            tmdbId={showDetails.id}
+            imageType={imageSelectorType}
+            currentPath={imageSelectorType === 'poster' ? showDetails.poster_path : showDetails.backdrop_path}
+            onSelect={handleImageSelected}
+          />
+        )
+      }
+    </div >
   );
 };
 

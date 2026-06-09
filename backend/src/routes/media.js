@@ -5,6 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { fetchTMDB } = require('../utils/tmdb');
 const { resolveDuration } = require('../utils/durationResolver');
 const { getAiringDateTime } = require('../utils/airtime');
+const { scanMediaItem } = require('../utils/folderScanner');
 
 const router = express.Router();
 
@@ -569,6 +570,14 @@ router.get('/conflicts', async (req, res) => {
       const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
       
       const normalizedPath = filePath.replace(/\\/g, '/');
+      
+      // Try to extract TMDB ID from anywhere in the path/filename
+      let tmdbId = null;
+      const tmdbMatch = normalizedPath.match(/(?:tmdb|tmdbid)[-:\s]+(\d+)/i) || normalizedPath.match(/\b(?:tmdb|tmdbid)-(\d+)\b/i);
+      if (tmdbMatch) {
+        tmdbId = parseInt(tmdbMatch[1], 10);
+      }
+
       const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/');
 
       if (isTvPath) {
@@ -580,10 +589,21 @@ router.get('/conflicts', async (req, res) => {
         } else {
           title = nameWithoutExt;
         }
-        
+
+        let year = null;
+        const yearMatch = title.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+        if (yearMatch) {
+          year = parseInt(yearMatch[1], 10);
+        }
+
+        // Clean title of tmdb tags and year tags
+        let cleanedTitle = title;
+        cleanedTitle = cleanedTitle.replace(/[\(\[](?:tmdb|tmdbid)[-:\s]*\d+[\)\]]/gi, '');
+        cleanedTitle = cleanedTitle.replace(/[\(\[]\d{4}[\)\]]/g, '');
+        cleanedTitle = cleanTitle(cleanedTitle);
+
         let season = 1;
         let episode = 1;
-        let year = null;
 
         if (parts.length >= 2) {
           const parentFolder = parts[parts.length - 2];
@@ -604,17 +624,20 @@ router.get('/conflicts', async (req, res) => {
           episode = parseInt(tvMatch2[2], 10);
         }
 
-        const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
-        if (yearMatch) {
-          year = parseInt(yearMatch[1], 10);
+        if (!year) {
+          const yearMatchFn = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+          if (yearMatchFn) {
+            year = parseInt(yearMatchFn[1], 10);
+          }
         }
 
         return {
           type: 'tv',
-          title: cleanTitle(title),
+          title: cleanedTitle,
           season,
           episode,
-          year
+          year,
+          tmdbId
         };
       }
 
@@ -625,12 +648,27 @@ router.get('/conflicts', async (req, res) => {
       if (yearMatch) {
         year = parseInt(yearMatch[1], 10);
         title = nameWithoutExt.substring(0, nameWithoutExt.indexOf(yearMatch[0]));
+      } else {
+        const parts = normalizedPath.split('/');
+        if (parts.length >= 2) {
+          const folderName = parts[parts.length - 2];
+          const folderYearMatch = folderName.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+          if (folderYearMatch) {
+            year = parseInt(folderYearMatch[1], 10);
+          }
+        }
       }
+
+      let cleanedTitle = title;
+      cleanedTitle = cleanedTitle.replace(/[\(\[](?:tmdb|tmdbid)[-:\s]*\d+[\)\]]/gi, '');
+      cleanedTitle = cleanedTitle.replace(/[\(\[]\d{4}[\)\]]/g, '');
+      cleanedTitle = cleanTitle(cleanedTitle);
 
       return {
         type: 'movie',
-        title: cleanTitle(title),
-        year
+        title: cleanedTitle,
+        year,
+        tmdbId
       };
     };
 
@@ -1224,6 +1262,36 @@ router.get('/raw/:type/:tmdbId', async (req, res) => {
   } catch (error) {
     console.error('Failed to get raw media info:', error);
     res.status(500).json({ error: 'Failed to get raw media info.' });
+  }
+});
+
+// POST targeted scan for a specific Movie, TV Show, or TV Season
+router.post('/scan/:type/:tmdbId', async (req, res) => {
+  const { type, tmdbId } = req.params;
+  const season = req.query.season ? parseInt(req.query.season, 10) : null;
+  const parsedId = parseInt(tmdbId, 10);
+
+  try {
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type }
+    });
+
+    if (!media) {
+      return res.status(404).json({ error: 'Media not found in local database. Please collect it first.' });
+    }
+
+    const result = await scanMediaItem(media.id, { season });
+
+    res.json({
+      success: true,
+      message: `Scan complete. Found ${result.addedCount} new files.`,
+      addedCount: result.addedCount,
+      totalProcessed: result.totalProcessed,
+      addedFiles: result.addedFiles
+    });
+  } catch (error) {
+    console.error('Targeted media scan failed:', error);
+    res.status(500).json({ error: `Failed to scan media: ${error.message}` });
   }
 });
 

@@ -39,11 +39,19 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/folders', foldersRoutes);
 
 const plexRoutes = require('./routes/plex');
+const http = require('http');
+const { initWebSocket } = require('./utils/wsManager');
 
 app.use('/api/webhook/plex', plexRoutes);
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Attach WebSocket server
+initWebSocket(server);
+
 // Start Server
-app.listen(PORT, async () => {
+server.listen(PORT, async () => {
   console.log(`TVTracker backend running on port ${PORT}`);
   try {
     await seedWatchHistoryLogs();
