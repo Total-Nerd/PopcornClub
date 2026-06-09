@@ -19,6 +19,14 @@
 
   --loading-overlay-bg: linear-gradient(135deg, rgba(15, 23, 42, 0.65) 0%, rgba(15, 23, 42, 0.45) 100%);
   --loading-card-bg: rgba(30, 41, 59, 0.35);
+
+  /* App.css styling variables */
+  --accent-bg: rgba(59, 130, 246, 0.1);
+  --accent-border: rgba(59, 130, 246, 0.4);
+  --text-h: var(--text-main);
+  --social-bg: var(--overlay-subtle);
+  --border: var(--border-color);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .theme-light {
@@ -34,6 +42,14 @@
 
   --loading-overlay-bg: linear-gradient(135deg, rgba(241, 245, 249, 0.65) 0%, rgba(241, 245, 249, 0.45) 100%);
   --loading-card-bg: rgba(255, 255, 255, 0.40);
+
+  /* App.css styling variables */
+  --accent-bg: rgba(59, 130, 246, 0.08);
+  --accent-border: rgba(59, 130, 246, 0.3);
+  --text-h: var(--text-main);
+  --social-bg: var(--overlay-subtle);
+  --border: var(--border-color);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .theme-oled {
@@ -49,6 +65,14 @@
 
   --loading-overlay-bg: linear-gradient(135deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.55) 100%);
   --loading-card-bg: rgba(10, 10, 10, 0.45);
+
+  /* App.css styling variables */
+  --accent-bg: rgba(59, 130, 246, 0.12);
+  --accent-border: rgba(59, 130, 246, 0.5);
+  --text-h: var(--text-main);
+  --social-bg: var(--overlay-subtle);
+  --border: var(--border-color);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 * {
