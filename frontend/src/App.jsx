@@ -13,6 +13,7 @@ import Lists from './pages/Lists';
 import SettingsPage from './pages/SettingsPage';
 import ShowDetails from './pages/ShowDetails';
 import MovieDetails from './pages/MovieDetails';
+import PersonDetails from './pages/PersonDetails';
 import WatchHistory from './pages/WatchHistory';
 import ScrollToTop from './components/ScrollToTop';
 import Conflicts from './pages/Conflicts';
@@ -38,6 +39,7 @@ const AppRoutes = () => {
         <Route path="shows/:tmdbId" element={<ShowDetails />} />
         <Route path="movies" element={<MyMovies />} />
         <Route path="movies/:tmdbId" element={<MovieDetails />} />
+        <Route path="person/:personId" element={<PersonDetails />} />
         <Route path="lists" element={<Lists />} />
         <Route path="history" element={<WatchHistory />} />
         <Route path="conflicts" element={<Conflicts />} />

@@ -518,18 +518,18 @@ const MyMovies = () => {
 
   // Card renderer to prevent code duplication
   const renderMovieCard = (movie) => {
-    const hasArtwork = aspectRatio === 'landscape' && movie.backdropPath;
-    const imageUrl = hasArtwork
-      ? `https://image.tmdb.org/t/p/w500${movie.backdropPath}`
+    const isLandscape = aspectRatio === 'landscape';
+    const imageUrl = isLandscape
+      ? (movie.backdropPath ? `https://image.tmdb.org/t/p/w500${movie.backdropPath}` : null)
       : (movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : null);
 
     return (
-      <div key={movie.id} className="media-card" onClick={() => navigate(`/movies/${movie.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: hasArtwork ? '16/9' : 'auto' }}>
+      <div key={movie.id} className="media-card" onClick={() => navigate(`/movies/${movie.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
         {imageUrl ? (
-          <LazyImage src={imageUrl} alt={movie.title} style={{ aspectRatio: hasArtwork ? '16/9' : '2/3', objectFit: 'cover' }} />
+          <LazyImage src={imageUrl} alt={movie.title} style={{ aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }} />
         ) : (
-          <div style={{ width: '100%', aspectRatio: hasArtwork ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            No Poster
+          <div style={{ width: '100%', aspectRatio: isLandscape ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '600' }}>
+            {isLandscape ? 'No artwork' : 'No Poster'}
           </div>
         )}
 
@@ -557,7 +557,7 @@ const MyMovies = () => {
           </span>
         </div>
 
-        {hasArtwork ? (
+        {isLandscape ? (
           <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
             <div className="media-title" title={movie.title} style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate(`/movies/${movie.tmdbId}`)}>{movie.title}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -693,13 +693,19 @@ const MyMovies = () => {
                             flexShrink: 0,
                             transition: 'width 0.2s, height 0.2s'
                           }}>
-                            {aspectRatio === 'landscape' && movie.backdropPath ? (
-                              <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            {aspectRatio === 'landscape' ? (
+                              movie.backdropPath ? (
+                                <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                  No artwork
+                                </div>
+                              )
                             ) : (movie.posterPath ? (
                               <img src={`https://image.tmdb.org/t/p/w92${movie.posterPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                                {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
+                                No Cover
                               </div>
                             ))}
                           </div>

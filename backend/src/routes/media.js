@@ -908,10 +908,11 @@ router.get('/tv/:tmdbId', async (req, res) => {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
-    const [tmdbData, creditsData, externalIdsData] = await Promise.all([
+    const [tmdbData, creditsData, externalIdsData, videosData] = await Promise.all([
       fetchTMDB(`/3/tv/${parsedId}`, systemSettings.tmdbApiKey),
       fetchTMDB(`/3/tv/${parsedId}/credits`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey)
+      fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
     ]);
 
     const media = await prisma.media.findFirst({
@@ -931,7 +932,8 @@ router.get('/tv/:tmdbId', async (req, res) => {
       ...tmdbData,
       poster_path: media?.posterPath || tmdbData.poster_path,
       backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
-      cast: creditsData.cast?.slice(0, 10) || [],
+      cast: creditsData.cast?.slice(0, 30) || [],
+      videos: videosData.results || [],
       external_ids: externalIdsData || {},
       isCollected,
       collectedEpisodes,
@@ -955,9 +957,10 @@ router.get('/movie/:tmdbId', async (req, res) => {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
-    const [tmdbData, creditsData] = await Promise.all([
+    const [tmdbData, creditsData, videosData] = await Promise.all([
       fetchTMDB(`/3/movie/${parsedId}`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/movie/${parsedId}/credits`, systemSettings.tmdbApiKey)
+      fetchTMDB(`/3/movie/${parsedId}/credits`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/movie/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
     ]);
 
     const media = await prisma.media.findFirst({
@@ -975,7 +978,8 @@ router.get('/movie/:tmdbId', async (req, res) => {
       ...tmdbData,
       poster_path: media?.posterPath || tmdbData.poster_path,
       backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
-      cast: creditsData.cast?.slice(0, 10) || [],
+      cast: creditsData.cast?.slice(0, 30) || [],
+      videos: videosData.results || [],
       isCollected,
       isWatched,
       localId: media?.id
@@ -2124,6 +2128,53 @@ router.put('/:type/:tmdbId/images', async (req, res) => {
   } catch (error) {
     console.error('Failed to update media images:', error.message);
     res.status(500).json({ error: 'Failed to update media images' });
+  }
+});
+
+// GET /api/media/person/:personId
+router.get('/person/:personId', async (req, res) => {
+  const { personId } = req.params;
+  const parsedPersonId = parseInt(personId, 10);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const apiKey = systemSettings.tmdbApiKey;
+    const [personData, creditsData] = await Promise.all([
+      fetchTMDB(`/3/person/${parsedPersonId}`, apiKey),
+      fetchTMDB(`/3/person/${parsedPersonId}/combined_credits`, apiKey)
+    ]);
+
+    // Find other media in local collection that this person stars in
+    let collectedMedia = [];
+    if (creditsData.cast && Array.isArray(creditsData.cast)) {
+      const tmdbIds = creditsData.cast.map(c => c.id);
+      
+      // Deduplicate TMDB IDs to keep database query efficient
+      const uniqueTmdbIds = Array.from(new Set(tmdbIds));
+
+      collectedMedia = await prisma.media.findMany({
+        where: {
+          tmdbId: { in: uniqueTmdbIds },
+          OR: [
+            { collections: { some: { userId: req.user.id } } },
+            { episodeCollections: { some: { userId: req.user.id } } }
+          ]
+        }
+      });
+    }
+
+    res.json({
+      person: personData,
+      credits: creditsData,
+      collectedMedia
+    });
+  } catch (error) {
+    console.error('Failed to fetch person details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch person details' });
   }
 });
 

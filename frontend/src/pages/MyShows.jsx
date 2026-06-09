@@ -506,18 +506,18 @@ const MyShows = () => {
     const percentage = Math.round(completionRate * 100);
     const unwatchedCount = Math.max(0, show.totalEpisodes - show.watchedCount);
 
-    const hasArtwork = aspectRatio === 'landscape' && show.backdropPath;
-    const imageUrl = hasArtwork 
-      ? `https://image.tmdb.org/t/p/w500${show.backdropPath}` 
+    const isLandscape = aspectRatio === 'landscape';
+    const imageUrl = isLandscape
+      ? (show.backdropPath ? `https://image.tmdb.org/t/p/w500${show.backdropPath}` : null)
       : (show.posterPath ? `https://image.tmdb.org/t/p/w500${show.posterPath}` : null);
 
     return (
-      <div key={show.id} className="media-card" onClick={() => navigate(`/shows/${show.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: hasArtwork ? '16/9' : 'auto' }}>
+      <div key={show.id} className="media-card" onClick={() => navigate(`/shows/${show.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
         {imageUrl ? (
-          <LazyImage src={imageUrl} alt={show.title} style={{ aspectRatio: hasArtwork ? '16/9' : '2/3', objectFit: 'cover' }} />
+          <LazyImage src={imageUrl} alt={show.title} style={{ aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }} />
         ) : (
-          <div style={{ width: '100%', aspectRatio: hasArtwork ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            No Poster
+          <div style={{ width: '100%', aspectRatio: isLandscape ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '600' }}>
+            {isLandscape ? 'No artwork' : 'No Poster'}
           </div>
         )}
 
@@ -553,7 +553,7 @@ const MyShows = () => {
           </div>
         )}
 
-        {hasArtwork ? (
+        {isLandscape ? (
           <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
             <div className="media-title" title={show.title} style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate(`/shows/${show.tmdbId}`)}>{show.title}</div>
             <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
@@ -709,13 +709,19 @@ const MyShows = () => {
                               flexShrink: 0,
                               transition: 'width 0.2s, height 0.2s'
                             }}>
-                              {aspectRatio === 'landscape' && show.backdropPath ? (
-                                <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              {aspectRatio === 'landscape' ? (
+                                show.backdropPath ? (
+                                  <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                    No artwork
+                                  </div>
+                                )
                               ) : (show.posterPath ? (
                                 <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
                                 <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                                  {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
+                                  No Cover
                                 </div>
                               ))}
                             </div>
@@ -763,13 +769,19 @@ const MyShows = () => {
                           flexShrink: 0,
                           transition: 'width 0.2s, height 0.2s'
                         }}>
-                          {aspectRatio === 'landscape' && show.backdropPath ? (
-                            <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          {aspectRatio === 'landscape' ? (
+                            show.backdropPath ? (
+                              <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                No artwork
+                              </div>
+                            )
                           ) : (show.posterPath ? (
                             <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
                             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                              {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
+                              No Cover
                             </div>
                           ))}
                         </div>

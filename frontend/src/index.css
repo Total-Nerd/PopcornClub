@@ -1148,9 +1148,10 @@ button {
   display: flex;
   gap: 16px;
   overflow-x: auto;
-  padding-bottom: 12px;
-  width: 100%;
-  max-width: 100%;
+  padding: 12px;
+  margin: -12px -12px 0 -12px;
+  width: calc(100% + 24px);
+  max-width: none;
 }
 
 .details-cast-grid>* {
@@ -2997,7 +2998,8 @@ select option {
   display: flex;
   gap: 16px;
   overflow-x: auto;
-  padding-bottom: 12px;
+  padding: 12px;
+  margin: -12px -12px 0 -12px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }

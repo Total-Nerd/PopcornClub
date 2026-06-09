@@ -688,15 +688,21 @@ const Search = () => {
                     flexShrink: 0,
                     transition: 'width 0.2s, height 0.2s'
                   }}>
-                    {aspectRatio === 'landscape' && item.backdrop_path ? (
-                      <img src={`https://image.tmdb.org/t/p/w92${item.backdrop_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (item.poster_path ? (
-                      <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                        {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
-                      </div>
-                    ))}
+                    {aspectRatio === 'landscape' ? (
+                       item.backdrop_path ? (
+                         <img src={`https://image.tmdb.org/t/p/w92${item.backdrop_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       ) : (
+                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                           No artwork
+                         </div>
+                       )
+                     ) : (item.poster_path ? (
+                       <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                     ) : (
+                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                         No Cover
+                       </div>
+                     ))}
                   </div>
                   <div>
                     <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{item.title || item.name}</div>
@@ -826,9 +832,9 @@ const Search = () => {
   };
 
   const renderMediaCard = (item, classNamePrefix = 'search-item') => {
-    const hasArtwork = aspectRatio === 'landscape' && item.backdrop_path;
-    const imageUrl = hasArtwork
-      ? `https://image.tmdb.org/t/p/w500${item.backdrop_path}`
+    const isLandscape = aspectRatio === 'landscape';
+    const imageUrl = isLandscape
+      ? (item.backdrop_path ? `https://image.tmdb.org/t/p/w500${item.backdrop_path}` : null)
       : (item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null);
 
     return (
@@ -839,7 +845,7 @@ const Search = () => {
         style={{
           position: 'relative',
           overflow: activeDropdownId === item.id ? 'visible' : 'hidden',
-          aspectRatio: hasArtwork ? '16/9' : 'auto',
+          aspectRatio: isLandscape ? '16/9' : 'auto',
           zIndex: activeDropdownId === item.id ? 100 : 'auto',
           width: classNamePrefix === 'discover-item' ? `${gridSize}px` : undefined,
           flex: classNamePrefix === 'discover-item' ? `0 0 ${gridSize}px` : undefined
@@ -850,14 +856,14 @@ const Search = () => {
             src={imageUrl}
             alt={item.title || item.name}
             onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-            style={{ cursor: 'pointer', aspectRatio: hasArtwork ? '16/9' : '2/3', objectFit: 'cover' }}
+            style={{ cursor: 'pointer', aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }}
           />
         ) : (
           <div
             onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-            style={{ width: '100%', aspectRatio: hasArtwork ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer' }}
+            style={{ width: '100%', aspectRatio: isLandscape ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
           >
-            No Image
+            {isLandscape ? 'No artwork' : 'No Poster'}
           </div>
         )}
 
@@ -901,7 +907,7 @@ const Search = () => {
           </div>
         )}
 
-        {hasArtwork ? (
+        {isLandscape ? (
           <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
             <div
               className="media-title"
