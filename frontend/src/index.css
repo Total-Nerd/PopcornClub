@@ -27,6 +27,58 @@
   --social-bg: var(--overlay-subtle);
   --border: var(--border-color);
   --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  /* Plex Integration Variables */
+  --plex-brand: #e5a93b;
+  --plex-brand-hover: #f59e0b;
+  --plex-brand-subtle: rgba(229, 169, 59, 0.15);
+  --plex-brand-border: rgba(229, 169, 59, 0.2);
+  --plex-brand-border-active: rgba(229, 169, 59, 0.3);
+  --plex-brand-overlay: rgba(229, 169, 59, 0.06);
+  --plex-shadow-glow: rgba(229, 169, 59, 0.05);
+  --plex-shadow-glow-active: rgba(229, 169, 59, 0.12);
+  --plex-pulse-shadow: rgba(229, 169, 59, 0.7);
+  --plex-pulse-shadow-empty: rgba(229, 169, 59, 0);
+  --plex-paused-border: rgba(148, 163, 184, 0.2);
+
+  /* Overlays & Backdrops */
+  --backdrop-bg: rgba(0, 0, 0, 0.65);
+  --mobile-backdrop-bg: rgba(0, 0, 0, 0.6);
+  --header-nav-bg: rgba(0, 0, 0, 0.15);
+  --sidebar-profile-bg: rgba(0, 0, 0, 0.1);
+  --rating-overlay-bg: rgba(0, 0, 0, 0.85);
+  --tooltip-bg: rgba(15, 23, 42, 0.95);
+  --tooltip-border: rgba(255, 255, 255, 0.08);
+  --tooltip-text: #f8fafc;
+  --mobile-sheet-handle-bg: rgba(255, 255, 255, 0.2);
+  --backdrop-btn-bg: rgba(15, 23, 42, 0.5);
+  --backdrop-btn-bg-hover: rgba(15, 23, 42, 0.8);
+
+  /* Semantic Overlays */
+  --warning-color: #fbbf24;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning-border-hover: rgba(245, 158, 11, 0.6);
+  --danger-bg-subtle: rgba(239, 68, 68, 0.1);
+  --danger-border-subtle: rgba(239, 68, 68, 0.2);
+  --danger-bg-subtle-hover: rgba(239, 68, 68, 0.2);
+  --success-bg-subtle: rgba(16, 185, 129, 0.12);
+  --success-border-subtle: rgba(16, 185, 129, 0.25);
+  --info-bg: rgba(59, 130, 246, 0.05);
+  --notification-bg: rgba(59, 130, 246, 0.25);
+
+  /* Code & Highlights */
+  --code-text-color: #38bdf8;
+  --rating-color: #ffb800;
+  --dot-tv: var(--accent);
+  --dot-movie: #8b5cf6;
+  --dot-watched: var(--success);
+
+  /* Contrast / Accent Overlays */
+  --text-on-accent: #ffffff;
+  --text-on-image: #ffffff;
+  --disabled-btn-text: rgba(255, 255, 255, 0.15);
+  --disabled-btn-bg: rgba(255, 255, 255, 0.01);
 }
 
 .theme-light {
@@ -50,6 +102,58 @@
   --social-bg: var(--overlay-subtle);
   --border: var(--border-color);
   --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  /* Plex Integration Variables */
+  --plex-brand: #d97706;
+  --plex-brand-hover: #b45309;
+  --plex-brand-subtle: rgba(217, 119, 6, 0.1);
+  --plex-brand-border: rgba(217, 119, 6, 0.2);
+  --plex-brand-border-active: rgba(217, 119, 6, 0.35);
+  --plex-brand-overlay: rgba(217, 119, 6, 0.05);
+  --plex-shadow-glow: rgba(217, 119, 6, 0.08);
+  --plex-shadow-glow-active: rgba(217, 119, 6, 0.15);
+  --plex-pulse-shadow: rgba(217, 119, 6, 0.6);
+  --plex-pulse-shadow-empty: rgba(217, 119, 6, 0);
+  --plex-paused-border: rgba(71, 85, 105, 0.2);
+
+  /* Overlays & Backdrops */
+  --backdrop-bg: rgba(0, 0, 0, 0.45);
+  --mobile-backdrop-bg: rgba(0, 0, 0, 0.4);
+  --header-nav-bg: rgba(0, 0, 0, 0.04);
+  --sidebar-profile-bg: rgba(0, 0, 0, 0.03);
+  --rating-overlay-bg: rgba(0, 0, 0, 0.85);
+  --tooltip-bg: rgba(15, 23, 42, 0.95);
+  --tooltip-border: rgba(255, 255, 255, 0.08);
+  --tooltip-text: #f8fafc;
+  --mobile-sheet-handle-bg: rgba(0, 0, 0, 0.2);
+  --backdrop-btn-bg: rgba(15, 23, 42, 0.55);
+  --backdrop-btn-bg-hover: rgba(15, 23, 42, 0.85);
+
+  /* Semantic Overlays */
+  --warning-color: #b45309;
+  --warning-bg: rgba(217, 119, 6, 0.1);
+  --warning-border: rgba(217, 119, 6, 0.25);
+  --warning-border-hover: rgba(217, 119, 6, 0.5);
+  --danger-bg-subtle: rgba(239, 68, 68, 0.08);
+  --danger-border-subtle: rgba(239, 68, 68, 0.18);
+  --danger-bg-subtle-hover: rgba(239, 68, 68, 0.15);
+  --success-bg-subtle: rgba(16, 185, 129, 0.08);
+  --success-border-subtle: rgba(16, 185, 129, 0.2);
+  --info-bg: rgba(59, 130, 246, 0.03);
+  --notification-bg: rgba(59, 130, 246, 0.15);
+
+  /* Code & Highlights */
+  --code-text-color: #0284c7;
+  --rating-color: #d97706;
+  --dot-tv: var(--accent);
+  --dot-movie: #7c3aed;
+  --dot-watched: var(--success);
+
+  /* Contrast / Accent Overlays */
+  --text-on-accent: #ffffff;
+  --text-on-image: #ffffff;
+  --disabled-btn-text: rgba(0, 0, 0, 0.15);
+  --disabled-btn-bg: rgba(0, 0, 0, 0.01);
 }
 
 .theme-oled {
@@ -73,6 +177,58 @@
   --social-bg: var(--overlay-subtle);
   --border: var(--border-color);
   --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+  /* Plex Integration Variables */
+  --plex-brand: #e5a93b;
+  --plex-brand-hover: #f59e0b;
+  --plex-brand-subtle: rgba(229, 169, 59, 0.12);
+  --plex-brand-border: rgba(229, 169, 59, 0.22);
+  --plex-brand-border-active: rgba(229, 169, 59, 0.35);
+  --plex-brand-overlay: rgba(229, 169, 59, 0.05);
+  --plex-shadow-glow: rgba(229, 169, 59, 0.12);
+  --plex-shadow-glow-active: rgba(229, 169, 59, 0.25);
+  --plex-pulse-shadow: rgba(229, 169, 59, 0.7);
+  --plex-pulse-shadow-empty: rgba(229, 169, 59, 0);
+  --plex-paused-border: rgba(138, 153, 173, 0.2);
+
+  /* Overlays & Backdrops */
+  --backdrop-bg: rgba(0, 0, 0, 0.75);
+  --mobile-backdrop-bg: rgba(0, 0, 0, 0.7);
+  --header-nav-bg: rgba(0, 0, 0, 0.25);
+  --sidebar-profile-bg: rgba(0, 0, 0, 0.15);
+  --rating-overlay-bg: rgba(0, 0, 0, 0.9);
+  --tooltip-bg: rgba(0, 0, 0, 0.98);
+  --tooltip-border: rgba(255, 255, 255, 0.08);
+  --tooltip-text: #f8fafc;
+  --mobile-sheet-handle-bg: rgba(255, 255, 255, 0.2);
+  --backdrop-btn-bg: rgba(15, 23, 42, 0.6);
+  --backdrop-btn-bg-hover: rgba(15, 23, 42, 0.9);
+
+  /* Semantic Overlays */
+  --warning-color: #fbbf24;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.22);
+  --warning-border-hover: rgba(245, 158, 11, 0.5);
+  --danger-bg-subtle: rgba(239, 68, 68, 0.12);
+  --danger-border-subtle: rgba(239, 68, 68, 0.22);
+  --danger-bg-subtle-hover: rgba(239, 68, 68, 0.25);
+  --success-bg-subtle: rgba(16, 185, 129, 0.1);
+  --success-border-subtle: rgba(16, 185, 129, 0.22);
+  --info-bg: rgba(59, 130, 246, 0.04);
+  --notification-bg: rgba(59, 130, 246, 0.25);
+
+  /* Code & Highlights */
+  --code-text-color: #38bdf8;
+  --rating-color: #ffb800;
+  --dot-tv: var(--accent);
+  --dot-movie: #8b5cf6;
+  --dot-watched: var(--success);
+
+  /* Contrast / Accent Overlays */
+  --text-on-accent: #ffffff;
+  --text-on-image: #ffffff;
+  --disabled-btn-text: rgba(255, 255, 255, 0.15);
+  --disabled-btn-bg: rgba(255, 255, 255, 0.01);
 }
 
 * {
@@ -307,11 +463,11 @@ button {
   /* Glassmorphism moved directly to container to support backdrop-filter under translate transform layers */
   background: var(--bg-card);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(229, 169, 59, 0.15);
+  border: 1px solid var(--plex-brand-border);
   border-radius: 20px;
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6),
-    0 1px 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 0 15px -3px rgba(229, 169, 59, 0.05);
+    0 1px 1px 0 var(--overlay-subtle) inset,
+    0 0 15px -3px var(--plex-shadow-glow);
   transition: all 0.3s ease;
 }
 
@@ -328,14 +484,14 @@ button {
 }
 
 .plex-session-widget-container.is-playing {
-  border-color: rgba(229, 169, 59, 0.3);
+  border-color: var(--plex-brand-border-active);
   box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.7),
-    0 1px 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 0 25px -2px rgba(229, 169, 59, 0.12);
+    0 1px 1px 0 var(--overlay-subtle) inset,
+    0 0 25px -2px var(--plex-shadow-glow-active);
 }
 
 .plex-session-widget-container.is-paused {
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: var(--plex-paused-border);
   background: var(--bg-input);
 }
 
@@ -352,24 +508,24 @@ button {
 
 /* Interactive Plex Widget Links */
 .plex-media-link {
-  color: #ffffff;
+  color: var(--text-main);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.2s ease;
 }
 
 .plex-media-link:hover {
-  color: #e5a93b;
+  color: var(--plex-brand-hover);
 }
 
 .plex-media-link-sub {
-  color: #94a3b8;
+  color: var(--text-muted);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 .plex-media-link-sub:hover {
-  color: #ffffff;
+  color: var(--text-main);
 }
 
 .plex-media-poster-link {
@@ -409,7 +565,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 /* Status Indicator Dot overlay */
@@ -424,9 +580,9 @@ button {
   display: block;
   width: 8px;
   height: 8px;
-  background-color: #e5a93b;
+  background-color: var(--plex-brand);
   border-radius: 50%;
-  box-shadow: 0 0 0 0 rgba(229, 169, 59, 0.7);
+  box-shadow: 0 0 0 0 var(--plex-pulse-shadow);
   animation: plex-pulse 1.6s infinite;
 }
 
@@ -434,24 +590,24 @@ button {
   display: block;
   width: 8px;
   height: 8px;
-  background-color: #94a3b8;
+  background-color: var(--text-muted);
   border-radius: 50%;
 }
 
 @keyframes plex-pulse {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(229, 169, 59, 0.7);
+    box-shadow: 0 0 0 0 var(--plex-pulse-shadow);
   }
 
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(229, 169, 59, 0);
+    box-shadow: 0 0 0 6px var(--plex-pulse-shadow-empty);
   }
 
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(229, 169, 59, 0);
+    box-shadow: 0 0 0 0 var(--plex-pulse-shadow-empty);
   }
 }
 
@@ -473,23 +629,23 @@ button {
 .plex-badge {
   font-size: 0.65rem;
   font-weight: 700;
-  background: rgba(229, 169, 59, 0.15);
-  color: #e5a93b;
+  background: var(--plex-brand-subtle);
+  color: var(--plex-brand);
   padding: 2px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(229, 169, 59, 0.2);
+  border: 1px solid var(--plex-brand-border);
   letter-spacing: 0.05em;
 }
 
 .plex-username {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .plex-media-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-main);
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -498,7 +654,7 @@ button {
 
 .plex-media-subtitle {
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   line-height: 1.3;
   margin-bottom: 8px;
   white-space: nowrap;
@@ -507,9 +663,9 @@ button {
 }
 
 .plex-se-code {
-  color: #e5a93b;
+  color: var(--plex-brand);
   font-weight: 600;
-  background: rgba(229, 169, 59, 0.06);
+  background: var(--plex-brand-overlay);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -527,7 +683,7 @@ button {
 .plex-time-duration {
   font-size: 0.7rem;
   font-family: monospace;
-  color: #94a3b8;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -542,7 +698,7 @@ button {
 
 .plex-progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #e5a93b, #f59e0b);
+  background: linear-gradient(90deg, var(--plex-brand), var(--plex-brand-hover));
   border-radius: 2px;
   transition: width 0.3s linear;
 }
@@ -558,20 +714,20 @@ button {
 }
 
 .plex-playing-state-btn {
-  color: #94a3b8;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .is-playing .plex-playing-state-btn {
-  color: #e5a93b;
+  color: var(--plex-brand);
 }
 
 .plex-dismiss-btn {
   background: none;
   border: none;
-  color: #64748b;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -581,8 +737,8 @@ button {
 }
 
 .plex-dismiss-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  background: var(--danger-bg-subtle);
 }
 
 /* -------------------- CALENDAR OVERLAYS -------------------- */
@@ -625,22 +781,22 @@ button {
 }
 
 .calendar-month-day.is-today {
-  background: rgba(59, 130, 246, 0.05);
+  background: var(--info-bg);
   border-color: var(--accent);
 }
 
 /* Offline PWA Banner */
 .pwa-offline-banner {
-  background: rgba(245, 158, 11, 0.12);
+  background: var(--warning-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid var(--warning-border);
   border-radius: 12px;
   padding: 12px 20px;
   margin-bottom: 24px;
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #fbbf24;
+  color: var(--warning-color);
   font-weight: 500;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   animation: pulse-border 2s infinite ease-in-out;
@@ -648,15 +804,15 @@ button {
 
 @keyframes pulse-border {
   0% {
-    border-color: rgba(245, 158, 11, 0.3);
+    border-color: var(--warning-border);
   }
 
   50% {
-    border-color: rgba(245, 158, 11, 0.6);
+    border-color: var(--warning-border-hover);
   }
 
   100% {
-    border-color: rgba(245, 158, 11, 0.3);
+    border-color: var(--warning-border);
   }
 }
 
@@ -899,9 +1055,9 @@ button {
   font-size: 0.85rem;
   font-weight: 600;
   backdrop-filter: blur(8px);
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--backdrop-btn-bg);
   border: 1px solid var(--border-color);
-  color: #fff;
+  color: var(--text-on-image);
   transition: all 0.2s ease;
   cursor: pointer;
   opacity: 0;
@@ -912,7 +1068,7 @@ button {
 }
 
 .edit-backdrop-btn:hover {
-  background: rgba(15, 23, 42, 0.8);
+  background: var(--backdrop-btn-bg-hover);
   border-color: var(--accent);
 }
 
@@ -935,14 +1091,14 @@ button {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--backdrop-bg);
   backdrop-filter: blur(4px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #fff;
+  color: var(--text-on-image);
   opacity: 0;
   transition: opacity 0.2s ease;
   z-index: 3;
@@ -1178,7 +1334,7 @@ body.sheet-open {
 .mobile-sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--mobile-backdrop-bg);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   z-index: 2000;
@@ -1208,13 +1364,9 @@ body.sheet-open {
 .mobile-sheet-handle {
   width: 40px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--mobile-sheet-handle-bg);
   border-radius: 2px;
   margin: 0 auto 20px auto;
-}
-
-.theme-light .mobile-sheet-handle {
-  background: rgba(0, 0, 0, 0.2);
 }
 
 .mobile-sheet-title {
@@ -1254,11 +1406,11 @@ body.sheet-open {
   justify-content: center;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-bg-subtle);
   color: var(--danger);
   font-weight: 600;
   font-size: 0.9rem;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 1px solid var(--danger-border-subtle);
   cursor: pointer;
 }
 
@@ -1306,7 +1458,7 @@ body.sheet-open {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.25);
+  background: var(--notification-bg);
   border: 1px solid var(--accent);
   border-radius: 20px;
   backdrop-filter: blur(8px);
@@ -1463,7 +1615,7 @@ body.sheet-open {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--backdrop-bg);
   backdrop-filter: blur(8px);
   z-index: 1100;
   display: flex;
@@ -1532,16 +1684,11 @@ body.sheet-open {
   padding: 12px;
   font-family: monospace;
   font-size: 0.8rem;
-  color: #38bdf8;
+  color: var(--code-text-color);
   max-height: 20vh;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
-}
-
-/* High contrast override for light theme JSON box */
-.theme-light .raw-json-box {
-  color: #0284c7;
 }
 
 .file-paths-list {
@@ -1656,8 +1803,8 @@ body.sheet-open {
     left: 80px;
     top: 50%;
     transform: translateY(-50%) translateX(-10px);
-    background: rgba(15, 23, 42, 0.95);
-    color: #f8fafc;
+    background: var(--tooltip-bg);
+    color: var(--tooltip-text);
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -1667,7 +1814,7 @@ body.sheet-open {
     pointer-events: none;
     transition: opacity 0.15s ease, transform 0.15s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--tooltip-border);
     z-index: 9999;
   }
 
@@ -1878,7 +2025,7 @@ body.sheet-open {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--backdrop-bg);
   backdrop-filter: blur(8px);
   z-index: 9999;
   display: flex;
@@ -2088,19 +2235,14 @@ body.sheet-open {
 }
 
 .alphabet-sidebar button:disabled {
-  color: rgba(255, 255, 255, 0.15);
+  color: var(--disabled-btn-text);
   cursor: default;
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.theme-light .alphabet-sidebar button:disabled {
-  color: rgba(0, 0, 0, 0.15);
-  background: rgba(0, 0, 0, 0.01);
+  background: var(--disabled-btn-bg);
 }
 
 .alphabet-sidebar button:not(:disabled):hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 0.85rem;
 }
 
@@ -2199,15 +2341,15 @@ body.sheet-open {
 }
 
 .badge-success {
-  background: rgba(16, 185, 129, 0.12);
+  background: var(--success-bg-subtle);
   color: var(--success);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  border: 1px solid var(--success-border-subtle);
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--warning-bg);
+  color: var(--warning-color);
+  border: 1px solid var(--warning-border);
 }
 
 /* Pagination container */
@@ -2280,7 +2422,7 @@ body.sheet-open {
 .filter-btn.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 /* ==================== RESPONSIVE VISIBILITY & MORE MENU ==================== */
@@ -2523,7 +2665,7 @@ select option {
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--sidebar-profile-bg);
   margin-top: 8px;
   transition: all 0.2s ease;
 }
@@ -2602,7 +2744,7 @@ select option {
 
 .logout-btn:hover {
   color: var(--danger);
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-bg-subtle);
 }
 
 /* Mobile Profile Header inside Bottom Sheet */
@@ -2616,14 +2758,14 @@ select option {
 .mobile-logout-btn {
   padding: 8px 16px !important;
   font-size: 0.85rem !important;
-  background: rgba(239, 68, 68, 0.1) !important;
+  background: var(--danger-bg-subtle) !important;
   color: var(--danger) !important;
-  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  border: 1px solid var(--danger-border-subtle) !important;
   border-radius: 8px !important;
 }
 
 .mobile-logout-btn:hover {
-  background: rgba(239, 68, 68, 0.2) !important;
+  background: var(--danger-bg-subtle-hover) !important;
 }
 
 .mobile-sheet-divider {
@@ -2722,7 +2864,7 @@ select option {
 
 .mobile-calendar-day-cell.selected .mobile-calendar-day-number {
   background: var(--accent);
-  color: #ffffff !important;
+  color: var(--text-on-accent) !important;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
 }
@@ -2787,13 +2929,13 @@ select option {
 
 .mobile-agenda-day-header.is-today {
   border-color: var(--accent);
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--accent-bg);
   color: var(--accent);
 }
 
 .mobile-agenda-today-badge {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 0.65rem;
   font-weight: 700;
   padding: 2px 6px;
@@ -2876,9 +3018,9 @@ select option {
   border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #ffb800;
+  color: var(--rating-color);
   /* gold/orange text */
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--rating-overlay-bg);
   /* slate bg */
   backdrop-filter: blur(4px);
   border: 1px solid var(--border-color);
@@ -2921,7 +3063,7 @@ select option {
 
 .type-toggle-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
@@ -3078,7 +3220,7 @@ select option {
 
 .search-history-delete-btn:hover {
   color: var(--danger);
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--danger-bg-subtle-hover);
 }
 
 /* Premium Glassmorphic Add To List Popup and Custom Checkbox */
@@ -3167,7 +3309,7 @@ select option {
 }
 
 .custom-checkbox-icon {
-  color: #fff;
+  color: var(--text-on-accent);
   opacity: 0;
   transform: scale(0.6);
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -3213,7 +3355,7 @@ select option {
 .calendar-navigation-controls {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--header-nav-bg);
   border-radius: 8px;
   border: 1px solid var(--border-color);
   overflow: hidden;
