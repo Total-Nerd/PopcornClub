@@ -237,7 +237,7 @@ button {
 .media-card:hover {
   /* transform: translateY(-4px); */
   transform: scale(1.02);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--text-muted);
 }
 
 .media-card img {
@@ -281,7 +281,7 @@ button {
   animation: plex-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 
   /* Glassmorphism moved directly to container to support backdrop-filter under translate transform layers */
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--bg-card);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(229, 169, 59, 0.15);
   border-radius: 20px;
@@ -312,7 +312,7 @@ button {
 
 .plex-session-widget-container.is-paused {
   border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--bg-input);
 }
 
 .plex-session-card {
@@ -369,8 +369,8 @@ button {
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
   flex-shrink: 0;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
 }
 
 .plex-media-poster img {
@@ -510,7 +510,7 @@ button {
 .plex-progress-bar-bg {
   flex-grow: 1;
   height: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--overlay-medium);
   border-radius: 2px;
   overflow: hidden;
   position: relative;
@@ -530,7 +530,7 @@ button {
   gap: 12px;
   flex-shrink: 0;
   padding-left: 8px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--border-color);
 }
 
 .plex-playing-state-btn {
@@ -581,13 +581,9 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 400px;
-  background: rgba(30, 41, 59, 0.4);
+  background: var(--overlay-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-}
-
-.theme-light .calendar-week-column {
-  background: rgba(30, 41, 59, 0);
 }
 
 .calendar-week-column.is-today {
@@ -595,7 +591,7 @@ button {
 }
 
 .calendar-month-day {
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--overlay-subtle);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 8px;
@@ -1018,7 +1014,7 @@ button {
   border-bottom: none;
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--overlay-medium);
   z-index: -1;
   transform: scaleX(0.96);
   transform-origin: bottom center;
@@ -1035,7 +1031,7 @@ button {
   border-bottom: none;
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--overlay-medium);
   z-index: -2;
   transform: scaleX(0.92);
   transform-origin: bottom center;
@@ -2350,18 +2346,8 @@ body.sheet-open {
 
 /* ==================== SELECT OPTION HIGHLIGHTS ==================== */
 select option {
-  background-color: #1e293b;
-  color: #f8fafc;
-}
-
-.theme-light select option {
-  background-color: #ffffff;
-  color: #0f172a;
-}
-
-.theme-oled select option {
-  background-color: #000000;
-  color: #f8fafc;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
 }
 
 /* ==================== MEDIA CARD LANDSCAPE CONTENT OVERLAY ==================== */
@@ -2844,7 +2830,7 @@ select option {
 }
 
 .discover-row::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--overlay-strong);
 }
 
 .discover-card-wrapper {
@@ -2868,10 +2854,10 @@ select option {
   font-weight: 700;
   color: #ffb800;
   /* gold/orange text */
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(0, 0, 0, 0.85);
   /* slate bg */
   backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   /* allow clicking through to card */
@@ -2880,7 +2866,7 @@ select option {
 /* Toggle Group for Search / Discover filter */
 .type-toggle-group {
   display: flex;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-subtle);
   border: 1px solid var(--border-color);
   padding: 4px;
   border-radius: 10px;
@@ -2985,7 +2971,7 @@ select option {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-subtle);
   border: 1px solid var(--border-color);
   font-weight: 600;
   border-radius: 8px;
@@ -2994,8 +2980,8 @@ select option {
 }
 
 .display-options-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--overlay-medium);
+  border-color: var(--text-muted);
 }
 
 @media (max-width: 768px) {
@@ -3041,11 +3027,7 @@ select option {
 }
 
 .search-history-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.theme-light .search-history-item:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--overlay-medium);
 }
 
 .search-history-item-text-wrapper {
@@ -3125,11 +3107,7 @@ select option {
 }
 
 .custom-checkbox-container:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.theme-light .custom-checkbox-container:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--overlay-subtle);
 }
 
 .custom-checkbox-input {
@@ -3144,7 +3122,7 @@ select option {
   position: relative;
   height: 20px;
   width: 20px;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--overlay-subtle);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   display: flex;
@@ -3154,16 +3132,8 @@ select option {
   flex-shrink: 0;
 }
 
-.theme-light .custom-checkbox-box {
-  background-color: rgba(0, 0, 0, 0.02);
-}
-
 .custom-checkbox-container:hover .custom-checkbox-box {
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.theme-light .custom-checkbox-container:hover .custom-checkbox-box {
-  border-color: rgba(0, 0, 0, 0.2);
+  border-color: var(--text-muted);
 }
 
 .custom-checkbox-input:checked~.custom-checkbox-box {
@@ -3238,7 +3208,7 @@ select option {
 }
 
 .nav-arrow-btn:hover {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: var(--overlay-subtle) !important;
 }
 
 .nav-today-btn {
@@ -3246,7 +3216,7 @@ select option {
   font-size: 0.85rem !important;
   color: var(--text-main) !important;
   border-radius: 0 !important;
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--overlay-subtle) !important;
   border-left: 1px solid var(--border-color) !important;
   border-right: 1px solid var(--border-color) !important;
   font-weight: 600 !important;
@@ -3257,7 +3227,7 @@ select option {
 }
 
 .nav-today-btn:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: var(--overlay-medium) !important;
 }
 
 .calendar-navigation-title {

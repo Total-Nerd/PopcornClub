@@ -534,7 +534,7 @@ const ShowDetails = () => {
           </div>
 
           <div className="details-banner-spacer">
-            <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)', backdropFilter: 'blur(8px)', background: 'rgba(15, 23, 42, 0.5)' }}>
+            <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)', backdropFilter: 'blur(8px)', background: 'var(--bg-card)' }}>
               <ArrowLeft size={18} />
               <span>Back</span>
             </button>
@@ -636,7 +636,7 @@ const ShowDetails = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '8px',
-                          background: isShowInAnyList() ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.05)',
+                          background: isShowInAnyList() ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
                           color: isShowInAnyList() ? 'rgb(96, 165, 250)' : 'var(--text-main)',
                           border: isShowInAnyList() ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent'
                         }}
@@ -654,7 +654,7 @@ const ShowDetails = () => {
                           bottom: '48px',
                           left: 0,
                           zIndex: 10,
-                          background: 'var(--bg-dark)',
+                          background: 'var(--bg-card)',
                           border: '1px solid var(--border-color)',
                           borderRadius: '8px',
                           boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
@@ -1189,7 +1189,7 @@ const ShowDetails = () => {
                         {rawData?.files && rawData.files.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {rawData.files.map(f => (
-                              <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(0,0,0,0.15)' }}>
+                              <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
                                 <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
                                   {f.season !== null && `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')} - `}{f.path}
                                 </code>
@@ -1204,7 +1204,7 @@ const ShowDetails = () => {
                             ))}
                           </div>
                         ) : (
-                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
                             No local files detected for this show in the database.
                           </div>
                         )}
@@ -1214,7 +1214,7 @@ const ShowDetails = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {correctingFile && (
                         <div style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
+                          background: 'var(--overlay-subtle)',
                           border: '1px solid var(--border-color)',
                           borderRadius: '6px',
                           padding: '10px 14px',
@@ -1276,7 +1276,7 @@ const ShowDetails = () => {
                               style={{ display: 'flex', gap: '12px', padding: '8px', borderRadius: '6px', background: 'var(--overlay-subtle)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
                               className="hover-bg"
                             >
-                              <div style={{ width: '40px', height: '60px', borderRadius: '4px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}>
+                              <div style={{ width: '40px', height: '60px', borderRadius: '4px', overflow: 'hidden', background: 'var(--bg-input)', flexShrink: 0 }}>
                                 {result.poster_path && (
                                   <img
                                     src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
@@ -1388,7 +1388,7 @@ const ShowDetails = () => {
                     {rawData?.files && rawData.files.filter(f => f.season === activeSeason).length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {rawData.files.filter(f => f.season === activeSeason).map(f => (
-                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(0,0,0,0.15)' }}>
+                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
                             <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
                               S{String(f.season).padStart(2, '0')}E{String(f.episode).padStart(2, '0')} - {f.path}
                             </code>
@@ -1403,7 +1403,7 @@ const ShowDetails = () => {
                         ))}
                       </div>
                     ) : (
-                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
                         No local files detected for Season {activeSeason} in the database.
                       </div>
                     )}
@@ -1451,7 +1451,7 @@ const ShowDetails = () => {
                     {rawData?.files && rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {rawData.files.filter(f => f.season === rawEpisode.season_number && f.episode === rawEpisode.episode_number).map(f => (
-                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(0,0,0,0.15)' }}>
+                          <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
                             <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
                               {f.path}
                             </code>
@@ -1466,7 +1466,7 @@ const ShowDetails = () => {
                         ))}
                       </div>
                     ) : (
-                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                      <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
                         No local files detected for this episode in the database.
                       </div>
                     )}

@@ -564,7 +564,7 @@ const SettingsPage = () => {
             </span>
             <span style={{ fontWeight: '600', color: 'var(--accent)' }}>{syncProgress}%</span>
           </div>
-          <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ width: '100%', height: '8px', background: 'var(--overlay-medium)', borderRadius: '4px', overflow: 'hidden' }}>
             <div style={{ width: `${syncProgress}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent) 0%, #a78bfa 100%)', transition: 'width 0.4s ease' }}></div>
           </div>
         </div>
