@@ -534,16 +534,25 @@ const MyMovies = () => {
         )}
 
         {/* Watched pill indicators */}
-        <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}>
+        <div 
+          style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}
+          onClick={(e) => handleToggleWatch(e, movie)}
+        >
           <span style={{
             padding: '4px 10px',
             borderRadius: '12px',
             fontSize: '0.75rem',
             fontWeight: '600',
-            background: movie.isWatched ? 'rgba(16, 185, 129, 0.9)' : 'rgba(148, 163, 184, 0.9)',
+            background: movie.isWatched ? 'var(--success)' : 'rgba(148, 163, 184, 0.9)',
             color: '#fff',
-            backdropFilter: 'blur(4px)'
-          }}>
+            backdropFilter: 'blur(4px)',
+            cursor: 'pointer',
+            display: 'inline-block',
+            transition: 'background 0.2s ease, transform 0.1s ease',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+          }}
+          className="watched-pill-clickable"
+          >
             {movie.isWatched ? 'Watched' : 'Unwatched'}
           </span>
         </div>
@@ -555,19 +564,6 @@ const MyMovies = () => {
               <div className="media-meta" style={{ fontSize: '0.75rem' }}>
                 {movie.releaseDate ? movie.releaseDate.substring(0, 4) : 'Unknown Year'}
               </div>
-              <button
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: movie.isWatched ? 'var(--accent)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  padding: '2px'
-                }}
-                onClick={e => handleToggleWatch(e, movie)}
-                title={movie.isWatched ? "Watched" : "Watch"}
-              >
-                {movie.isWatched ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
             </div>
           </div>
         ) : (
@@ -575,29 +571,6 @@ const MyMovies = () => {
             <div className="media-title" title={movie.title}>{movie.title}</div>
             <div className="media-meta">
               {movie.releaseDate ? movie.releaseDate.substring(0, 4) : 'Unknown Year'}
-            </div>
-
-            <div style={{ display: 'flex', marginTop: '16px' }} onClick={e => e.stopPropagation()}>
-              <button
-                className="btn btn-secondary"
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  fontSize: '0.85rem',
-                  background: movie.isWatched ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
-                  color: movie.isWatched ? 'var(--accent)' : 'var(--text-main)',
-                  border: movie.isWatched ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onClick={e => handleToggleWatch(e, movie)}
-                title={movie.isWatched ? "Watched" : "Watch"}
-              >
-                {movie.isWatched ? <EyeOff size={16} /> : <Eye size={16} />}
-                <span>{movie.isWatched ? 'Watched' : 'Watch'}</span>
-              </button>
             </div>
           </div>
         )}
@@ -741,23 +714,24 @@ const MyMovies = () => {
                           {(movie.releaseDate || '').substring(0, 4) || 'N/A'}
                         </td>
                         <td style={{ padding: '12px 8px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                          <button
-                            className="btn btn-secondary"
-                            style={{
-                              padding: '6px 10px',
-                              background: movie.isWatched ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
-                              color: movie.isWatched ? 'rgb(52, 211, 153)' : 'var(--text-main)',
-                              border: movie.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginLeft: 'auto'
-                            }}
+                          <span
                             onClick={e => handleToggleWatch(e, movie)}
-                            title={movie.isWatched ? "Watched" : "Watch"}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              background: movie.isWatched ? 'var(--success)' : 'var(--overlay-strong)',
+                              color: 'var(--text-main)',
+                              cursor: 'pointer',
+                              display: 'inline-block',
+                              transition: 'all 0.2s ease',
+                              border: '1px solid var(--border-color)'
+                            }}
+                            className="watched-pill"
                           >
-                            {movie.isWatched ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
+                            {movie.isWatched ? 'Watched' : 'Unwatched'}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -802,23 +776,24 @@ const MyMovies = () => {
                       {(movie.releaseDate || '').substring(0, 4) || 'N/A'}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                      <button
-                        className="btn btn-secondary"
-                        style={{
-                          padding: '6px 10px',
-                          background: movie.isWatched ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
-                          color: movie.isWatched ? 'rgb(52, 211, 153)' : 'var(--text-main)',
-                          border: movie.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid transparent',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginLeft: 'auto'
-                        }}
+                      <span
                         onClick={e => handleToggleWatch(e, movie)}
-                        title={movie.isWatched ? "Watched" : "Watch"}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          background: movie.isWatched ? 'var(--success)' : 'var(--overlay-strong)',
+                          color: 'var(--text-main)',
+                          cursor: 'pointer',
+                          display: 'inline-block',
+                          transition: 'all 0.2s ease',
+                          border: '1px solid var(--border-color)'
+                        }}
+                        className="watched-pill"
                       >
-                        {movie.isWatched ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
+                        {movie.isWatched ? 'Watched' : 'Unwatched'}
+                      </span>
                     </td>
                   </tr>
                 ))

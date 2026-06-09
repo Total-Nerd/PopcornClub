@@ -141,7 +141,7 @@ router.get('/', async (req, res) => {
                     col => col.season === s.season_number && col.episode === ep.episode_number
                   );
 
-                  const airDateTime = getAiringDateTime(ep.air_date, originCountries);
+                  const airDateTime = getAiringDateTime(ep.air_date, originCountries, media.tmdbId);
 
                   events.push({
                     id: `tv-${media.id}-s${s.season_number}e${ep.episode_number}`,

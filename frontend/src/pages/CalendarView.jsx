@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
+import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers, Sliders, Check } from 'lucide-react';
-import { getEventsFromIndexedDB } from '../utils/pwaHelper';
+import { getEventsFromIndexedDB, upsertEventsToIndexedDB } from '../utils/pwaHelper';
 import MobileBottomSheet from '../components/MobileBottomSheet';
+import { useModal } from '../context/ModalContext';
 
 const pad = (num) => String(num).padStart(2, '0');
 
@@ -54,16 +55,367 @@ const groupDayEvents = (events) => {
   return grouped;
 };
 
+const getSortableTitle = (title) => {
+  if (!title) return '';
+  return title
+    .toLowerCase()
+    .replace(/^(?:a|an|the)\s+/i, '')
+    .trim();
+};
+
+const sortEvents = (eventList) => {
+  return [...eventList].sort((a, b) => {
+    const timeA = a.airDateTime ? new Date(a.airDateTime).getTime() : new Date(a.airDate + 'T00:00:00Z').getTime();
+    const timeB = b.airDateTime ? new Date(b.airDateTime).getTime() : new Date(b.airDate + 'T00:00:00Z').getTime();
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    const titleA = getSortableTitle(a.type === 'tv' ? a.showTitle : a.title);
+    const titleB = getSortableTitle(b.type === 'tv' ? b.showTitle : b.title);
+    return titleA.localeCompare(titleB);
+  });
+};
+
+const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails, onToggleStackExpand, expandedStacks }) => {
+  const [translateX, setTranslateX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const startTranslateX = useRef(0);
+  const isHorizontalSwipe = useRef(null);
+  const cardRef = useRef(null);
+
+  const handleTouchStart = (e) => {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    startTranslateX.current = translateX;
+    isHorizontalSwipe.current = null;
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isSwiping) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - startX.current;
+    const diffY = currentY - startY.current;
+
+    if (isHorizontalSwipe.current === null) {
+      if (Math.abs(diffY) > Math.abs(diffX)) {
+        isHorizontalSwipe.current = false;
+        setIsSwiping(false);
+        return;
+      } else {
+        isHorizontalSwipe.current = true;
+      }
+    }
+
+    if (isHorizontalSwipe.current) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      setTranslateX(startTranslateX.current + diffX);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isSwiping) return;
+    setIsSwiping(false);
+
+    const width = cardRef.current ? cardRef.current.offsetWidth : 300;
+    const absX = Math.abs(translateX);
+    const p = absX / width;
+    const dir = translateX > 0 ? 1 : -1;
+
+    if (p >= 0.8) {
+      // Auto-trigger default action
+      if (!ev.isCollected) {
+        onToggleCollect('collect', ev);
+      } else {
+        onToggleWatch('watch', ev);
+      }
+      setTranslateX(0);
+    } else if (p >= 0.35) {
+      // Snap to reveal both options
+      setTranslateX(dir * 160);
+    } else if (p >= 0.15) {
+      // Snap to reveal first option
+      setTranslateX(dir * 80);
+    } else {
+      // Snap back to 0
+      setTranslateX(0);
+    }
+  };
+
+  const isWatched = ev.isWatched;
+  const poster = ev.type === 'tv' ? ev.showPoster : ev.posterPath;
+  const title = ev.type === 'tv' ? ev.showTitle : ev.title;
+
+  const absX = Math.abs(translateX);
+  const width = cardRef.current ? cardRef.current.offsetWidth : 300;
+  const p = absX / width;
+  const defaultAction = !ev.isCollected ? 'collect' : 'watch';
+
+  let collectWidth = 0;
+  let watchWidth = 0;
+
+  if (absX <= 80) {
+    collectWidth = absX;
+    watchWidth = 0;
+  } else if (absX <= 160) {
+    collectWidth = 80;
+    watchWidth = absX - 80;
+  } else {
+    // Both are beyond 80px. Check if we are transitioning to default action only.
+    // Transition range is p = 0.5 (equal) to p = 0.8 (default only)
+    const equalWidth = absX / 2;
+    const factor = Math.min(1, Math.max(0, (p - 0.5) / 0.3)); // 0 to 1
+
+    if (defaultAction === 'collect') {
+      collectWidth = equalWidth + factor * equalWidth;
+      watchWidth = equalWidth - factor * equalWidth;
+    } else {
+      collectWidth = equalWidth - factor * equalWidth;
+      watchWidth = equalWidth + factor * equalWidth;
+    }
+  }
+
+  const cOpacity = collectWidth > 15 ? 1 : 0;
+  const wOpacity = watchWidth > 15 ? 1 : 0;
+
+  return (
+    <div 
+      className={`swipe-container ${ev.isStacked ? 'calendar-card-stacked' : ''}`}
+      style={{
+        position: 'relative',
+        width: '100%',
+        borderRadius: '8px',
+        marginBottom: ev.isStacked ? '8px' : '0px'
+      }}
+    >
+      <div 
+        className="swipe-underlay"
+        style={{
+          position: 'absolute',
+          top: '2px',
+          bottom: '2px',
+          left: '4px',
+          right: '4px',
+          display: 'flex',
+          flexDirection: translateX > 0 ? 'row' : 'row-reverse',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          borderRadius: '6px',
+          zIndex: 1,
+          background: 'var(--bg-card-solid)',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Collect / Uncollect Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollect('collect', ev);
+            setTranslateX(0);
+          }}
+          style={{
+            width: `${collectWidth}px`,
+            opacity: cOpacity,
+            height: '100%',
+            background: '#2563eb', // blue
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+            border: 'none',
+            outline: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            transition: isSwiping ? 'none' : 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease'
+          }}
+        >
+          {ev.isCollected ? <X size={18} /> : <Plus size={18} />}
+          <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+            {ev.isStacked ? (ev.isCollected ? 'Uncollect All' : 'Collect All') : (ev.isCollected ? 'Uncollect' : 'Collect')}
+          </span>
+        </button>
+
+        {/* Watch / Unwatch Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleWatch('watch', ev);
+            setTranslateX(0);
+          }}
+          style={{
+            width: `${watchWidth}px`,
+            opacity: wOpacity,
+            height: '100%',
+            background: '#10b981', // green
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+            border: 'none',
+            outline: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            transition: isSwiping ? 'none' : 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease'
+          }}
+        >
+          {ev.isWatched ? <EyeOff size={18} /> : <Eye size={18} />}
+          <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>
+            {ev.isStacked ? (ev.isWatched ? 'Unwatch All' : 'Watch All') : (ev.isWatched ? 'Unwatch' : 'Watch')}
+          </span>
+        </button>
+      </div>
+
+      <div
+        ref={cardRef}
+        className={`glass-panel swipe-front-card ${isWatched ? 'is-watched' : ''}`}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={(e) => {
+          if (translateX !== 0) {
+            e.stopPropagation();
+            setTranslateX(0);
+          } else {
+            if (ev.isStacked) {
+              onToggleStackExpand(ev.id);
+            } else {
+              onOpenDetails(ev);
+            }
+          }
+        }}
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          transform: `translateX(${translateX}px)`,
+          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          padding: '10px',
+          fontSize: '1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          cursor: 'pointer',
+          border: '1px solid var(--border-color)',
+          borderRadius: '8px',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: '290px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
+          {poster ? (
+            <img
+              src={`https://image.tmdb.org/t/p/w185${poster}`}
+              alt={title}
+              style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+            />
+          ) : (
+            <div style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%' }}>
+                {title}
+              </span>
+              {ev.isCollected && (
+                <span className="collected-badge-pill">
+                  Collected
+                </span>
+              )}
+            </div>
+            {ev.type === 'tv' ? (
+              <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
+                {ev.localTimeStr && (
+                  <>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{ev.localTimeStr}</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: '#c084fc', fontWeight: '500', fontSize: '0.95rem', marginTop: '4px' }}>
+                Movie Release
+              </div>
+            )}
+          </div>
+          {ev.isStacked && (
+            <Layers size={14} style={{ color: 'var(--text-muted)', position: 'absolute', top: 0, right: 0 }} />
+          )}
+        </div>
+
+        {ev.isStacked && expandedStacks[ev.id] && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+            {ev.originalEpisodes.map(subEv => (
+              <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => onOpenDetails(subEv)}>
+                  S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => onToggleCollect('collect', subEv)}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '4px 6px',
+                      fontSize: '0.8rem',
+                      background: subEv.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isCollected ? 'var(--success)' : 'var(--text-muted)'
+                    }}
+                  >
+                    {subEv.isCollected ? 'Collected' : 'Collect'}
+                  </button>
+                  <button
+                    onClick={() => onToggleWatch('watch', subEv)}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '4px 6px',
+                      fontSize: '0.8rem',
+                      background: subEv.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isWatched ? 'var(--accent)' : 'var(--text-muted)'
+                    }}
+                  >
+                    {subEv.isWatched ? 'Watched' : 'Watch'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const CalendarView = () => {
+  const { showAlert } = useModal();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('calendar_view_mode') || 'week'); // 'month' or 'week'
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOfflineMode, setIsOfflineMode] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+  const [updatingInBackground, setUpdatingInBackground] = useState(false);
   const [expandedStacks, setExpandedStacks] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [selectedMobileDate, setSelectedMobileDate] = useState(new Date());
   const [isDisplayMenuOpen, setIsDisplayMenuOpen] = useState(false);
+  const [mobileSwipeMode, setMobileSwipeMode] = useState(() => localStorage.getItem('calendar_mobile_swipe_mode') === 'true');
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   const navigationRef = useRef(null);
@@ -173,6 +525,26 @@ const CalendarView = () => {
             </label>
           </div>
         </div>
+
+        {isMobile && (
+          <div>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Mobile Actions</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label className="custom-checkbox-container" onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="custom-checkbox-input"
+                  checked={mobileSwipeMode}
+                  onChange={() => setMobileSwipeMode(prev => !prev)}
+                />
+                <span className="custom-checkbox-box">
+                  <Check className="custom-checkbox-icon" size={12} strokeWidth={3} />
+                </span>
+                <span className="custom-checkbox-label">Swipe Actions</span>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -251,6 +623,10 @@ const CalendarView = () => {
     localStorage.setItem('calendar_hide_watched', hideWatched);
   }, [hideWatched]);
 
+  useEffect(() => {
+    localStorage.setItem('calendar_mobile_swipe_mode', mobileSwipeMode);
+  }, [mobileSwipeMode]);
+
   // Auto-scroll to today's date in mobile view
   useEffect(() => {
     if (!loading && typeof window !== 'undefined') {
@@ -283,44 +659,66 @@ const CalendarView = () => {
   // Fetch events based on current view date range
   useEffect(() => {
     const fetchEvents = async () => {
-      setLoading(true);
+      let start, end;
+      let gridStart, gridEnd;
+      if (viewMode === 'month') {
+        const startMonth = startOfMonth(currentDate);
+        const endMonth = endOfMonth(currentDate);
+        gridStart = startOfWeek(startMonth, { weekStartsOn: 1 });
+        gridEnd = endOfWeek(endMonth, { weekStartsOn: 1 });
+
+        start = format(gridStart, 'yyyy-MM-dd');
+        end = format(gridEnd, 'yyyy-MM-dd');
+      } else {
+        gridStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+        gridEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+
+        start = format(gridStart, 'yyyy-MM-dd');
+        end = format(gridEnd, 'yyyy-MM-dd');
+      }
+
+      const startMinus1 = format(subDays(gridStart, 1), 'yyyy-MM-dd');
+      const endPlus1 = format(addDays(gridEnd, 1), 'yyyy-MM-dd');
+
+      // Check IndexedDB cache first
+      let hasCache = false;
       try {
-        let start, end;
-        if (viewMode === 'month') {
-          // Fetch from 7 days before start of month to 7 days after to catch boundary cells
-          const startMonth = startOfMonth(currentDate);
-          const endMonth = endOfMonth(currentDate);
-          const gridStart = startOfWeek(startMonth, { weekStartsOn: 1 });
-          const gridEnd = endOfWeek(endMonth, { weekStartsOn: 1 });
-
-          start = format(gridStart, 'yyyy-MM-dd');
-          end = format(gridEnd, 'yyyy-MM-dd');
-        } else {
-          const gridStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-          const gridEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-
-          start = format(gridStart, 'yyyy-MM-dd');
-          end = format(gridEnd, 'yyyy-MM-dd');
+        const cached = await getEventsFromIndexedDB(startMinus1, endPlus1);
+        if (cached && cached.length > 0) {
+          setEvents(sortEvents(cached));
+          setLoading(false); // Render immediately
+          setUpdatingInBackground(true); // Flag background sync
+          hasCache = true;
         }
+      } catch (cacheErr) {
+        console.warn('[PWA] Error reading calendar cache:', cacheErr);
+      }
 
-        try {
-          const res = await api.get(`/calendar?start=${start}&end=${end}`);
-          setEvents(res.data);
-          setIsOfflineMode(false);
-        } catch (netErr) {
-          console.warn('[PWA] Failed to fetch calendar from network, falling back to IndexedDB:', netErr);
-          setIsOfflineMode(true);
-          const cached = await getEventsFromIndexedDB(start, end);
+      if (!hasCache) {
+        setLoading(true);
+        setUpdatingInBackground(false);
+      }
+
+      try {
+        const res = await api.get(`/calendar?start=${start}&end=${end}`);
+        setEvents(sortEvents(res.data));
+        setIsOfflineMode(false);
+        // Upsert newly fetched calendar items to IndexedDB
+        await upsertEventsToIndexedDB(res.data);
+      } catch (netErr) {
+        console.warn('[PWA] Failed to fetch calendar from network, falling back to IndexedDB:', netErr);
+        setIsOfflineMode(true);
+        if (!hasCache) {
+          const cached = await getEventsFromIndexedDB(startMinus1, endPlus1);
           if (cached && cached.length > 0) {
-            setEvents(cached);
+            setEvents(sortEvents(cached));
           } else {
             setEvents([]);
           }
         }
-      } catch (err) {
-        console.error('Failed in fetchEvents sequence:', err);
       } finally {
         setLoading(false);
+        setUpdatingInBackground(false);
       }
     };
 
@@ -347,6 +745,7 @@ const CalendarView = () => {
     const isTV = ev.type === 'tv';
     const isCurrentlyWatched = ev.isWatched;
     const newVal = !isCurrentlyWatched;
+    const title = ev.type === 'tv' ? ev.showTitle : ev.title;
 
     try {
       if (isTV) {
@@ -384,6 +783,7 @@ const CalendarView = () => {
       // Update local state
       const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
       setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: newVal } : e));
+      showAlert(`${newVal ? 'Watched' : 'Unwatched'} "${title}"`, 'success');
     } catch (err) {
       console.error('Failed to toggle watch status:', err);
     }
@@ -393,6 +793,7 @@ const CalendarView = () => {
     const isTV = ev.type === 'tv';
     const isCurrentlyCollected = ev.isCollected;
     const newVal = !isCurrentlyCollected;
+    const title = ev.type === 'tv' ? ev.showTitle : ev.title;
 
     try {
       if (isTV) {
@@ -430,6 +831,7 @@ const CalendarView = () => {
       // Update local state
       const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
       setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isCollected: newVal } : e));
+      showAlert(`${newVal ? 'Collected' : 'Removed from collection'} "${title}"`, 'success');
     } catch (err) {
       console.error('Failed to toggle collection status:', err);
     }
@@ -491,6 +893,20 @@ const CalendarView = () => {
   const weekDaysHeader = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const renderEventCard = (ev) => {
+    if (isMobile && mobileSwipeMode) {
+      return (
+        <SwipeableEventCard
+          key={ev.id}
+          ev={ev}
+          onToggleWatch={handleToggleWatch}
+          onToggleCollect={handleToggleCollect}
+          onOpenDetails={handleOpenDetails}
+          onToggleStackExpand={toggleStackExpand}
+          expandedStacks={expandedStacks}
+        />
+      );
+    }
+
     const isWatched = ev.isWatched;
     const poster = ev.type === 'tv' ? ev.showPoster : ev.posterPath;
     const title = ev.type === 'tv' ? ev.showTitle : ev.title;
@@ -670,14 +1086,6 @@ const CalendarView = () => {
   return (
     <div style={{ width: '100%' }}>
 
-      {/* Offline Mode PWA Banner */}
-      {isOfflineMode && (
-        <div className="pwa-offline-banner">
-          <WifiOff size={20} />
-          <span>Offline Mode — displaying local cached data for the next 6 months</span>
-        </div>
-      )}
-
       {/* Calendar Header Panel */}
       <div ref={containerRef} className="sticky-header-container">
         <div ref={headerRef} className="page-header">
@@ -707,7 +1115,7 @@ const CalendarView = () => {
         </div>
       </div>
 
-      {loading && (
+      {updatingInBackground && (
         <div className="fetching-airtimes-notification">
           <div className="spin" style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#fff', borderRadius: '50%' }}></div>
           <span style={{ fontSize: '0.8rem', fontWeight: '500' }}>Fetching airtimes...</span>

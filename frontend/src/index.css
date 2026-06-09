@@ -79,6 +79,8 @@
   --text-on-image: #ffffff;
   --disabled-btn-text: rgba(255, 255, 255, 0.15);
   --disabled-btn-bg: rgba(255, 255, 255, 0.01);
+  --bg-card-solid: #1e293b;
+  --success-bg-solid: #1d3742;
 }
 
 .theme-light {
@@ -154,6 +156,8 @@
   --text-on-image: #ffffff;
   --disabled-btn-text: rgba(0, 0, 0, 0.15);
   --disabled-btn-bg: rgba(0, 0, 0, 0.01);
+  --bg-card-solid: #ffffff;
+  --success-bg-solid: #e7f8f2;
 }
 
 .theme-oled {
@@ -229,6 +233,8 @@
   --text-on-image: #ffffff;
   --disabled-btn-text: rgba(255, 255, 255, 0.15);
   --disabled-btn-bg: rgba(255, 255, 255, 0.01);
+  --bg-card-solid: #000000;
+  --success-bg-solid: #02130d;
 }
 
 * {
@@ -243,6 +249,7 @@ body {
   color: var(--text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 a {
@@ -747,6 +754,7 @@ button {
   grid-template-columns: repeat(7, 1fr);
   gap: 16px;
   min-height: 60vh;
+  margin-top: 10px;
 }
 
 .calendar-month-grid {
@@ -3430,4 +3438,79 @@ select option {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
   padding: 8px 0 !important;
+}
+
+/* Global Offline Banner */
+.offline-status-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background-color: var(--danger);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transform: translateY(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.offline-status-bar.show {
+  transform: translateY(0);
+}
+
+.offline-status-bar.offline {
+  background-color: #ef4444; /* bright red */
+}
+
+.offline-status-bar.online {
+  background-color: #10b981; /* green */
+}
+
+/* Mobile swipe gesture styling */
+.swipe-container {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.swipe-underlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.swipe-front-card {
+  position: relative;
+  z-index: 2;
+  background: var(--bg-card-solid) !important;
+}
+
+.swipe-front-card.is-watched {
+  background: var(--success-bg-solid) !important;
+}
+
+/* Collected Badge Pill in Swipe Mode */
+.collected-badge-pill {
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
 }

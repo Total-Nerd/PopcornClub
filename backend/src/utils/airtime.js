@@ -1,11 +1,14 @@
 // Helper to calculate airing datetime in UTC based on origin countries and standard airing times
-function getAiringDateTime(airDateStr, originCountries = []) {
+function getAiringDateTime(airDateStr, originCountries = [], tmdbId = null) {
   if (!airDateStr) return null;
   const country = originCountries[0] || 'US';
   const date = new Date(airDateStr + 'T12:00:00Z'); // Use noon UTC to avoid date boundaries on transition days
   
   // Default local prime time for airtime: 9 PM (21:00)
-  const localHour = 21; 
+  let localHour = 21; 
+  if (tmdbId === 60625 || tmdbId === '60625') {
+    localHour = 23; // Rick and Morty airs at 11 PM America/New_York
+  }
   let utcOffset = 0; // offset in hours from UTC
   
   const zones = {

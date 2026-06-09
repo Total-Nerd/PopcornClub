@@ -981,7 +981,7 @@ router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
     const originCountries = tvCache?.data?.origin_country || [];
 
     const episodes = tmdbData.episodes.map(ep => {
-      const airDateTime = getAiringDateTime(ep.air_date, originCountries);
+      const airDateTime = getAiringDateTime(ep.air_date, originCountries, parsedId);
       return {
         ...ep,
         airDateTime,
