@@ -5,6 +5,7 @@ import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, Refresh
 import { useModal } from '../context/ModalContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
+import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const ShowDetails = () => {
   const { tmdbId } = useParams();
@@ -447,10 +448,112 @@ const ShowDetails = () => {
     }
   };
 
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
+  const [watchOptionsMedia, setWatchOptionsMedia] = useState(null);
+  const [activeWatchEpisode, setActiveWatchEpisode] = useState(null);
+
+  const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
+    if (!activeWatchEpisode || !showDetails) return;
+    const episode = activeWatchEpisode;
+    try {
+      if (choice === 'watching-now') {
+        await api.post('/media/active-session', {
+          tmdbId: showDetails.id,
+          type: 'episode',
+          title: episode.name,
+          overview: episode.overview,
+          releaseDate: episode.air_date,
+          posterPath: episode.still_path,
+          season: episode.season_number,
+          episode: episode.episode_number,
+          grandparentTitle: showDetails.name,
+          parentTitle: `Season ${episode.season_number}`
+        });
+        showAlert('Started watching now', 'info');
+      } else if (choice === 'removed-last') {
+        // Update episodes array in local state
+        setSeasonEpisodes(prev => prev.map(ep =>
+          ep.id === episode.id
+            ? { ...ep, isWatched: watchedAt }
+            : ep
+        ));
+
+        // Update showDetails counts
+        setShowDetails(prev => {
+          let updatedWatched = [...prev.watchedEpisodes];
+          if (!watchedAt) {
+            updatedWatched = updatedWatched.filter(x => !(x.season === episode.season_number && x.episode === episode.episode_number));
+          }
+          return {
+            ...prev,
+            watchedEpisodes: updatedWatched
+          };
+        });
+        showAlert('Removed watch entry', 'info');
+      } else {
+        await api.post('/media/episode/watch', {
+          tmdbId: showDetails.id,
+          season: episode.season_number,
+          episode: episode.episode_number,
+          watched: true,
+          title: showDetails.name,
+          posterPath: showDetails.poster_path,
+          watchedAt
+        });
+
+        // Update episodes array in local state
+        setSeasonEpisodes(prev => prev.map(ep =>
+          ep.id === episode.id
+            ? { ...ep, isWatched: true }
+            : ep
+        ));
+
+        // Update showDetails counts
+        setShowDetails(prev => {
+          let updatedWatched = [...prev.watchedEpisodes];
+          const exists = updatedWatched.some(x => x.season === episode.season_number && x.episode === episode.episode_number);
+          if (!exists) {
+            updatedWatched.push({ season: episode.season_number, episode: episode.episode_number });
+          }
+
+          return {
+            ...prev,
+            isCollected: true, // Auto-collect show
+            watchedEpisodes: updatedWatched
+          };
+        });
+
+        showAlert('Marked as watched', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to log episode watch:', err);
+      showAlert('Failed to update watch status', 'error');
+    }
+  };
+
   const handleEpisodeToggle = async (action, episode) => {
     const isWatched = action === 'watch';
     const currentVal = isWatched ? episode.isWatched : episode.isCollected;
     const newVal = !currentVal;
+
+    if (isWatched) {
+      setActiveWatchEpisode(episode);
+      setWatchOptionsMedia({
+        tmdbId: showDetails.id,
+        type: 'episode',
+        title: `Ep ${episode.episode_number}. ${episode.name}`,
+        overview: episode.overview,
+        releaseDate: episode.air_date || episode.airDateTime,
+        posterPath: episode.still_path,
+        season: episode.season_number,
+        episode: episode.episode_number,
+        grandparentTitle: showDetails.name,
+        parentTitle: `Season ${episode.season_number}`,
+        isWatched: episode.isWatched
+      });
+      setIsWatchOptionsOpen(true);
+      return;
+    }
 
     try {
       await api.post(`/media/episode/${action}`, {
@@ -1694,6 +1797,36 @@ const ShowDetails = () => {
             ></iframe>
           </div>
         </div>
+      )}
+
+      {isWatchOptionsOpen && (
+        <WatchOptionsModal
+          isOpen={isWatchOptionsOpen}
+          onClose={() => setIsWatchOptionsOpen(false)}
+          media={watchOptionsMedia}
+          onSelect={handleWatchOptionsSelect}
+          onWatchStatusChange={(newIsWatched) => {
+            if (!activeWatchEpisode) return;
+            setSeasonEpisodes(prev => prev.map(ep =>
+              ep.id === activeWatchEpisode.id ? { ...ep, isWatched: newIsWatched } : ep
+            ));
+            setShowDetails(prev => {
+              let updatedWatched = [...prev.watchedEpisodes];
+              if (!newIsWatched) {
+                updatedWatched = updatedWatched.filter(x => !(x.season === activeWatchEpisode.season_number && x.episode === activeWatchEpisode.episode_number));
+              } else {
+                const exists = updatedWatched.some(x => x.season === activeWatchEpisode.season_number && x.episode === activeWatchEpisode.episode_number);
+                if (!exists) {
+                  updatedWatched.push({ season: activeWatchEpisode.season_number, episode: activeWatchEpisode.episode_number });
+                }
+              }
+              return {
+                ...prev,
+                watchedEpisodes: updatedWatched
+              };
+            });
+          }}
+        />
       )}
     </div >
   );

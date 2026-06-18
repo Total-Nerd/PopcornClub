@@ -5,6 +5,7 @@ import { ArrowLeft, Film, Star, Plus, Eye, Trash2, Calendar, Clock, ExternalLink
 import { useModal } from '../context/ModalContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
+import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const MovieDetails = () => {
   const { tmdbId } = useParams();
@@ -254,28 +255,52 @@ const MovieDetails = () => {
     fetchMovieDetails();
   }, [tmdbId]);
 
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
+
+  const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
+    if (!movieDetails) return;
+    try {
+      if (choice === 'watching-now') {
+        await api.post('/media/active-session', {
+          tmdbId: movieDetails.id,
+          type: 'movie',
+          title: movieDetails.title,
+          overview: movieDetails.overview,
+          releaseDate: movieDetails.release_date,
+          posterPath: movieDetails.poster_path
+        });
+        showAlert('Started watching now', 'info');
+      } else if (choice === 'removed-last') {
+        setMovieDetails(prev => ({
+          ...prev,
+          isWatched: watchedAt
+        }));
+        showAlert('Removed watch entry', 'info');
+      } else {
+        await api.post('/media/watch', {
+          tmdbId: movieDetails.id,
+          type: 'movie',
+          title: movieDetails.title,
+          overview: movieDetails.overview,
+          releaseDate: movieDetails.release_date,
+          posterPath: movieDetails.poster_path,
+          watchedAt
+        });
+        setMovieDetails(prev => ({
+          ...prev,
+          isWatched: true
+        }));
+        showAlert('Marked as watched', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to update watch status:', err);
+      showAlert('Failed to update watch status', 'error');
+    }
+  };
+
   const handleToggleWatch = async () => {
     if (!movieDetails) return;
-    const isCurrentlyWatched = movieDetails.isWatched;
-
-    try {
-      await api.post('/media/watch', {
-        tmdbId: movieDetails.id,
-        type: 'movie',
-        title: movieDetails.title,
-        overview: movieDetails.overview,
-        releaseDate: movieDetails.release_date,
-        posterPath: movieDetails.poster_path,
-        remove: isCurrentlyWatched
-      });
-
-      setMovieDetails(prev => ({
-        ...prev,
-        isWatched: !isCurrentlyWatched
-      }));
-    } catch (err) {
-      console.error('Failed to toggle watch status:', err);
-    }
+    setIsWatchOptionsOpen(true);
   };
 
   const handleToggleCollection = async () => {
@@ -1102,6 +1127,24 @@ const MovieDetails = () => {
             ></iframe>
           </div>
         </div>
+      )}
+
+      {movieDetails && (
+        <WatchOptionsModal
+          isOpen={isWatchOptionsOpen}
+          onClose={() => setIsWatchOptionsOpen(false)}
+          media={{
+            tmdbId: movieDetails.id,
+            type: 'movie',
+            title: movieDetails.title,
+            overview: movieDetails.overview,
+            releaseDate: movieDetails.release_date,
+            posterPath: movieDetails.poster_path,
+            isWatched: movieDetails.isWatched
+          }}
+          onSelect={handleWatchOptionsSelect}
+          onWatchStatusChange={(newIsWatched) => setMovieDetails(prev => ({ ...prev, isWatched: newIsWatched }))}
+        />
       )}
     </div>
   );

@@ -4,6 +4,8 @@ import api from '../api';
 import { Eye, EyeOff, Search, Film, Star, Clock, Calendar, Check, Trash2, X, Sliders, LayoutGrid, List as ListIcon } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 import MobileBottomSheet from '../components/MobileBottomSheet';
+import { useModal } from '../context/ModalContext';
+import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const getContentWidth = (windowWidth) => {
   if (windowWidth > 768) {
@@ -53,7 +55,47 @@ const getDefaultCols = (aspectRatio) => {
 };
 
 const MyMovies = () => {
+  const { showAlert } = useModal();
   const [movies, setMovies] = useState([]);
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
+  const [watchOptionsMedia, setWatchOptionsMedia] = useState(null);
+  const [activeWatchMovie, setActiveWatchMovie] = useState(null);
+
+  const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
+    if (!activeWatchMovie) return;
+    const movie = activeWatchMovie;
+    try {
+      if (choice === 'watching-now') {
+        await api.post('/media/active-session', {
+          tmdbId: movie.tmdbId,
+          type: 'movie',
+          title: movie.title,
+          overview: movie.overview,
+          releaseDate: movie.releaseDate,
+          posterPath: movie.posterPath
+        });
+        showAlert('Started watching now', 'info');
+      } else if (choice === 'removed-last') {
+        setMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isWatched: watchedAt } : m));
+        showAlert('Removed watch entry', 'info');
+      } else {
+        await api.post('/media/watch', {
+          tmdbId: movie.tmdbId,
+          type: 'movie',
+          title: movie.title,
+          overview: movie.overview,
+          releaseDate: movie.releaseDate,
+          posterPath: movie.posterPath,
+          watchedAt
+        });
+        setMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isWatched: true } : m));
+        showAlert('Marked as watched', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to update watch status:', err);
+      showAlert('Failed to update watch status', 'error');
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem('movies_search_query') || '');
   const [filterType, setFilterType] = useState(() => localStorage.getItem('movies_filter_type') || 'all'); // 'all', 'watched', 'unwatched'
@@ -421,23 +463,17 @@ const MyMovies = () => {
 
   const handleToggleWatch = async (e, movie) => {
     e.stopPropagation();
-    try {
-      const isCurrentlyWatched = movie.isWatched;
-      await api.post('/media/watch', {
-        tmdbId: movie.tmdbId,
-        type: 'movie',
-        title: movie.title,
-        overview: movie.overview,
-        releaseDate: movie.releaseDate,
-        posterPath: movie.posterPath,
-        remove: isCurrentlyWatched // if currently watched, remove it (make unwatched)
-      });
-
-      // Update local state
-      setMovies(prev => prev.map(m => m.id === movie.id ? { ...m, isWatched: !isCurrentlyWatched } : m));
-    } catch (err) {
-      console.error('Failed to toggle watch status', err);
-    }
+    setActiveWatchMovie(movie);
+    setWatchOptionsMedia({
+      tmdbId: movie.tmdbId,
+      type: 'movie',
+      title: movie.title,
+      overview: movie.overview,
+      releaseDate: movie.releaseDate,
+      posterPath: movie.posterPath,
+      isWatched: movie.isWatched
+    });
+    setIsWatchOptionsOpen(true);
   };
 
 
@@ -833,6 +869,18 @@ const MyMovies = () => {
       )}
 
       {/* Side padding spacing adjustment */}
+      {isWatchOptionsOpen && (
+        <WatchOptionsModal
+          isOpen={isWatchOptionsOpen}
+          onClose={() => setIsWatchOptionsOpen(false)}
+          media={watchOptionsMedia}
+          onSelect={handleWatchOptionsSelect}
+          onWatchStatusChange={(newIsWatched) => {
+            if (!activeWatchMovie) return;
+            setMovies(prev => prev.map(m => m.id === activeWatchMovie.id ? { ...m, isWatched: newIsWatched } : m));
+          }}
+        />
+      )}
     </div>
   );
 };

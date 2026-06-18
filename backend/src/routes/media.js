@@ -1044,7 +1044,7 @@ router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
 
 // Toggle episode watch status
 router.post('/episode/watch', async (req, res) => {
-  const { tmdbId, season, episode, watched, title, posterPath } = req.body;
+  const { tmdbId, season, episode, watched, title, posterPath, watchedAt } = req.body;
   if (!tmdbId || season === undefined || episode === undefined) {
     return res.status(400).json({ error: 'Missing required episode fields' });
   }
@@ -1054,10 +1054,11 @@ router.post('/episode/watch', async (req, res) => {
     const systemSettings = await prisma.systemSettings.findFirst();
 
     if (watched) {
+      const watchDate = watchedAt ? new Date(watchedAt) : new Date();
       const history = await prisma.episodeWatchHistory.upsert({
         where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season, episode } },
-        update: { watchedAt: new Date() },
-        create: { userId: req.user.id, mediaId: media.id, season, episode, watchedAt: new Date() }
+        update: { watchedAt: watchDate },
+        create: { userId: req.user.id, mediaId: media.id, season, episode, watchedAt: watchDate }
       });
       const runtime = await resolveDuration({
         tmdbId: media.tmdbId,
@@ -1074,7 +1075,7 @@ router.post('/episode/watch', async (req, res) => {
           type: 'tv',
           season,
           episode,
-          watchedAt: new Date(),
+          watchedAt: watchDate,
           isCompleted: true,
           duration: durationSec,
           viewOffset: durationSec
@@ -1229,6 +1230,138 @@ router.post('/force-remove', async (req, res) => {
   } catch (error) {
     console.error('Failed to force remove media:', error);
     res.status(500).json({ error: `Failed to force remove media: ${error.message}` });
+  }
+});
+
+const activeTimeouts = {};
+
+// POST start active session
+router.post('/active-session', async (req, res) => {
+  const { tmdbId, type, title, overview, releaseDate, posterPath, season, episode, grandparentTitle, parentTitle } = req.body;
+  if (!tmdbId || !type || !title) {
+    return res.status(400).json({ error: 'Missing required media fields' });
+  }
+
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const runtime = await resolveDuration({
+      tmdbId: parseInt(tmdbId),
+      type: type === 'episode' ? 'tv' : type,
+      season: type === 'episode' ? parseInt(season) : undefined,
+      episode: type === 'episode' ? parseInt(episode) : undefined,
+      apiKey: systemSettings?.tmdbApiKey
+    });
+    const durationSec = (runtime || (type === 'episode' ? 45 : 120)) * 60;
+    const durationMs = durationSec * 1000;
+
+    const session = {
+      title,
+      type: type === 'episode' ? 'episode' : 'movie',
+      grandparentTitle: type === 'episode' ? grandparentTitle : null,
+      parentTitle: type === 'episode' ? parentTitle : null,
+      season: type === 'episode' ? parseInt(season) : null,
+      episode: type === 'episode' ? parseInt(episode) : null,
+      viewOffset: 0,
+      duration: durationMs,
+      updatedAt: Date.now(),
+      isPlaying: true,
+      isManual: true,
+      ratingKey: `manual-${type}-${tmdbId}`,
+      posterPath,
+      tmdbId: parseInt(tmdbId)
+    };
+
+    const plexStore = require('../utils/plexStore');
+    plexStore.setActiveSession(req.user.id, session);
+
+    // Cancel existing timeout if any
+    if (activeTimeouts[req.user.id]) {
+      clearTimeout(activeTimeouts[req.user.id]);
+      delete activeTimeouts[req.user.id];
+    }
+
+    // Start a timeout to auto-complete the watch history log
+    activeTimeouts[req.user.id] = setTimeout(async () => {
+      try {
+        console.log(`[Manual Watch] Completing watch for ${title} for User: ${req.user.username}`);
+        const media = await getOrCreateMediaRecord({ tmdbId: parseInt(tmdbId), type: type === 'episode' ? 'tv' : 'movie', title: grandparentTitle || title, posterPath, overview, releaseDate });
+
+        if (type === 'episode') {
+          await prisma.episodeWatchHistory.upsert({
+            where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season: parseInt(season), episode: parseInt(episode) } },
+            update: { watchedAt: new Date() },
+            create: { userId: req.user.id, mediaId: media.id, season: parseInt(season), episode: parseInt(episode), watchedAt: new Date() }
+          });
+          await prisma.watchHistoryLog.create({
+            data: {
+              userId: req.user.id,
+              mediaId: media.id,
+              type: 'tv',
+              season: parseInt(season),
+              episode: parseInt(episode),
+              watchedAt: new Date(),
+              isCompleted: true,
+              duration: durationSec,
+              viewOffset: durationSec
+            }
+          });
+          if (systemSettings?.tmdbApiKey) {
+            await syncShowWatchHistory(media.id, media.tmdbId, systemSettings.tmdbApiKey, req.user.id);
+          }
+        } else {
+          await prisma.watchHistory.create({
+            data: { userId: req.user.id, mediaId: media.id, watchedAt: new Date() }
+          });
+          await prisma.watchHistoryLog.create({
+            data: {
+              userId: req.user.id,
+              mediaId: media.id,
+              type: 'movie',
+              watchedAt: new Date(),
+              isCompleted: true,
+              duration: durationSec,
+              viewOffset: durationSec
+            }
+          });
+        }
+
+        plexStore.clearActiveSession(req.user.id);
+        const { broadcastToUser } = require('../utils/wsManager');
+        broadcastToUser(req.user.id, { type: 'plex-session', session: null });
+        delete activeTimeouts[req.user.id];
+      } catch (err) {
+        console.error('[Manual Watch] Failed to complete manual watch timeout:', err);
+      }
+    }, durationMs);
+
+    const { broadcastToUser } = require('../utils/wsManager');
+    broadcastToUser(req.user.id, { type: 'plex-session', session });
+
+    res.json({ success: true, session });
+  } catch (error) {
+    console.error('Failed to start active session:', error);
+    res.status(500).json({ error: 'Failed to start active session' });
+  }
+});
+
+// DELETE cancel active session
+router.delete('/active-session', (req, res) => {
+  try {
+    const plexStore = require('../utils/plexStore');
+    plexStore.clearActiveSession(req.user.id);
+
+    if (activeTimeouts[req.user.id]) {
+      clearTimeout(activeTimeouts[req.user.id]);
+      delete activeTimeouts[req.user.id];
+    }
+
+    const { broadcastToUser } = require('../utils/wsManager');
+    broadcastToUser(req.user.id, { type: 'plex-session', session: null });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to clear active session:', error);
+    res.status(500).json({ error: 'Failed to clear active session' });
   }
 });
 
@@ -1806,7 +1939,7 @@ router.get('/watch-history', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const type = req.query.type || 'all'; // 'all', 'movie', 'tv'
+    const type = req.query.type || 'all'; // 'all', 'movie', 'tv', 'episode'
     const includePartial = req.query.includePartial === 'true';
     const search = req.query.search || '';
     const startDate = req.query.startDate || '';
@@ -1816,16 +1949,28 @@ router.get('/watch-history', async (req, res) => {
     const skip = (page - 1) * limit;
 
     const where = { userId: req.user.id };
-    if (type !== 'all') {
-      where.type = type;
+    const mappedType = type === 'episode' ? 'tv' : type;
+    if (mappedType !== 'all') {
+      where.type = mappedType;
     }
     if (!includePartial) {
       where.isCompleted = true;
     }
 
-    if (req.query.mediaId) {
+    if (req.query.tmdbId && req.query.type) {
+      const targetType = req.query.type === 'episode' ? 'tv' : req.query.type;
+      const media = await prisma.media.findFirst({
+        where: { tmdbId: parseInt(req.query.tmdbId), type: targetType }
+      });
+      if (media) {
+        where.mediaId = media.id;
+      } else {
+        return res.json({ logs: [], total: 0 });
+      }
+    } else if (req.query.mediaId) {
       where.mediaId = parseInt(req.query.mediaId);
     }
+
     if (req.query.season) {
       where.season = parseInt(req.query.season);
     }
@@ -1917,6 +2062,133 @@ router.get('/watch-history', async (req, res) => {
   }
 });
 
+// Remove the last watched history entry
+router.post('/watch-history/remove-last', async (req, res) => {
+  const { tmdbId, type, season, episode } = req.body;
+  if (!tmdbId || !type) {
+    return res.status(400).json({ error: 'Missing tmdbId or type' });
+  }
+
+  try {
+    const mediaType = type === 'episode' ? 'tv' : type;
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parseInt(tmdbId), type: mediaType }
+    });
+    if (!media) return res.status(404).json({ error: 'Media not found' });
+
+    const where = {
+      userId: req.user.id,
+      mediaId: media.id,
+      type: mediaType
+    };
+    if (type === 'episode') {
+      where.season = season;
+      where.episode = episode;
+    }
+
+    const log = await prisma.watchHistoryLog.findFirst({
+      where,
+      orderBy: { watchedAt: 'desc' }
+    });
+
+    if (!log) {
+      return res.status(404).json({ error: 'No watch history entry found to remove' });
+    }
+
+    // Delete from WatchHistoryLog
+    await prisma.watchHistoryLog.delete({ where: { id: log.id } });
+
+    let isWatched = false;
+
+    // Synchronize deletion with old watch history tables
+    if (log.type === 'movie') {
+      // Find a matching WatchHistory record close to the log's watchedAt
+      let match = await prisma.watchHistory.findFirst({
+        where: {
+          userId: req.user.id,
+          mediaId: log.mediaId,
+          watchedAt: {
+            gte: new Date(log.watchedAt.getTime() - 60000),
+            lte: new Date(log.watchedAt.getTime() + 60000)
+          }
+        }
+      });
+      if (!match) {
+        const allHistories = await prisma.watchHistory.findMany({
+          where: { userId: req.user.id, mediaId: log.mediaId }
+        });
+        if (allHistories.length > 0) {
+          allHistories.sort((a, b) => Math.abs(a.watchedAt.getTime() - log.watchedAt.getTime()) - Math.abs(b.watchedAt.getTime() - log.watchedAt.getTime()));
+          match = allHistories[0];
+        }
+      }
+      if (match) {
+        await prisma.watchHistory.delete({ where: { id: match.id } });
+      }
+
+      const remainingWatchCount = await prisma.watchHistory.count({
+        where: { userId: req.user.id, mediaId: log.mediaId }
+      });
+      isWatched = remainingWatchCount > 0;
+    } else if (log.type === 'tv') {
+      const otherLogs = await prisma.watchHistoryLog.findFirst({
+        where: {
+          userId: req.user.id,
+          mediaId: log.mediaId,
+          type: 'tv',
+          season: log.season,
+          episode: log.episode,
+          isCompleted: true
+        }
+      });
+      if (!otherLogs) {
+        await prisma.episodeWatchHistory.deleteMany({
+          where: {
+            userId: req.user.id,
+            mediaId: log.mediaId,
+            season: log.season,
+            episode: log.episode
+          }
+        });
+      } else {
+        isWatched = true;
+        const latestRemainingLog = await prisma.watchHistoryLog.findFirst({
+          where: {
+            userId: req.user.id,
+            mediaId: log.mediaId,
+            type: 'tv',
+            season: log.season,
+            episode: log.episode,
+            isCompleted: true
+          },
+          orderBy: { watchedAt: 'desc' }
+        });
+        if (latestRemainingLog) {
+          await prisma.episodeWatchHistory.updateMany({
+            where: {
+              userId: req.user.id,
+              mediaId: log.mediaId,
+              season: log.season,
+              episode: log.episode
+            },
+            data: { watchedAt: latestRemainingLog.watchedAt }
+          });
+        }
+      }
+
+      const systemSettings = await prisma.systemSettings.findFirst();
+      if (systemSettings?.tmdbApiKey) {
+        await syncShowWatchHistory(media.id, media.tmdbId, systemSettings.tmdbApiKey, req.user.id);
+      }
+    }
+
+    res.json({ success: true, isWatched });
+  } catch (error) {
+    console.error('Failed to remove last watch history entry:', error);
+    res.status(500).json({ error: 'Failed to remove last watch history entry' });
+  }
+});
+
 // DELETE a watch history entry
 router.delete('/watch-history/:id', async (req, res) => {
   const id = parseInt(req.params.id);
@@ -1930,6 +2202,8 @@ router.delete('/watch-history/:id', async (req, res) => {
 
     // Delete from WatchHistoryLog first
     await prisma.watchHistoryLog.delete({ where: { id } });
+
+    let isWatched = false;
 
     // Synchronize deletion with old watch history tables
     if (log.type === 'movie') {
@@ -1958,6 +2232,11 @@ router.delete('/watch-history/:id', async (req, res) => {
         await prisma.watchHistory.delete({ where: { id: match.id } });
         console.log(`[Sync Delete] Deleted matching WatchHistory record for movie ID ${log.mediaId}`);
       }
+
+      const remainingWatchCount = await prisma.watchHistory.count({
+        where: { userId: req.user.id, mediaId: log.mediaId }
+      });
+      isWatched = remainingWatchCount > 0;
     } else if (log.type === 'tv' && log.isCompleted) {
       // Check if there are other completed watch logs for this episode
       const otherLogs = await prisma.watchHistoryLog.findFirst({
@@ -1981,10 +2260,40 @@ router.delete('/watch-history/:id', async (req, res) => {
           }
         });
         console.log(`[Sync Delete] Deleted EpisodeWatchHistory record for S${log.season}E${log.episode} of show ID ${log.mediaId}`);
+      } else {
+        isWatched = true;
+        const latestRemainingLog = await prisma.watchHistoryLog.findFirst({
+          where: {
+            userId: req.user.id,
+            mediaId: log.mediaId,
+            type: 'tv',
+            season: log.season,
+            episode: log.episode,
+            isCompleted: true
+          },
+          orderBy: { watchedAt: 'desc' }
+        });
+        if (latestRemainingLog) {
+          await prisma.episodeWatchHistory.updateMany({
+            where: {
+              userId: req.user.id,
+              mediaId: log.mediaId,
+              season: log.season,
+              episode: log.episode
+            },
+            data: { watchedAt: latestRemainingLog.watchedAt }
+          });
+        }
+      }
+
+      const mediaRecord = await prisma.media.findUnique({ where: { id: log.mediaId } });
+      const systemSettings = await prisma.systemSettings.findFirst();
+      if (mediaRecord && systemSettings?.tmdbApiKey) {
+        await syncShowWatchHistory(mediaRecord.id, mediaRecord.tmdbId, systemSettings.tmdbApiKey, req.user.id);
       }
     }
 
-    res.json({ success: true });
+    res.json({ success: true, isWatched });
   } catch (error) {
     console.error('Failed to delete watch history log:', error);
     res.status(500).json({ error: 'Failed to delete watch history log' });

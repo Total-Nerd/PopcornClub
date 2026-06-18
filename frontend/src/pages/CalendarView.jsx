@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, Eye
 import { getEventsFromIndexedDB, upsertEventsToIndexedDB } from '../utils/pwaHelper';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { useModal } from '../context/ModalContext';
+import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const pad = (num) => String(num).padStart(2, '0');
 
@@ -741,52 +742,102 @@ const CalendarView = () => {
     }
   };
 
-  const handleToggleWatch = async (action, ev) => {
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
+  const [watchOptionsMedia, setWatchOptionsMedia] = useState(null);
+  const [activeWatchEvent, setActiveWatchEvent] = useState(null);
+
+  const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
+    if (!activeWatchEvent) return;
+    const ev = activeWatchEvent;
     const isTV = ev.type === 'tv';
-    const isCurrentlyWatched = ev.isWatched;
-    const newVal = !isCurrentlyWatched;
-    const title = ev.type === 'tv' ? ev.showTitle : ev.title;
+    const title = isTV ? ev.showTitle : ev.title;
 
     try {
-      if (isTV) {
-        if (ev.isStacked) {
-          await Promise.all(ev.originalEpisodes.map(subEv =>
-            api.post('/media/episode/watch', {
-              tmdbId: subEv.tmdbId,
-              season: subEv.seasonNumber,
-              episode: subEv.episodeNumber,
-              watched: newVal,
-              title: subEv.showTitle,
-              posterPath: subEv.showPoster
-            })
-          ));
+      if (choice === 'watching-now') {
+        const target = isTV && ev.isStacked ? ev.originalEpisodes[0] : ev;
+        await api.post('/media/active-session', {
+          tmdbId: target.tmdbId,
+          type: isTV ? 'episode' : 'movie',
+          title: isTV ? target.title || `Ep ${target.episodeNumber}` : target.title,
+          overview: target.overview,
+          releaseDate: isTV ? (target.airDateTime || target.airDate) : target.releaseDate,
+          posterPath: isTV ? target.showPoster : target.posterPath,
+          season: isTV ? target.seasonNumber : undefined,
+          episode: isTV ? target.episodeNumber : undefined,
+          grandparentTitle: isTV ? target.showTitle : undefined,
+          parentTitle: isTV ? `Season ${target.seasonNumber}` : undefined
+        });
+        showAlert('Started watching now', 'info');
+      } else if (choice === 'removed-last') {
+        const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
+        setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: watchedAt } : e));
+        showAlert(`Removed watch entry for "${title}"`, 'info');
+      } else {
+        if (isTV) {
+          if (ev.isStacked) {
+            await Promise.all(ev.originalEpisodes.map(subEv =>
+              api.post('/media/episode/watch', {
+                tmdbId: subEv.tmdbId,
+                season: subEv.seasonNumber,
+                episode: subEv.episodeNumber,
+                watched: true,
+                title: subEv.showTitle,
+                posterPath: subEv.showPoster,
+                watchedAt
+              })
+            ));
+          } else {
+            await api.post('/media/episode/watch', {
+              tmdbId: ev.tmdbId,
+              season: ev.seasonNumber,
+              episode: ev.episodeNumber,
+              watched: true,
+              title: ev.showTitle,
+              posterPath: ev.showPoster,
+              watchedAt
+            });
+          }
         } else {
-          await api.post('/media/episode/watch', {
+          await api.post('/media/watch', {
             tmdbId: ev.tmdbId,
-            season: ev.seasonNumber,
-            episode: ev.episodeNumber,
-            watched: newVal,
-            title: ev.showTitle,
-            posterPath: ev.showPoster
+            type: 'movie',
+            title: ev.title,
+            posterPath: ev.posterPath,
+            watchedAt
           });
         }
-      } else {
-        await api.post('/media/watch', {
-          tmdbId: ev.tmdbId,
-          type: 'movie',
-          title: ev.title,
-          posterPath: ev.posterPath,
-          remove: isCurrentlyWatched
-        });
-      }
 
-      // Update local state
-      const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
-      setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: newVal } : e));
-      showAlert(`${newVal ? 'Watched' : 'Unwatched'} "${title}"`, 'success');
+        // Update local state
+        const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
+        setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: true } : e));
+        showAlert(`Watched "${title}"`, 'success');
+      }
     } catch (err) {
-      console.error('Failed to toggle watch status:', err);
+      console.error('Failed to log watch history:', err);
+      showAlert('Failed to update watch status', 'error');
     }
+  };
+
+  const handleToggleWatch = async (action, ev) => {
+    const isTV = ev.type === 'tv';
+    const title = ev.type === 'tv' ? ev.showTitle : ev.title;
+
+    setActiveWatchEvent(ev);
+    const target = isTV && ev.isStacked ? ev.originalEpisodes[0] : ev;
+    setWatchOptionsMedia({
+      tmdbId: target.tmdbId,
+      type: isTV ? 'episode' : 'movie',
+      title: isTV ? `${target.showTitle} - S${pad(target.seasonNumber)}E${pad(target.episodeNumber)}` : target.title,
+      overview: target.overview,
+      releaseDate: isTV ? (target.airDateTime || target.airDate) : target.releaseDate,
+      posterPath: isTV ? target.showPoster : target.posterPath,
+      season: isTV ? target.seasonNumber : undefined,
+      episode: isTV ? target.episodeNumber : undefined,
+      grandparentTitle: isTV ? target.showTitle : undefined,
+      parentTitle: isTV ? `Season ${target.seasonNumber}` : undefined,
+      isWatched: ev.isWatched
+    });
+    setIsWatchOptionsOpen(true);
   };
 
   const handleToggleCollect = async (action, ev) => {
@@ -1352,7 +1403,20 @@ const CalendarView = () => {
           </div>
         )
       )}
-
+      {/* Side padding spacing adjustment */}
+      {isWatchOptionsOpen && (
+        <WatchOptionsModal
+          isOpen={isWatchOptionsOpen}
+          onClose={() => setIsWatchOptionsOpen(false)}
+          media={watchOptionsMedia}
+          onSelect={handleWatchOptionsSelect}
+          onWatchStatusChange={(newIsWatched) => {
+            if (!activeWatchEvent) return;
+            const subIds = activeWatchEvent.isStacked ? activeWatchEvent.originalEpisodes.map(sub => sub.id) : [activeWatchEvent.id];
+            setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: newIsWatched } : e));
+          }}
+        />
+      )}
     </div>
   );
 };

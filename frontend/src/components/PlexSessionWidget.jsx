@@ -128,6 +128,15 @@ const PlexSessionWidget = () => {
     return () => clearInterval(interval);
   }, [session]);
 
+  const handleCancelManualWatch = async (e) => {
+    e.stopPropagation();
+    try {
+      await api.delete('/media/active-session');
+    } catch (err) {
+      console.error('Failed to cancel manual watch session:', err);
+    }
+  };
+
   // Render nothing if there is no user, no active session, or if the user dismissed it
   if (!user || !session || isDismissed) {
     return null;
@@ -256,7 +265,20 @@ const PlexSessionWidget = () => {
         </div>
 
         {/* Right Side: Dismiss Controls only */}
-        <div className="plex-media-controls">
+        <div className="plex-media-controls" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {session.isManual && (
+            <button 
+              type="button" 
+              className="plex-dismiss-btn" 
+              onClick={handleCancelManualWatch}
+              title="Cancel Watching"
+              style={{ color: 'var(--danger)' }}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path fill="currentColor" d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4-4H8V8h8v8z" />
+              </svg>
+            </button>
+          )}
           <button 
             type="button" 
             className="plex-dismiss-btn" 
