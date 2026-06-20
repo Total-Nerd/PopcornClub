@@ -473,6 +473,7 @@ const CalendarView = () => {
   // Filtering & Toggles state
   const [hideCollected, setHideCollected] = useState(() => localStorage.getItem('calendar_hide_collected') === 'true');
   const [hideWatched, setHideWatched] = useState(() => localStorage.getItem('calendar_hide_watched') === 'true');
+  const [mediaTypeFilter, setMediaTypeFilter] = useState(() => localStorage.getItem('calendar_media_type_filter') || 'all');
 
   const renderDisplayOptionsContent = () => {
     return (
@@ -493,6 +494,33 @@ const CalendarView = () => {
               style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'week' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
             >
               Week
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Type</div>
+          <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setMediaTypeFilter('all')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: mediaTypeFilter === 'all' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setMediaTypeFilter('shows')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: mediaTypeFilter === 'shows' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              Shows
+            </button>
+            <button
+              type="button"
+              onClick={() => setMediaTypeFilter('movies')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: mediaTypeFilter === 'movies' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              Movies
             </button>
           </div>
         </div>
@@ -623,6 +651,10 @@ const CalendarView = () => {
   useEffect(() => {
     localStorage.setItem('calendar_hide_watched', hideWatched);
   }, [hideWatched]);
+
+  useEffect(() => {
+    localStorage.setItem('calendar_media_type_filter', mediaTypeFilter);
+  }, [mediaTypeFilter]);
 
   useEffect(() => {
     localStorage.setItem('calendar_mobile_swipe_mode', mobileSwipeMode);
@@ -892,6 +924,8 @@ const CalendarView = () => {
   const filteredEvents = events.filter(ev => {
     if (hideCollected && ev.isCollected) return false;
     if (hideWatched && ev.isWatched) return false;
+    if (mediaTypeFilter === 'shows' && ev.type !== 'tv') return false;
+    if (mediaTypeFilter === 'movies' && ev.type !== 'movie') return false;
     return true;
   }).map(ev => {
     if (ev.airDateTime) {
