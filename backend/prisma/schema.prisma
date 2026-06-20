@@ -34,10 +34,14 @@ model User {
 }
 
 model SystemSettings {
-  id             Int      @id @default(1)
-  tmdbApiKey     String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                       Int      @id @default(1)
+  tmdbApiKey               String?
+  traktUsername            String?
+  traktClientId            String?
+  plexGlobalWebhookToken   String?
+  plexGlobalLastWebhookAt  DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 model Media {

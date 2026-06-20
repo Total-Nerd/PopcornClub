@@ -44,10 +44,12 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <History size={20} />
           <span>History</span>
         </NavLink>
-        <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
-          <AlertTriangle size={20} />
-          <span>Conflicts</span>
-        </NavLink>
+        {user?.role === 'admin' && (
+          <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
+            <AlertTriangle size={20} />
+            <span>Conflicts</span>
+          </NavLink>
+        )}
         <NavLink to="/settings" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only nav-link-settings ${isActive ? 'active' : ''}`} data-tooltip={user?.name || user?.username || 'Settings'}>
           <div className="sidebar-avatar-wrapper">
             {user?.avatarPath ? (
@@ -86,10 +88,12 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
             <History size={18} />
             <span>History</span>
           </NavLink>
-          <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
-            <AlertTriangle size={18} />
-            <span>Conflicts</span>
-          </NavLink>
+          {user?.role === 'admin' && (
+            <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+              <AlertTriangle size={18} />
+              <span>Conflicts</span>
+            </NavLink>
+          )}
           <NavLink to="/lists" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <List size={18} />
             <span>Lists</span>

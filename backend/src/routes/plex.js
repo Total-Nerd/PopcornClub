@@ -425,6 +425,58 @@ async function handlePlexWebhook(payload, user, res) {
   res.sendStatus(200);
 }
 
+// Global webhook (Admin managed, works for all matching users)
+router.post('/global/:token', upload.single('thumb'), async (req, res) => {
+  try {
+    const { token } = req.params;
+    const payload = req.body.payload ? JSON.parse(req.body.payload) : req.body;
+    
+    if (!payload || !payload.Account || !payload.Metadata) {
+      return res.sendStatus(200);
+    }
+
+    const systemSettings = await prisma.systemSettings.findFirst({
+      where: { plexGlobalWebhookToken: token }
+    });
+
+    if (!systemSettings) {
+      console.log(`[Plex Global Webhook] Invalid global webhook token: ${token}`);
+      return res.sendStatus(404);
+    }
+
+    // Update global webhook last active timestamp
+    await prisma.systemSettings.update({
+      where: { id: systemSettings.id },
+      data: { plexGlobalLastWebhookAt: new Date() }
+    });
+
+    const plexUser = payload.Account?.title;
+    if (!plexUser) {
+      console.log('[Plex Global Webhook] Missing Account.title in payload.');
+      return res.sendStatus(200);
+    }
+
+    const matchedUser = await prisma.user.findFirst({
+      where: {
+        plexUser: {
+          equals: plexUser,
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    if (!matchedUser) {
+      console.log(`[Plex Global Webhook] No user found with Plex username: "${plexUser}". Ignoring scrobble.`);
+      return res.sendStatus(200);
+    }
+
+    await handlePlexWebhook(payload, matchedUser, res);
+  } catch (error) {
+    console.error('Plex Global Webhook Error:', error);
+    res.sendStatus(500);
+  }
+});
+
 // Token-based webhook (User specific)
 router.post('/:token', upload.single('thumb'), async (req, res) => {
   try {

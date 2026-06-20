@@ -330,7 +330,18 @@ router.post('/import-trakt', async (req, res) => {
     }
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    const traktApiKey = clientId || user?.traktClientId || process.env.TRAKT_CLIENT_ID || 'd83a151b72cccd41c88806283db87cc4f56f1837ff44821815b3e24e10b14643';
+    
+    let traktApiKey = clientId;
+    if (!traktApiKey) {
+      if (user?.role === 'admin') {
+        traktApiKey = systemSettings?.traktClientId;
+      } else {
+        traktApiKey = user?.traktClientId;
+      }
+    }
+    if (!traktApiKey) {
+      traktApiKey = process.env.TRAKT_CLIENT_ID || 'd83a151b72cccd41c88806283db87cc4f56f1837ff44821815b3e24e10b14643';
+    }
     const headers = {
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
@@ -542,6 +553,9 @@ router.post('/import-trakt', async (req, res) => {
 
 // GET media conflicts (mismatched titles/years, unresolved details, or orphaned files)
 router.get('/conflicts', async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   try {
     const mediaList = await prisma.media.findMany({
       include: {
@@ -1434,6 +1448,9 @@ router.post('/scan/:type/:tmdbId', async (req, res) => {
 
 // POST correct match for a Movie or TV Show
 router.post('/correct', async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   const { oldTmdbId, type, newTmdbId, imdbId, title, releaseYear } = req.body;
   if (!oldTmdbId || !type) {
     return res.status(400).json({ error: 'Missing oldTmdbId or type' });
@@ -1675,6 +1692,9 @@ router.post('/correct', async (req, res) => {
 
 // POST correct match for a specific file path (re-linking/separating it from old media to new/different media)
 router.post('/correct-file', async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   const { fileId, filePath, type, newTmdbId, imdbId, title, releaseYear } = req.body;
   if ((fileId === undefined && !filePath) || !type) {
     return res.status(400).json({ error: 'Missing fileId, filePath or type' });
@@ -1948,7 +1968,11 @@ router.get('/watch-history', async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const where = { userId: req.user.id };
+    let targetUserId = req.user.id;
+    if (req.user.role === 'admin' && req.query.userId) {
+      targetUserId = parseInt(req.query.userId);
+    }
+    const where = { userId: targetUserId };
     const mappedType = type === 'episode' ? 'tv' : type;
     if (mappedType !== 'all') {
       where.type = mappedType;
@@ -2046,9 +2070,16 @@ router.get('/watch-history', async (req, res) => {
     
     const uniqueGenres = Array.from(uniqueGenresSet).sort();
 
+    let activeSession = null;
+    if (page === 1) {
+      const plexStore = require('../utils/plexStore');
+      activeSession = plexStore.getActiveSession(targetUserId);
+    }
+
     res.json({
       logs,
       genres: uniqueGenres,
+      activeSession,
       pagination: {
         total,
         page,
@@ -2326,38 +2357,41 @@ async function recreateCollectionsFromLocalFiles(mediaId, type, userId = 1) {
 
     if (files.length === 0) return;
 
-    // Ensure the main Collection entry exists
-    await prisma.collection.upsert({
-      where: { userId_mediaId: { userId, mediaId } },
-      update: {},
-      create: { userId, mediaId }
-    });
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    for (const u of allUsers) {
+      // Ensure the main Collection entry exists
+      await prisma.collection.upsert({
+        where: { userId_mediaId: { userId: u.id, mediaId } },
+        update: {},
+        create: { userId: u.id, mediaId }
+      });
 
-    if (type === 'tv') {
-      for (const file of files) {
-        if (file.season !== null && file.episode !== null) {
-          await prisma.episodeCollection.upsert({
-            where: {
-              userId_mediaId_season_episode: {
-                userId,
+      if (type === 'tv') {
+        for (const file of files) {
+          if (file.season !== null && file.episode !== null) {
+            await prisma.episodeCollection.upsert({
+              where: {
+                userId_mediaId_season_episode: {
+                  userId: u.id,
+                  mediaId,
+                  season: file.season,
+                  episode: file.episode
+                }
+              },
+              update: {},
+              create: {
+                userId: u.id,
                 mediaId,
                 season: file.season,
                 episode: file.episode
               }
-            },
-            update: {},
-            create: {
-              userId,
-              mediaId,
-              season: file.season,
-              episode: file.episode
-            }
-          });
+            });
+          }
         }
       }
     }
-  } catch (err) {
-    console.error(`Failed to recreate collections from local files for mediaId ${mediaId}:`, err);
+  } catch (error) {
+    console.error('Failed to recreate collections:', error);
   }
 }
 

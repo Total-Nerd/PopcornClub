@@ -42,7 +42,7 @@ const AppRoutes = () => {
         <Route path="person/:personId" element={<PersonDetails />} />
         <Route path="lists" element={<Lists />} />
         <Route path="history" element={<WatchHistory />} />
-        <Route path="conflicts" element={<Conflicts />} />
+        <Route path="conflicts" element={user?.role === 'admin' ? <Conflicts /> : <Navigate to="/" />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

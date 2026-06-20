@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { History, Trash2, Film, Tv, ChevronLeft, ChevronRight, Check, Play, SlidersHorizontal, X } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 import { useModal } from '../context/ModalContext';
 import DateRangePicker from '../components/DateRangePicker';
+import { AuthContext } from '../context/AuthContext';
 
 const WatchHistory = () => {
   const { showAlert, showConfirm } = useModal();
+  const { user } = useContext(AuthContext);
 
   const [logs, setLogs] = useState([]);
   const [availableGenres, setAvailableGenres] = useState([]);
@@ -15,6 +17,24 @@ const WatchHistory = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  const [usersList, setUsersList] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [activeSession, setActiveSession] = useState(null);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      const fetchUsers = async () => {
+        try {
+          const res = await api.get('/settings/users');
+          setUsersList(res.data);
+        } catch (err) {
+          console.error('Failed to load users for history filtering:', err);
+        }
+      };
+      fetchUsers();
+    }
+  }, [user]);
 
   // Filter States
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,7 +83,7 @@ const WatchHistory = () => {
   useEffect(() => {
     localStorage.setItem('history_include_partial', JSON.stringify(includePartial));
     setPage(1);
-  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter]);
+  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter, selectedUserId]);
 
   useEffect(() => {
     localStorage.setItem('history_show_posters', JSON.stringify(showPosters));
@@ -105,10 +125,12 @@ const WatchHistory = () => {
           genre: selectedGenre,
           mediaId: mediaIdFilter || undefined,
           season: seasonFilter || undefined,
-          episode: episodeFilter || undefined
+          episode: episodeFilter || undefined,
+          userId: selectedUserId || undefined
         }
       });
       setLogs(res.data.logs);
+      setActiveSession(res.data.activeSession || null);
       setAvailableGenres(res.data.genres || []);
       setTotalPages(res.data.pagination.pages);
       setTotalCount(res.data.pagination.total);
@@ -121,7 +143,7 @@ const WatchHistory = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter]);
+  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter, selectedUserId]);
 
   const handleDelete = async (id) => {
     const confirmed = await showConfirm('Are you sure you want to delete this watch history entry?');
@@ -172,6 +194,7 @@ const WatchHistory = () => {
     setMediaIdFilter('');
     setSeasonFilter('');
     setEpisodeFilter('');
+    setSelectedUserId('');
     setSearchParams({});
   };
 
@@ -228,6 +251,29 @@ const WatchHistory = () => {
                 style={{ padding: '10px 14px', fontSize: '0.9rem' }}
               />
             </div>
+
+            {/* User Filter (Admin only) */}
+            {user?.role === 'admin' && (
+              <div className="filter-field">
+                <label>View History for User</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="input-field"
+                  style={{ padding: '10px 14px', fontSize: '0.9rem', cursor: 'pointer' }}
+                >
+                  <option value="">Me ({user.username})</option>
+                  {usersList.map(u => {
+                    if (u.id === user.id) return null;
+                    return (
+                      <option key={u.id} value={u.id}>
+                        {u.name ? `${u.name} (${u.username})` : u.username}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
 
             {/* Genre Options */}
             <div className="filter-field">
@@ -328,6 +374,84 @@ const WatchHistory = () => {
             >
               Reset Filters
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active Session (Currently Watching) */}
+      {activeSession && (
+        <div 
+          className="glass-panel" 
+          style={{ 
+            marginBottom: '20px', 
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(124, 58, 237, 0.03) 100%)', 
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.05)',
+            borderRadius: '12px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Pulsing indicator */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }} />
+              <div style={{ position: 'absolute', width: '18px', height: '18px', borderRadius: '50%', background: 'var(--danger)', opacity: 0.4, animation: 'pulse-border 2s infinite ease-in-out' }} />
+            </div>
+
+            {/* Poster preview */}
+            {showPosters && activeSession.posterPath && (
+              <div style={{ width: '40px', height: '56px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>
+                <LazyImage
+                  src={`https://image.tmdb.org/t/p/w92${activeSession.posterPath}`}
+                  alt={activeSession.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            )}
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: '4px' }}>
+                  Currently Watching
+                </span>
+                {activeSession.user && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    ({activeSession.user})
+                  </span>
+                )}
+              </div>
+              <span style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '1.05rem' }}>
+                {activeSession.type === 'episode' ? activeSession.grandparentTitle : activeSession.title}
+              </span>
+              {activeSession.type === 'episode' && (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  S{activeSession.season}E{activeSession.episode} — "{activeSession.title}"
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Progress details */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px', flex: '1 1 200px', maxWidth: '350px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+              <span>{formatDurationWithSeconds(Math.round(activeSession.viewOffset / 1000))}</span>
+              <span>{formatDurationWithSeconds(Math.round(activeSession.duration / 1000))} ({activeSession.duration > 0 ? Math.round((activeSession.viewOffset / activeSession.duration) * 100) : 0}%)</span>
+            </div>
+            <div style={{ width: '100%', height: '6px', background: 'var(--overlay-medium)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  width: `${activeSession.duration > 0 ? Math.round((activeSession.viewOffset / activeSession.duration) * 100) : 0}%`, 
+                  height: '100%', 
+                  background: 'var(--danger)', 
+                  borderRadius: '3px' 
+                }} 
+              />
+            </div>
           </div>
         </div>
       )}
@@ -542,6 +666,11 @@ const WatchHistory = () => {
         }
         .reset-btn-hover:hover {
           background: var(--overlay-strong) !important;
+        }
+        @keyframes pulse-border {
+          0% { transform: scale(0.95); opacity: 0.5; }
+          50% { transform: scale(1.1); opacity: 0.1; }
+          100% { transform: scale(0.95); opacity: 0.5; }
         }
       `}</style>
     </div>

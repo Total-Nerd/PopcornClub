@@ -225,13 +225,50 @@ async function processSingleFile(filePath, folderType, apiKey) {
   if (!isVideoFile(filePath)) return null;
 
   try {
-    // 1. Check if path already in database. If so, simply refresh lastSeen and return.
+    // 1. Check if path already in database. If so, refresh lastSeen and ensure all users have collections.
     const existing = await prisma.localFile.findUnique({ where: { path: filePath } });
     if (existing) {
       await prisma.localFile.update({
         where: { path: filePath },
         data: { lastSeen: new Date(), missingSince: null }
       });
+      try {
+        const allUsers = await prisma.user.findMany({ select: { id: true } });
+        for (const u of allUsers) {
+          if (existing.type === 'tv' && existing.season !== null && existing.episode !== null) {
+            await prisma.collection.upsert({
+              where: { userId_mediaId: { userId: u.id, mediaId: existing.mediaId } },
+              update: {},
+              create: { userId: u.id, mediaId: existing.mediaId }
+            });
+            await prisma.episodeCollection.upsert({
+              where: {
+                userId_mediaId_season_episode: {
+                  userId: u.id,
+                  mediaId: existing.mediaId,
+                  season: existing.season,
+                  episode: existing.episode
+                }
+              },
+              update: {},
+              create: {
+                userId: u.id,
+                mediaId: existing.mediaId,
+                season: existing.season,
+                episode: existing.episode
+              }
+            });
+          } else {
+            await prisma.collection.upsert({
+              where: { userId_mediaId: { userId: u.id, mediaId: existing.mediaId } },
+              update: {},
+              create: { userId: u.id, mediaId: existing.mediaId }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[Folder Scanner] Failed to record collection for existing file for all users:', err.message);
+      }
       return existing;
     }
 
@@ -284,39 +321,46 @@ async function processSingleFile(filePath, folderType, apiKey) {
       posterPath: tmdbData.poster_path
     });
 
-    // 5. Add to Collection or EpisodeCollection
-    if (parsed.type === 'tv' && parsed.season !== undefined && parsed.episode !== undefined) {
-      // Mark TV Show collected
-      await prisma.collection.upsert({
-        where: { userId_mediaId: { userId: 1, mediaId: media.id } },
-        update: {},
-        create: { userId: 1, mediaId: media.id }
-      });
-      // Mark Episode collected
-      await prisma.episodeCollection.upsert({
-        where: {
-          userId_mediaId_season_episode: {
-            userId: 1,
-            mediaId: media.id,
-            season: parsed.season,
-            episode: parsed.episode
-          }
-        },
-        update: {},
-        create: {
-          userId: 1,
-          mediaId: media.id,
-          season: parsed.season,
-          episode: parsed.episode
+    // 5. Add to Collection or EpisodeCollection for all users
+    try {
+      const allUsers = await prisma.user.findMany({ select: { id: true } });
+      for (const u of allUsers) {
+        if (parsed.type === 'tv' && parsed.season !== undefined && parsed.episode !== undefined) {
+          // Mark TV Show collected
+          await prisma.collection.upsert({
+            where: { userId_mediaId: { userId: u.id, mediaId: media.id } },
+            update: {},
+            create: { userId: u.id, mediaId: media.id }
+          });
+          // Mark Episode collected
+          await prisma.episodeCollection.upsert({
+            where: {
+              userId_mediaId_season_episode: {
+                userId: u.id,
+                mediaId: media.id,
+                season: parsed.season,
+                episode: parsed.episode
+              }
+            },
+            update: {},
+            create: {
+              userId: u.id,
+              mediaId: media.id,
+              season: parsed.season,
+              episode: parsed.episode
+            }
+          });
+        } else {
+          // Mark Movie collected
+          await prisma.collection.upsert({
+            where: { userId_mediaId: { userId: u.id, mediaId: media.id } },
+            update: {},
+            create: { userId: u.id, mediaId: media.id }
+          });
         }
-      });
-    } else {
-      // Mark Movie collected
-      await prisma.collection.upsert({
-        where: { userId_mediaId: { userId: 1, mediaId: media.id } },
-        update: {},
-        create: { userId: 1, mediaId: media.id }
-      });
+      }
+    } catch (err) {
+      console.error('[Folder Scanner] Failed to record collection for all users:', err.message);
     }
 
     // 6. Create LocalFile Record

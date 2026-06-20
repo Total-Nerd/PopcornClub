@@ -181,10 +181,22 @@ router.get('/me', authenticateToken, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  // Retrieve global system settings tmdbApiKey
-  const systemSettings = await prisma.systemSettings.findFirst();
+  let systemSettings = await prisma.systemSettings.findFirst();
+  if (!systemSettings) {
+    systemSettings = await prisma.systemSettings.create({
+      data: { id: 1 }
+    });
+  }
 
-  res.json({ 
+  if (user.role === 'admin' && !systemSettings.plexGlobalWebhookToken) {
+    const plexGlobalWebhookToken = crypto.randomBytes(16).toString('hex');
+    systemSettings = await prisma.systemSettings.update({
+      where: { id: systemSettings.id },
+      data: { plexGlobalWebhookToken }
+    });
+  }
+
+  const resData = { 
     id: user.id,
     username: user.username, 
     name: user.name,
@@ -197,7 +209,16 @@ router.get('/me', authenticateToken, async (req, res) => {
     tmdbApiKey: systemSettings?.tmdbApiKey || null,
     traktUsername: user.traktUsername,
     traktClientId: user.traktClientId
-  });
+  };
+
+  if (user.role === 'admin') {
+    resData.traktUsername = systemSettings.traktUsername || '';
+    resData.traktClientId = systemSettings.traktClientId || '';
+    resData.plexGlobalWebhookToken = systemSettings.plexGlobalWebhookToken || '';
+    resData.plexGlobalLastWebhookAt = systemSettings.plexGlobalLastWebhookAt || null;
+  }
+
+  res.json(resData);
 });
 
 module.exports = router;
