@@ -1420,6 +1420,7 @@ router.get('/raw/:type/:tmdbId', async (req, res) => {
 router.post('/scan/:type/:tmdbId', async (req, res) => {
   const { type, tmdbId } = req.params;
   const season = req.query.season ? parseInt(req.query.season, 10) : null;
+  const episode = req.query.episode ? parseInt(req.query.episode, 10) : null;
   const parsedId = parseInt(tmdbId, 10);
 
   try {
@@ -1431,7 +1432,7 @@ router.post('/scan/:type/:tmdbId', async (req, res) => {
       return res.status(404).json({ error: 'Media not found in local database. Please collect it first.' });
     }
 
-    const result = await scanMediaItem(media.id, { season });
+    const result = await scanMediaItem(media.id, { season, episode });
 
     res.json({
       success: true,
@@ -1695,9 +1696,9 @@ router.post('/correct-file', async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied' });
   }
-  const { fileId, filePath, type, newTmdbId, imdbId, title, releaseYear } = req.body;
-  if ((fileId === undefined && !filePath) || !type) {
-    return res.status(400).json({ error: 'Missing fileId, filePath or type' });
+  const { fileId, fileIds, filePath, type, newTmdbId, imdbId, title, releaseYear } = req.body;
+  if ((fileId === undefined && !filePath && (!fileIds || fileIds.length === 0)) || !type) {
+    return res.status(400).json({ error: 'Missing fileId, fileIds, filePath or type' });
   }
 
   try {
@@ -1741,26 +1742,30 @@ router.post('/correct-file', async (req, res) => {
       return res.status(400).json({ error: 'Could not resolve a target TMDB ID. Please provide TMDB ID, IMDb ID, or search details.' });
     }
 
-    // 3. Find the specific local file record
-    let file = null;
-    if (fileId !== undefined) {
-      file = await prisma.localFile.findUnique({
+    // 3. Find the specific local file records
+    let filesToProcess = [];
+    if (fileIds && Array.isArray(fileIds) && fileIds.length > 0) {
+      filesToProcess = await prisma.localFile.findMany({
+        where: { id: { in: fileIds } },
+        include: { media: true }
+      });
+    } else if (fileId !== undefined) {
+      const file = await prisma.localFile.findUnique({
         where: { id: parseInt(fileId) },
         include: { media: true }
       });
+      if (file) filesToProcess.push(file);
     } else if (filePath) {
-      file = await prisma.localFile.findUnique({
+      const file = await prisma.localFile.findUnique({
         where: { path: filePath },
         include: { media: true }
       });
+      if (file) filesToProcess.push(file);
     }
 
-    if (!file) {
-      return res.status(404).json({ error: 'Local file record not found in database.' });
+    if (filesToProcess.length === 0) {
+      return res.status(404).json({ error: 'Local file records not found in database.' });
     }
-
-    const oldMediaId = file.mediaId;
-    const oldMedia = file.media;
 
     // 4. Fetch the target media metadata from TMDB
     const detailsEndpoint = type === 'movie' ? `/3/movie/${targetTmdbId}` : `/3/tv/${targetTmdbId}`;
@@ -1792,162 +1797,177 @@ router.post('/correct-file', async (req, res) => {
       });
     }
 
-    // Parse the file path using the scanner helper logic to extract season/episode if it is TV
-    let season = null;
-    let episode = null;
-    if (type === 'tv') {
-      const filename = file.path.split(/[/\\]/).pop();
-      const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
-      const normalizedPath = file.path.replace(/\\/g, '/');
-      const parts = normalizedPath.split('/');
+    const oldMediaIdsTouched = new Set();
+    const oldMediaRecordsTouched = [];
+
+    // Process all files
+    for (const file of filesToProcess) {
+      const oldMediaId = file.mediaId;
+      const oldMedia = file.media;
       
-      season = 1;
-      episode = 1;
-      
-      if (parts.length >= 2) {
-        const parentFolder = parts[parts.length - 2];
-        const seasonMatch = parentFolder.match(/season\s*(\d{1,2})/i);
-        if (seasonMatch) {
-          season = parseInt(seasonMatch[1], 10);
-        }
+      if (!oldMediaIdsTouched.has(oldMediaId)) {
+        oldMediaIdsTouched.add(oldMediaId);
+        oldMediaRecordsTouched.push(oldMedia);
       }
 
-      const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})/i);
-      const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})/i);
+      // Parse the file path using the scanner helper logic to extract season/episode if it is TV
+      let season = null;
+      let episode = null;
+      if (type === 'tv') {
+        const filename = file.path.split(/[/\\]/).pop();
+        const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
+        const normalizedPath = file.path.replace(/\\/g, '/');
+        const parts = normalizedPath.split('/');
+        
+        season = 1;
+        episode = 1;
+        
+        if (parts.length >= 2) {
+          const parentFolder = parts[parts.length - 2];
+          const seasonMatch = parentFolder.match(/season\s*(\d{1,2})/i);
+          if (seasonMatch) {
+            season = parseInt(seasonMatch[1], 10);
+          }
+        }
 
-      if (tvMatch1) {
-        season = parseInt(tvMatch1[1], 10);
-        episode = parseInt(tvMatch1[2], 10);
-      } else if (tvMatch2) {
-        season = parseInt(tvMatch2[1], 10);
-        episode = parseInt(tvMatch2[2], 10);
-      } else {
-        const epMatch = nameWithoutExt.match(/(?:ep|episode|e)[. _-]*(\d{1,2})/i);
-        if (epMatch) {
-          episode = parseInt(epMatch[1], 10);
+        const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})/i);
+        const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})/i);
+
+        if (tvMatch1) {
+          season = parseInt(tvMatch1[1], 10);
+          episode = parseInt(tvMatch1[2], 10);
+        } else if (tvMatch2) {
+          season = parseInt(tvMatch2[1], 10);
+          episode = parseInt(tvMatch2[2], 10);
         } else {
-          const numMatch = nameWithoutExt.match(/\b(\d{1,2})\b/);
-          if (numMatch) {
-            episode = parseInt(numMatch[1], 10);
-          }
-        }
-      }
-    }
-
-    // 6. Update the file to point to the target media record
-    await prisma.localFile.update({
-      where: { id: file.id },
-      data: {
-        mediaId: targetMedia.id,
-        season,
-        episode,
-        manuallyCorrected: true
-      }
-    });
-
-    if (type === 'tv' && season !== null && episode !== null) {
-      // Migrate specific EpisodeCollection if it exists for admin (userId 1)
-      const oldEc = await prisma.episodeCollection.findUnique({
-        where: {
-          userId_mediaId_season_episode: {
-            userId: 1,
-            mediaId: oldMediaId,
-            season,
-            episode
-          }
-        }
-      });
-      if (oldEc) {
-        const exists = await prisma.episodeCollection.findUnique({
-          where: {
-            userId_mediaId_season_episode: {
-              userId: 1,
-              mediaId: targetMedia.id,
-              season,
-              episode
+          const epMatch = nameWithoutExt.match(/(?:ep|episode|e)[. _-]*(\d{1,2})/i);
+          if (epMatch) {
+            episode = parseInt(epMatch[1], 10);
+          } else {
+            const numMatch = nameWithoutExt.match(/\b(\d{1,2})\b/);
+            if (numMatch) {
+              episode = parseInt(numMatch[1], 10);
             }
           }
-        });
-        if (!exists) {
-          await prisma.episodeCollection.update({
-            where: { id: oldEc.id },
-            data: { mediaId: targetMedia.id }
-          });
-        } else {
-          await prisma.episodeCollection.delete({ where: { id: oldEc.id } });
         }
       }
 
-      // Migrate specific EpisodeWatchHistory if it exists for admin (userId 1)
-      const oldEwh = await prisma.episodeWatchHistory.findUnique({
-        where: {
-          userId_mediaId_season_episode: {
-            userId: 1,
-            mediaId: oldMediaId,
-            season,
-            episode
-          }
-        }
-      });
-      if (oldEwh) {
-        const exists = await prisma.episodeWatchHistory.findUnique({
-          where: {
-            userId_mediaId_season_episode: {
-              userId: 1,
-              mediaId: targetMedia.id,
-              season,
-              episode
-            }
-          }
-        });
-        if (!exists) {
-          await prisma.episodeWatchHistory.update({
-            where: { id: oldEwh.id },
-            data: { mediaId: targetMedia.id }
-          });
-        } else {
-          await prisma.episodeWatchHistory.delete({ where: { id: oldEwh.id } });
-        }
-      }
-
-      // Migrate WatchHistoryLogs for this episode
-      await prisma.watchHistoryLog.updateMany({
-        where: {
-          mediaId: oldMediaId,
-          type: 'tv',
-          season,
-          episode
-        },
+      // 6. Update the file to point to the target media record
+      await prisma.localFile.update({
+        where: { id: file.id },
         data: {
-          mediaId: targetMedia.id
+          mediaId: targetMedia.id,
+          season,
+          episode,
+          manuallyCorrected: true
         }
       });
+
+      if (type === 'tv' && season !== null && episode !== null) {
+        // Migrate specific EpisodeCollection if it exists for admin (userId 1)
+        const oldEc = await prisma.episodeCollection.findUnique({
+          where: {
+            userId_mediaId_season_episode: {
+              userId: 1,
+              mediaId: oldMediaId,
+              season,
+              episode
+            }
+          }
+        });
+        if (oldEc) {
+          const exists = await prisma.episodeCollection.findUnique({
+            where: {
+              userId_mediaId_season_episode: {
+                userId: 1,
+                mediaId: targetMedia.id,
+                season,
+                episode
+              }
+            }
+          });
+          if (!exists) {
+            await prisma.episodeCollection.update({
+              where: { id: oldEc.id },
+              data: { mediaId: targetMedia.id }
+            });
+          } else {
+            await prisma.episodeCollection.delete({ where: { id: oldEc.id } });
+          }
+        }
+
+        // Migrate specific EpisodeWatchHistory if it exists for admin (userId 1)
+        const oldEwh = await prisma.episodeWatchHistory.findUnique({
+          where: {
+            userId_mediaId_season_episode: {
+              userId: 1,
+              mediaId: oldMediaId,
+              season,
+              episode
+            }
+          }
+        });
+        if (oldEwh) {
+          const exists = await prisma.episodeWatchHistory.findUnique({
+            where: {
+              userId_mediaId_season_episode: {
+                userId: 1,
+                mediaId: targetMedia.id,
+                season,
+                episode
+              }
+            }
+          });
+          if (!exists) {
+            await prisma.episodeWatchHistory.update({
+              where: { id: oldEwh.id },
+              data: { mediaId: targetMedia.id }
+            });
+          } else {
+            await prisma.episodeWatchHistory.delete({ where: { id: oldEwh.id } });
+          }
+        }
+
+        // Migrate WatchHistoryLogs for this episode
+        await prisma.watchHistoryLog.updateMany({
+          where: {
+            mediaId: oldMediaId,
+            type: 'tv',
+            season,
+            episode
+          },
+          data: {
+            mediaId: targetMedia.id
+          }
+        });
+      }
     }
 
     // 7. Update collection statuses for both old and target media
-    await recreateCollectionsFromLocalFiles(oldMediaId, oldMedia.type, 1);
     await recreateCollectionsFromLocalFiles(targetMedia.id, type, 1);
-
-    // Sync watch histories
     if (type === 'tv') {
       await syncShowWatchHistory(targetMedia.id, targetMedia.tmdbId, apiKey, req.user.id);
     }
-    if (oldMedia.type === 'tv') {
-      await syncShowWatchHistory(oldMediaId, oldMedia.tmdbId, apiKey, req.user.id);
-    }
 
-    // 8. Auto-cleanup: if old media has no local files left AND no watch logs and no collections, delete it!
-    const remainingFiles = await prisma.localFile.count({ where: { mediaId: oldMediaId } });
-    if (remainingFiles === 0) {
-      const remainingCollections = await prisma.collection.count({ where: { mediaId: oldMediaId } });
-      const remainingLogs = await prisma.watchHistoryLog.count({ where: { mediaId: oldMediaId } });
-      if (remainingCollections === 0 && remainingLogs === 0) {
-        await prisma.media.delete({ where: { id: oldMediaId } });
-        console.log(`[Correct File] Cleaned up empty orphaned media ID: ${oldMediaId}`);
+    for (const oldMedia of oldMediaRecordsTouched) {
+      await recreateCollectionsFromLocalFiles(oldMedia.id, oldMedia.type, 1);
+      if (oldMedia.type === 'tv') {
+        await syncShowWatchHistory(oldMedia.id, oldMedia.tmdbId, apiKey, req.user.id);
+      }
+
+      // 8. Auto-cleanup: if old media has no local files left AND no watch logs and no collections, delete it!
+      const remainingFiles = await prisma.localFile.count({ where: { mediaId: oldMedia.id } });
+      if (remainingFiles === 0) {
+        const remainingCollections = await prisma.collection.count({ where: { mediaId: oldMedia.id } });
+        const remainingLogs = await prisma.watchHistoryLog.count({ where: { mediaId: oldMedia.id } });
+        if (remainingCollections === 0 && remainingLogs === 0) {
+          await prisma.media.delete({ where: { id: oldMedia.id } });
+          console.log(`[Correct File] Cleaned up empty orphaned media ID: ${oldMedia.id}`);
+        }
       }
     }
 
-    res.json({ success: true, message: `Successfully re-matched file to "${newTitle}".`, media: targetMedia });
+    res.json({ success: true, message: `Successfully re-matched ${filesToProcess.length} file(s) to "${newTitle}".`, media: targetMedia });
   } catch (error) {
     console.error('Error during file correction:', error);
     res.status(500).json({ error: `Failed to correct file match: ${error.message}` });
@@ -2369,23 +2389,26 @@ async function recreateCollectionsFromLocalFiles(mediaId, type, userId = 1) {
       if (type === 'tv') {
         for (const file of files) {
           if (file.season !== null && file.episode !== null) {
-            await prisma.episodeCollection.upsert({
-              where: {
-                userId_mediaId_season_episode: {
+            const endEp = file.endEpisode || file.episode;
+            for (let ep = file.episode; ep <= endEp; ep++) {
+              await prisma.episodeCollection.upsert({
+                where: {
+                  userId_mediaId_season_episode: {
+                    userId: u.id,
+                    mediaId,
+                    season: file.season,
+                    episode: ep
+                  }
+                },
+                update: {},
+                create: {
                   userId: u.id,
                   mediaId,
                   season: file.season,
-                  episode: file.episode
+                  episode: ep
                 }
-              },
-              update: {},
-              create: {
-                userId: u.id,
-                mediaId,
-                season: file.season,
-                episode: file.episode
-              }
-            });
+              });
+            }
           }
         }
       }

@@ -72,6 +72,7 @@ function parseFilename(filePath) {
 
     let season = 1;
     let episode = 1;
+    let endEpisode = null;
 
     // Check parent folder for Season number
     if (parts.length >= 2) {
@@ -82,16 +83,18 @@ function parseFilename(filePath) {
       }
     }
 
-    // Try standard S01E02 or similar patterns in the filename
-    const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})/i);
-    const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})/i);
+    // Try standard S01E02 or S01E02E05 patterns in the filename
+    const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})(?:[-_]*e?(\d{1,2}))?\b/i);
+    const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})(?:[-_]*x?(\d{1,2}))?\b/i);
 
     if (tvMatch1) {
       season = parseInt(tvMatch1[1], 10);
       episode = parseInt(tvMatch1[2], 10);
+      if (tvMatch1[3]) endEpisode = parseInt(tvMatch1[3], 10);
     } else if (tvMatch2) {
       season = parseInt(tvMatch2[1], 10);
       episode = parseInt(tvMatch2[2], 10);
+      if (tvMatch2[3]) endEpisode = parseInt(tvMatch2[3], 10);
     } else {
       // Fallback: search for lone episode numbers in filename
       const epMatch = nameWithoutExt.match(/(?:ep|episode|e)[. _-]*(\d{1,2})/i);
@@ -118,6 +121,7 @@ function parseFilename(filePath) {
       title: cleanedTitle,
       season,
       episode,
+      endEpisode,
       year,
       tmdbId
     };
@@ -225,58 +229,85 @@ async function processSingleFile(filePath, folderType, apiKey) {
   if (!isVideoFile(filePath)) return null;
 
   try {
-    // 1. Check if path already in database. If so, refresh lastSeen and ensure all users have collections.
+    // 1. Parse details from filename
+    const parsed = parseFilename(filePath);
+    if (!parsed) return null;
+
+    console.log(`[Folder Scanner] Resolving file: "${path.basename(filePath)}" parsed as:`, parsed);
+
+    // 2. Check if path already in database. If so, refresh lastSeen and update metadata if needed.
     const existing = await prisma.localFile.findUnique({ where: { path: filePath } });
     if (existing) {
-      await prisma.localFile.update({
-        where: { path: filePath },
-        data: { lastSeen: new Date(), missingSince: null }
-      });
+      let shouldUpdate = false;
+      const updateData = { lastSeen: new Date(), missingSince: null };
+      
+      if (parsed.type === 'tv') {
+         if (!existing.manuallyCorrected && existing.episode !== parsed.episode) {
+            updateData.episode = parsed.episode;
+            shouldUpdate = true;
+         }
+         if (existing.endEpisode !== parsed.endEpisode) {
+            updateData.endEpisode = parsed.endEpisode;
+            shouldUpdate = true;
+         }
+      }
+      
+      let finalFile = existing;
+      if (shouldUpdate) {
+         finalFile = await prisma.localFile.update({
+            where: { id: existing.id },
+            data: updateData
+         });
+         console.log(`[Folder Scanner] Updated existing file metadata: S${finalFile.season}E${finalFile.episode}-${finalFile.endEpisode}`);
+      } else {
+         await prisma.localFile.update({
+            where: { id: existing.id },
+            data: updateData
+         });
+      }
+
       try {
         const allUsers = await prisma.user.findMany({ select: { id: true } });
         for (const u of allUsers) {
-          if (existing.type === 'tv' && existing.season !== null && existing.episode !== null) {
+          if (finalFile.type === 'tv' && finalFile.season !== null && finalFile.episode !== null) {
             await prisma.collection.upsert({
-              where: { userId_mediaId: { userId: u.id, mediaId: existing.mediaId } },
+              where: { userId_mediaId: { userId: u.id, mediaId: finalFile.mediaId } },
               update: {},
-              create: { userId: u.id, mediaId: existing.mediaId }
+              create: { userId: u.id, mediaId: finalFile.mediaId }
             });
-            await prisma.episodeCollection.upsert({
-              where: {
-                userId_mediaId_season_episode: {
+            const endEp = finalFile.endEpisode || finalFile.episode;
+            for (let ep = finalFile.episode; ep <= endEp; ep++) {
+              await prisma.episodeCollection.upsert({
+                where: {
+                  userId_mediaId_season_episode: {
+                    userId: u.id,
+                    mediaId: finalFile.mediaId,
+                    season: finalFile.season,
+                    episode: ep
+                  }
+                },
+                update: {},
+                create: {
                   userId: u.id,
-                  mediaId: existing.mediaId,
-                  season: existing.season,
-                  episode: existing.episode
+                  mediaId: finalFile.mediaId,
+                  season: finalFile.season,
+                  episode: ep
                 }
-              },
-              update: {},
-              create: {
-                userId: u.id,
-                mediaId: existing.mediaId,
-                season: existing.season,
-                episode: existing.episode
-              }
-            });
+              });
+            }
           } else {
             await prisma.collection.upsert({
-              where: { userId_mediaId: { userId: u.id, mediaId: existing.mediaId } },
+              where: { userId_mediaId: { userId: u.id, mediaId: finalFile.mediaId } },
               update: {},
-              create: { userId: u.id, mediaId: existing.mediaId }
+              create: { userId: u.id, mediaId: finalFile.mediaId }
             });
           }
         }
       } catch (err) {
         console.error('[Folder Scanner] Failed to record collection for existing file for all users:', err.message);
       }
-      return existing;
+      return finalFile;
     }
-
-    // 2. Parse details from filename
-    const parsed = parseFilename(filePath);
-    if (!parsed) return null;
-
-    console.log(`[Folder Scanner] Resolving file: "${path.basename(filePath)}" parsed as:`, parsed);
 
     // 3. Search and resolve on TMDB
     let tmdbData = null;
@@ -333,23 +364,26 @@ async function processSingleFile(filePath, folderType, apiKey) {
             create: { userId: u.id, mediaId: media.id }
           });
           // Mark Episode collected
-          await prisma.episodeCollection.upsert({
-            where: {
-              userId_mediaId_season_episode: {
+          const endEp = parsed.endEpisode || parsed.episode;
+          for (let ep = parsed.episode; ep <= endEp; ep++) {
+            await prisma.episodeCollection.upsert({
+              where: {
+                userId_mediaId_season_episode: {
+                  userId: u.id,
+                  mediaId: media.id,
+                  season: parsed.season,
+                  episode: ep
+                }
+              },
+              update: {},
+              create: {
                 userId: u.id,
                 mediaId: media.id,
                 season: parsed.season,
-                episode: parsed.episode
+                episode: ep
               }
-            },
-            update: {},
-            create: {
-              userId: u.id,
-              mediaId: media.id,
-              season: parsed.season,
-              episode: parsed.episode
-            }
-          });
+            });
+          }
         } else {
           // Mark Movie collected
           await prisma.collection.upsert({
@@ -371,6 +405,7 @@ async function processSingleFile(filePath, folderType, apiKey) {
         mediaId: media.id,
         season: parsed.type === 'tv' ? parsed.season : null,
         episode: parsed.type === 'tv' ? parsed.episode : null,
+        endEpisode: parsed.type === 'tv' ? (parsed.endEpisode || null) : null,
         lastSeen: new Date(),
         missingSince: null
       }
@@ -561,24 +596,32 @@ async function runCleanupJob() {
 
       // Run uncollect verification
       if (file.type === 'tv') {
-        // Count other local files for this exact episode
-        const remainingCount = await prisma.localFile.count({
-          where: {
-            mediaId: file.mediaId,
-            season: file.season,
-            episode: file.episode
-          }
-        });
-        if (remainingCount === 0) {
-          // Uncollect the episode
-          await prisma.episodeCollection.deleteMany({
+        // A single file might cover a range of episodes
+        const endEp = file.endEpisode || file.episode;
+        for (let ep = file.episode; ep <= endEp; ep++) {
+          // Count other local files covering this exact episode 'ep'
+          const remainingCount = await prisma.localFile.count({
             where: {
               mediaId: file.mediaId,
               season: file.season,
-              episode: file.episode
+              episode: { lte: ep },
+              OR: [
+                { endEpisode: { gte: ep } },
+                { endEpisode: null, episode: ep }
+              ]
             }
           });
-          console.log(`[Folder Scanner] Episode S${file.season}E${file.episode} of Media #${file.mediaId} is no longer collected (no local files left).`);
+          if (remainingCount === 0) {
+            // Uncollect the episode
+            await prisma.episodeCollection.deleteMany({
+              where: {
+                mediaId: file.mediaId,
+                season: file.season,
+                episode: ep
+              }
+            });
+            console.log(`[Folder Scanner] Episode S${file.season}E${ep} of Media #${file.mediaId} is no longer collected (no local files left).`);
+          }
         }
       } else {
         // Count other local files for this movie
@@ -845,7 +888,7 @@ function matchDirectoryToMedia(dirName, media) {
 }
 
 async function scanMediaItem(mediaId, options = {}) {
-  const { season } = options;
+  const { season, episode } = options;
   const settings = await prisma.systemSettings.findFirst();
   const apiKey = settings?.tmdbApiKey;
   if (!apiKey) {
@@ -954,33 +997,29 @@ async function scanMediaItem(mediaId, options = {}) {
       continue;
     }
 
+    // If episode filter is provided, check episode range
+    if (media.type === 'tv' && episode !== null && parsed.episode !== null) {
+      const endEp = parsed.endEpisode || parsed.episode;
+      if (episode < parsed.episode || episode > endEp) {
+        continue;
+      }
+    }
+
     totalProcessed++;
 
     if (!existing) {
       // Delay slightly if it's a new file to avoid rate limits
       await sleep(250);
-      try {
-        const localFile = await processSingleFile(filePath, media.type, apiKey);
-        if (localFile) {
-          addedCount++;
-          addedFiles.push(filePath);
-        }
-      } catch (err) {
-        console.error(`[Folder Scanner] Error processing target file ${filePath}:`, err.message);
+    }
+    
+    try {
+      const localFile = await processSingleFile(filePath, media.type, apiKey);
+      if (localFile && !existing) {
+        addedCount++;
+        addedFiles.push(filePath);
       }
-    } else {
-      // If it exists but is marked missing, reset missingSince
-      if (existing.missingSince) {
-        await prisma.localFile.update({
-          where: { id: existing.id },
-          data: { missingSince: null }
-        });
-      }
-      // Update lastSeen
-      await prisma.localFile.update({
-        where: { id: existing.id },
-        data: { lastSeen: new Date() }
-      });
+    } catch (err) {
+      console.error(`[Folder Scanner] Error processing target file ${filePath}:`, err.message);
     }
   }
 

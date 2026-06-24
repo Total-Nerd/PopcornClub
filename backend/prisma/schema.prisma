@@ -173,6 +173,7 @@ model LocalFile {
   media         Media        @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   season        Int?         // TV only
   episode       Int?         // TV only
+  endEpisode    Int?         // TV only
   lastSeen          DateTime     @default(now())
   missingSince      DateTime?    // Track when deleted to implement the 12-hour removal rule
   manuallyCorrected Boolean      @default(false)

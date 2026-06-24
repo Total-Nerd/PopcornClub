@@ -8,7 +8,7 @@ async function main() {
   console.log('Starting duration filler script...');
   
   // 1. Get TMDB API Key
-  const settings = await prisma.settings.findFirst();
+  const settings = await prisma.systemSettings.findFirst();
   const apiKey = settings?.tmdbApiKey;
   if (!apiKey) {
     console.log('WARNING: No TMDB API Key found in settings. Relying purely on cached data and fallbacks.');

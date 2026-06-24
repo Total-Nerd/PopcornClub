@@ -80,6 +80,7 @@ const sortEvents = (eventList) => {
 };
 
 const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails, onToggleStackExpand, expandedStacks }) => {
+  const navigate = useNavigate();
   const [translateX, setTranslateX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const startX = useRef(0);
@@ -324,15 +325,46 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
               src={`https://image.tmdb.org/t/p/w185${poster}`}
               alt={title}
               style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+              className="actionable-poster"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.type === 'tv') {
+                  navigate(`/shows/${ev.tmdbId}`);
+                } else {
+                  navigate(`/movies/${ev.tmdbId}`);
+                }
+              }}
             />
           ) : (
-            <div style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div 
+              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              className="actionable-poster"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.type === 'tv') {
+                  navigate(`/shows/${ev.tmdbId}`);
+                } else {
+                  navigate(`/movies/${ev.tmdbId}`);
+                }
+              }}
+            >
               {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%' }}>
+              <span 
+                style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%', cursor: 'pointer' }}
+                className="actionable-text"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (ev.type === 'tv') {
+                    navigate(`/shows/${ev.tmdbId}`);
+                  } else {
+                    navigate(`/movies/${ev.tmdbId}`);
+                  }
+                }}
+              >
                 {title}
               </span>
               {ev.isCollected && (
@@ -343,7 +375,17 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
             </div>
             {ev.type === 'tv' ? (
               <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
+                <span
+                  className="actionable-text"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const epNum = ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber;
+                    navigate(`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${epNum}`);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
+                </span>
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -366,7 +408,14 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => onOpenDetails(subEv)}>
+                <span 
+                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`);
+                  }}
+                  className="actionable-text"
+                >
                   S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
                 </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -768,7 +817,8 @@ const CalendarView = () => {
 
   const handleOpenDetails = (event) => {
     if (event.type === 'tv') {
-      navigate(`/shows/${event.tmdbId}?season=${event.seasonNumber}`);
+      const epNum = event.isStacked ? event.originalEpisodes[0].episodeNumber : event.episodeNumber;
+      navigate(`/shows/${event.tmdbId}?season=${event.seasonNumber}${epNum ? `&episode=${epNum}` : ''}`);
     } else {
       navigate(`/movies/${event.tmdbId}`);
     }
@@ -1062,19 +1112,60 @@ const CalendarView = () => {
               src={`https://image.tmdb.org/t/p/w185${poster}`}
               alt={title}
               style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+              className="actionable-poster"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.type === 'tv') {
+                  navigate(`/shows/${ev.tmdbId}`);
+                } else {
+                  navigate(`/movies/${ev.tmdbId}`);
+                }
+              }}
             />
           ) : (
-            <div style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div 
+              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              className="actionable-poster"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.type === 'tv') {
+                  navigate(`/shows/${ev.tmdbId}`);
+                } else {
+                  navigate(`/movies/${ev.tmdbId}`);
+                }
+              }}
+            >
               {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
-            <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div 
+              style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+              className="actionable-text"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.type === 'tv') {
+                  navigate(`/shows/${ev.tmdbId}`);
+                } else {
+                  navigate(`/movies/${ev.tmdbId}`);
+                }
+              }}
+            >
               {title}
             </div>
             {ev.type === 'tv' ? (
               <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
+                <span
+                  className="actionable-text"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const epNum = ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber;
+                    navigate(`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${epNum}`);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
+                </span>
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -1097,7 +1188,14 @@ const CalendarView = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => handleOpenDetails(subEv)}>
+                <span 
+                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`);
+                  }}
+                  className="actionable-text"
+                >
                   S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
                 </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -1305,6 +1403,7 @@ const CalendarView = () => {
                           <div
                             key={ev.id}
                             onClick={() => handleOpenDetails(ev)}
+                            className="calendar-month-event"
                             style={{
                               padding: '4px 6px',
                               background: ev.type === 'tv'
@@ -1451,6 +1550,32 @@ const CalendarView = () => {
           }}
         />
       )}
+      <style>{`
+        .actionable-text {
+          cursor: pointer;
+          transition: color 0.15s ease;
+        }
+        .actionable-text:hover {
+          text-decoration: underline !important;
+          color: var(--accent-light, #a78bfa) !important;
+        }
+        .actionable-poster {
+          cursor: pointer;
+          transition: transform 0.2s ease, filter 0.2s ease;
+        }
+        .actionable-poster:hover {
+          filter: brightness(1.1) !important;
+          transform: scale(1.02);
+        }
+        .calendar-month-event {
+          cursor: pointer;
+          transition: filter 0.15s ease;
+        }
+        .calendar-month-event:hover {
+          text-decoration: underline !important;
+          filter: brightness(1.2) !important;
+        }
+      `}</style>
     </div>
   );
 };

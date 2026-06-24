@@ -17,6 +17,7 @@ import PersonDetails from './pages/PersonDetails';
 import WatchHistory from './pages/WatchHistory';
 import ScrollToTop from './components/ScrollToTop';
 import Conflicts from './pages/Conflicts';
+import StatsPage from './pages/StatsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -42,6 +43,7 @@ const AppRoutes = () => {
         <Route path="person/:personId" element={<PersonDetails />} />
         <Route path="lists" element={<Lists />} />
         <Route path="history" element={<WatchHistory />} />
+        <Route path="stats/:username" element={<StatsPage />} />
         <Route path="conflicts" element={user?.role === 'admin' ? <Conflicts /> : <Navigate to="/" />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

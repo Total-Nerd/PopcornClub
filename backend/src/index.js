@@ -23,6 +23,7 @@ const mediaRoutes = require('./routes/media');
 const listsRoutes = require('./routes/lists');
 const calendarRoutes = require('./routes/calendar');
 const foldersRoutes = require('./routes/folders');
+const statsRoutes = require('./routes/stats');
 const { initFolderScanner } = require('./utils/folderScanner');
 const { seedWatchHistoryLogs, backfillMediaGenres } = require('./utils/historyMigration');
 
@@ -37,6 +38,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/lists', listsRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/folders', foldersRoutes);
+app.use('/api/stats', statsRoutes);
 
 const plexRoutes = require('./routes/plex');
 const http = require('http');

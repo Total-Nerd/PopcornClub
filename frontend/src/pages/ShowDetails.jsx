@@ -22,7 +22,8 @@ const ShowDetails = () => {
   const [rawData, setRawData] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [correctMode, setCorrectMode] = useState(false);
-  const [correctingFile, setCorrectingFile] = useState(null);
+  const [correctingFiles, setCorrectingFiles] = useState([]);
+  const [selectedFilesForRematch, setSelectedFilesForRematch] = useState([]);
   const [correctTitle, setCorrectTitle] = useState('');
   const [correctYear, setCorrectYear] = useState('');
   const [correctId, setCorrectId] = useState('');
@@ -126,16 +127,30 @@ const ShowDetails = () => {
     }
   }, [showDetails, tmdbId]);
 
-  const parseFilenameFromPath = (filePath) => {
-    const filename = filePath.split(/[/\\]/).pop();
-    const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
+  const parsePathForRematch = (filePath) => {
+    const parts = filePath.split(/[/\\]/).filter(Boolean);
+    let targetName = parts.pop() || '';
+    
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (!parts[i].toLowerCase().includes('season') && !parts[i].toLowerCase().match(/specials?/i)) {
+        targetName = parts[i];
+        break;
+      }
+    }
+    
+    const tmdbMatch = targetName.match(/\{tmdb-(\d+)\}/i);
+    let tmdbId = '';
+    if (tmdbMatch) {
+      tmdbId = tmdbMatch[1];
+      targetName = targetName.replace(tmdbMatch[0], '').trim();
+    }
 
-    const yearMatch = nameWithoutExt.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
+    const yearMatch = targetName.match(/(?:\(|\[)(\d{4})(?:[\s,\]\)]|$)/);
     let year = '';
-    let title = nameWithoutExt;
+    let title = targetName;
     if (yearMatch) {
       year = yearMatch[1];
-      title = nameWithoutExt.substring(0, nameWithoutExt.indexOf(yearMatch[0]));
+      title = targetName.substring(0, targetName.indexOf(yearMatch[0]));
     }
 
     const cleanTitleStr = title.replace(/[._-]/g, ' ')
@@ -143,19 +158,19 @@ const ShowDetails = () => {
       .replace(/\s+/g, ' ')
       .trim();
 
-    return { title: cleanTitleStr, year };
+    return { title: cleanTitleStr, year, tmdbId };
   };
 
-  const startFileReMatch = (file) => {
+  const startFileReMatch = (files) => {
     setShowSeasonRawModal(false);
     setRawEpisode(null);
     setShowRawModal(true);
-    setCorrectingFile(file);
-    const parsed = parseFilenameFromPath(file.path);
+    setCorrectingFiles(files);
+    const parsed = parsePathForRematch(files[0].path);
     setCorrectTitle(parsed.title);
     const showYear = showDetails?.first_air_date ? showDetails.first_air_date.substring(0, 4) : '';
     setCorrectYear(parsed.year && showYear && parsed.year !== showYear ? '' : parsed.year);
-    setCorrectId('');
+    setCorrectId(parsed.tmdbId || '');
     setSearchResults([]);
     setModalError('');
     setCorrectMode(true);
@@ -203,8 +218,8 @@ const ShowDetails = () => {
         type: 'tv'
       };
 
-      if (correctingFile) {
-        payload.fileId = correctingFile.id;
+      if (correctingFiles.length > 0) {
+        payload.fileIds = correctingFiles.map(f => f.id);
       } else {
         payload.oldTmdbId = showDetails?.localId || tmdbId;
       }
@@ -228,14 +243,23 @@ const ShowDetails = () => {
         return;
       }
 
-      const endpoint = correctingFile ? '/media/correct-file' : '/media/correct';
+      const endpoint = correctingFiles.length > 0 ? '/media/correct-file' : '/media/correct';
       const res = await api.post(endpoint, payload);
       showAlert(res.data.message || 'Correction successful!', 'success');
-      setShowRawModal(false);
-      setCorrectMode(false);
-      setCorrectingFile(null);
-      navigate(`/shows/${res.data.media.tmdbId}`, { replace: true });
-      window.location.reload();
+      
+      if (correctingFiles.length > 0) {
+        setCorrectMode(false);
+        setCorrectingFiles([]);
+        setSelectedFilesForRematch([]);
+        fetchRawData();
+      } else {
+        setShowRawModal(false);
+        setCorrectMode(false);
+        setCorrectingFiles([]);
+        setSelectedFilesForRematch([]);
+        navigate(`/shows/${res.data.media.tmdbId}`, { replace: true });
+        window.location.reload();
+      }
     } catch (err) {
       setModalError(err.response?.data?.error || 'Failed to apply correction.');
     } finally {
@@ -326,6 +350,33 @@ const ShowDetails = () => {
 
     fetchShowDetails();
   }, [tmdbId]);
+
+  useEffect(() => {
+    if (!loadingSeason && seasonEpisodes.length > 0) {
+      const queryParams = new URLSearchParams(location.search);
+      const urlEpisode = queryParams.get('episode');
+      if (urlEpisode) {
+        const episodeNum = parseInt(urlEpisode, 10);
+        const epObj = seasonEpisodes.find(e => e.episode_number === episodeNum);
+        if (epObj) {
+          // Expand description first to achieve full layout height
+          setExpandedEpisodes(prev => ({ ...prev, [epObj.id]: true }));
+
+          // Scroll and highlight after DOM layout adjusts to expanded state
+          setTimeout(() => {
+            const element = document.getElementById(`episode-${episodeNum}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              element.classList.add('episode-card-highlighted');
+              setTimeout(() => {
+                element.classList.remove('episode-card-highlighted');
+              }, 3000);
+            }
+          }, 150);
+        }
+      }
+    }
+  }, [loadingSeason, seasonEpisodes, location.search]);
 
   const fetchSeasonEpisodes = async (id, seasonNumber) => {
     setLoadingSeason(true);
@@ -435,6 +486,24 @@ const ShowDetails = () => {
     try {
       showAlert(`Scanning folders for Season ${activeSeason}...`, 'info');
       const res = await api.post(`/media/scan/tv/${tmdbId}?season=${activeSeason}`);
+      if (res.data.success) {
+        showAlert(res.data.message || 'Scan completed successfully.', 'success');
+        // Refresh show details and season episodes
+        const detailsRes = await api.get(`/media/tv/${tmdbId}`);
+        setShowDetails(detailsRes.data);
+        handleSelectSeason(activeSeason);
+      }
+    } catch (err) {
+      console.error('Scan failed:', err);
+      showAlert(`Scan failed: ${err.response?.data?.error || err.message}`, 'error');
+    }
+  };
+
+  const handleScanEpisode = async (episodeNumber) => {
+    if (!activeSeason) return;
+    try {
+      showAlert(`Scanning folders for Season ${activeSeason} Episode ${episodeNumber}...`, 'info');
+      const res = await api.post(`/media/scan/tv/${tmdbId}?season=${activeSeason}&episode=${episodeNumber}`);
       if (res.data.success) {
         showAlert(res.data.message || 'Scan completed successfully.', 'success');
         // Refresh show details and season episodes
@@ -1201,6 +1270,7 @@ const ShowDetails = () => {
                       {seasonEpisodes.map(ep => (
                         <div
                           key={ep.id}
+                          id={`episode-${ep.episode_number}`}
                           className={`episode-card ${ep.isWatched ? 'is-watched' : ''}`}
                         >
                           {/* Episode Thumbnail */}
@@ -1312,6 +1382,15 @@ const ShowDetails = () => {
                                       className="episode-dropdown-item"
                                       onClick={() => {
                                         setActiveEpisodeMenu(null);
+                                        handleScanEpisode(ep.episode_number);
+                                      }}
+                                    >
+                                      <Search size={14} /> Scan for Media
+                                    </button>
+                                    <button
+                                      className="episode-dropdown-item"
+                                      onClick={() => {
+                                        setActiveEpisodeMenu(null);
                                         setRawEpisode(ep);
                                         fetchRawData();
                                       }}
@@ -1351,6 +1430,15 @@ const ShowDetails = () => {
                                     >
                                       <ExternalLink size={16} /> View on TMDb
                                     </a>
+                                    <button
+                                      className="mobile-sheet-option"
+                                      onClick={() => {
+                                        setActiveEpisodeMenu(null);
+                                        handleScanEpisode(ep.episode_number);
+                                      }}
+                                    >
+                                      <Search size={16} /> Scan for Media
+                                    </button>
                                     <button
                                       className="mobile-sheet-option"
                                       onClick={() => {
@@ -1413,13 +1501,13 @@ const ShowDetails = () => {
       {/* Show Local Data / Correct Match Modal */}
       {
         showRawModal && (
-          <div className="custom-modal-backdrop" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+          <div className="custom-modal-backdrop" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFiles([]); setSelectedFilesForRematch([]); setModalError(''); setSearchResults([]); }}>
+            <div className="custom-modal-content" onClick={e => e.stopPropagation()}>
               <div className="custom-modal-header">
                 <h3 style={{ margin: 0, fontWeight: '700' }}>
                   {correctMode ? 'Correct Match' : 'TV Show Local Data & Correction'}
                 </h3>
-                <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFiles([]); setSelectedFilesForRematch([]); setModalError(''); setSearchResults([]); }}>
                   <X size={20} />
                 </button>
               </div>
@@ -1452,19 +1540,75 @@ const ShowDetails = () => {
                         <div>
                           <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Associated Local File Paths</h4>
                           {rawData?.files && rawData.files.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {rawData.files.map(f => (
-                                <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
-                                  <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>
-                                    {f.season !== null && `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')} - `}{f.path}
-                                  </code>
-                                  <button
-                                    onClick={() => startFileReMatch(f)}
-                                    className="btn btn-secondary"
-                                    style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
-                                  >
-                                    Re-match Path
-                                  </button>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                              {Object.entries(
+                                rawData.files.reduce((acc, file) => {
+                                  const parts = file.path.split(/[/\\]/);
+                                  parts.pop();
+                                  const folder = parts.join('/') || '/';
+                                  if (!acc[folder]) acc[folder] = [];
+                                  acc[folder].push(file);
+                                  return acc;
+                                }, {})
+                              ).map(([folder, filesInFolder]) => (
+                                <div key={folder} className="glass-panel" style={{ padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '8px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                                    <div style={{ fontWeight: '600', color: 'var(--text-main)', wordBreak: 'break-all', fontSize: '0.9rem' }}>
+                                      {folder}
+                                    </div>
+                                    <button
+                                      onClick={() => startFileReMatch(filesInFolder)}
+                                      className="btn btn-primary"
+                                      style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+                                    >
+                                      Re-match Folder
+                                    </button>
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    {filesInFolder.map(f => (
+                                      <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '6px', background: 'var(--bg-input)', borderRadius: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, overflow: 'hidden' }}>
+                                          <input 
+                                            type="checkbox" 
+                                            id={`file-check-${f.id}`} 
+                                            checked={selectedFilesForRematch.includes(f.id)}
+                                            onChange={(e) => {
+                                              if (e.target.checked) {
+                                                setSelectedFilesForRematch(prev => [...prev, f.id]);
+                                              } else {
+                                                setSelectedFilesForRematch(prev => prev.filter(id => id !== f.id));
+                                              }
+                                            }}
+                                          />
+                                          <label htmlFor={`file-check-${f.id}`} style={{ color: 'var(--text-muted)', wordBreak: 'break-all', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.path.split(/[/\\]/).pop()}>
+                                            {f.season !== null && `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')} - `}{f.path.split(/[/\\]/).pop()}
+                                          </label>
+                                        </div>
+                                        <button
+                                          onClick={() => startFileReMatch([f])}
+                                          className="btn btn-secondary"
+                                          style={{ padding: '2px 8px', fontSize: '0.8rem', flexShrink: 0 }}
+                                        >
+                                          Re-match
+                                        </button>
+                                      </div>
+                                    ))}
+                                    {filesInFolder.some(f => selectedFilesForRematch.includes(f.id)) && (
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                        <button
+                                          onClick={() => {
+                                            const selectedIds = filesInFolder.map(f => f.id).filter(id => selectedFilesForRematch.includes(id));
+                                            const filesToRematch = filesInFolder.filter(f => selectedIds.includes(f.id));
+                                            startFileReMatch(filesToRematch);
+                                          }}
+                                          className="btn btn-secondary"
+                                          style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+                                        >
+                                          Re-match Selected
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1477,7 +1621,7 @@ const ShowDetails = () => {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {correctingFile && (
+                        {correctingFiles.length > 0 && (
                           <div style={{
                             background: 'var(--overlay-subtle)',
                             border: '1px solid var(--border-color)',
@@ -1485,12 +1629,16 @@ const ShowDetails = () => {
                             padding: '10px 14px',
                             fontSize: '0.85rem'
                           }}>
-                            <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Correcting File Path:</div>
-                            <code style={{ color: 'var(--text-main)', wordBreak: 'break-all' }}>{correctingFile.path}</code>
+                            <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Correcting {correctingFiles.length} File(s):</div>
+                            <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {correctingFiles.map(f => (
+                                <code key={f.id} style={{ color: 'var(--text-main)', wordBreak: 'break-all', display: 'block' }}>{f.path}</code>
+                              ))}
+                            </div>
                           </div>
                         )}
 
-                        {!correctingFile && (
+                        {correctingFiles.length === 0 && (
                           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             Search TMDB for the correct TV show, or enter a target TMDB ID or IMDb ID (ttXXXXXXX) directly below.
                           </p>
@@ -1630,7 +1778,7 @@ const ShowDetails = () => {
       {
         showSeasonRawModal && (
           <div className="custom-modal-backdrop" onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
-            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div className="custom-modal-content" onClick={e => e.stopPropagation()}>
               <div className="custom-modal-header">
                 <h3 style={{ margin: 0, fontWeight: '700' }}>Season {activeSeason} Local Data</h3>
                 <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowSeasonRawModal(false); setModalError(''); }}>
@@ -1693,7 +1841,7 @@ const ShowDetails = () => {
       {
         rawEpisode && (
           <div className="custom-modal-backdrop" onClick={() => { setRawEpisode(null); setModalError(''); }}>
-            <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div className="custom-modal-content" onClick={e => e.stopPropagation()}>
               <div className="custom-modal-header">
                 <h3 style={{ margin: 0, fontWeight: '700' }}>
                   S{String(rawEpisode.season_number).padStart(2, '0')}E{String(rawEpisode.episode_number).padStart(2, '0')} Local Data
@@ -1765,6 +1913,15 @@ const ShowDetails = () => {
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        .episode-card {
+          border: 1px solid transparent;
+          transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+        }
+        .episode-card-highlighted {
+          border-color: var(--accent) !important;
+          box-shadow: 0 0 12px rgba(124, 58, 237, 0.3) !important;
+          background: rgba(124, 58, 237, 0.08) !important;
         }
       `}</style>
 

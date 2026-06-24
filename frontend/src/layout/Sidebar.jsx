@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut } from 'lucide-react';
+import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2 } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { AuthContext } from '../context/AuthContext';
 
@@ -43,6 +43,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="History">
           <History size={20} />
           <span>History</span>
+        </NavLink>
+        <NavLink to={`/stats/${user?.username}`} onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Stats">
+          <BarChart2 size={20} />
+          <span>Stats</span>
         </NavLink>
         {user?.role === 'admin' && (
           <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
@@ -87,6 +91,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <History size={18} />
             <span>History</span>
+          </NavLink>
+          <NavLink to={`/stats/${user?.username}`} onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+            <BarChart2 size={18} />
+            <span>Stats</span>
           </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
