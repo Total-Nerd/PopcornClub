@@ -9,52 +9,53 @@ datasource db {
 }
 
 model User {
-  id               Int                  @id @default(autoincrement())
-  username         String               @unique
-  passwordHash     String
-  name             String?
-  email            String?
-  avatarPath       String?
-  role             String               @default("user") // "admin" or "user"
-  plexUser         String?
-  plexWebhookToken String?              @unique
-  traktUsername    String?
-  traktClientId    String?
+  id                Int       @id @default(autoincrement())
+  username          String    @unique
+  passwordHash      String
+  name              String?
+  email             String?
+  avatarPath        String?
+  role              String    @default("user") // "admin" or "user"
+  plexUser          String?
+  plexWebhookToken  String?   @unique
+  traktUsername     String?
+  traktClientId     String?
   plexLastWebhookAt DateTime?
 
-  collections          Collection[]
+  collections         Collection[]
   watchHistory        WatchHistory[]
   episodeCollections  EpisodeCollection[]
   episodeWatchHistory EpisodeWatchHistory[]
   watchHistoryLogs    WatchHistoryLog[]
   customLists         CustomList[]
+  ignoredMissingEps   IgnoredMissingEpisode[]
 
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SystemSettings {
-  id                       Int      @id @default(1)
-  tmdbApiKey               String?
-  traktUsername            String?
-  traktClientId            String?
-  plexGlobalWebhookToken   String?
-  plexGlobalLastWebhookAt  DateTime?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                      Int       @id @default(1)
+  tmdbApiKey              String?
+  traktUsername           String?
+  traktClientId           String?
+  plexGlobalWebhookToken  String?
+  plexGlobalLastWebhookAt DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 model Media {
-  id                  Int                  @id @default(autoincrement())
-  tmdbId              Int
-  type                String               // "movie" or "tv"
-  title               String
-  overview            String?
-  releaseDate         DateTime?
-  posterPath          String?
-  backdropPath        String?
-  genres              String?
-  
+  id           Int       @id @default(autoincrement())
+  tmdbId       Int
+  type         String // "movie" or "tv"
+  title        String
+  overview     String?
+  releaseDate  DateTime?
+  posterPath   String?
+  backdropPath String?
+  genres       String?
+
   collections         Collection[]
   watchHistory        WatchHistory[]
   listItems           ListItem[]
@@ -62,9 +63,10 @@ model Media {
   episodeWatchHistory EpisodeWatchHistory[]
   localFiles          LocalFile[]
   watchHistoryLogs    WatchHistoryLog[]
+  ignoredMissingEps   IgnoredMissingEpisode[]
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tmdbId, type])
 }
@@ -73,9 +75,9 @@ model WatchHistoryLog {
   id          Int      @id @default(autoincrement())
   mediaId     Int
   media       Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  type        String   // "movie" or "tv"
-  season      Int?     // TV only
-  episode     Int?     // TV only
+  type        String // "movie" or "tv"
+  season      Int? // TV only
+  episode     Int? // TV only
   watchedAt   DateTime @default(now())
   duration    Int      @default(0) // total duration in seconds
   viewOffset  Int      @default(0) // offset/progress in seconds
@@ -83,8 +85,8 @@ model WatchHistoryLog {
   userId      Int?
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Collection {
@@ -99,12 +101,12 @@ model Collection {
 }
 
 model WatchHistory {
-  id         Int      @id @default(autoincrement())
-  mediaId    Int
-  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  userId     Int?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  watchedAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  mediaId   Int
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchedAt DateTime @default(now())
 }
 
 model EpisodeCollection {
@@ -145,13 +147,25 @@ model CustomList {
   @@unique([userId, name])
 }
 
+model IgnoredMissingEpisode {
+  id      Int   @id @default(autoincrement())
+  userId  Int
+  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaId Int
+  media   Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season  Int
+  episode Int
+
+  @@unique([userId, mediaId, season, episode])
+}
+
 model ListItem {
-  id           Int        @id @default(autoincrement())
-  listId       Int
-  list         CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  mediaId      Int
-  media        Media      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  addedAt      DateTime   @default(now())
+  id      Int        @id @default(autoincrement())
+  listId  Int
+  list    CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  mediaId Int
+  media   Media      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  addedAt DateTime   @default(now())
 
   @@unique([listId, mediaId])
 }
@@ -159,26 +173,26 @@ model ListItem {
 model LocalFolder {
   id        Int      @id @default(autoincrement())
   path      String   @unique
-  type      String   // "movie" or "tv"
+  type      String // "movie" or "tv"
   watch     Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model LocalFile {
-  id            Int          @id @default(autoincrement())
-  path          String       @unique
-  type          String       // "movie" or "tv"
-  mediaId       Int
-  media         Media        @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  season        Int?         // TV only
-  episode       Int?         // TV only
-  endEpisode    Int?         // TV only
-  lastSeen          DateTime     @default(now())
-  missingSince      DateTime?    // Track when deleted to implement the 12-hour removal rule
-  manuallyCorrected Boolean      @default(false)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id                Int       @id @default(autoincrement())
+  path              String    @unique
+  type              String // "movie" or "tv"
+  mediaId           Int
+  media             Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season            Int? // TV only
+  episode           Int? // TV only
+  endEpisode        Int? // TV only
+  lastSeen          DateTime  @default(now())
+  missingSince      DateTime? // Track when deleted to implement the 12-hour removal rule
+  manuallyCorrected Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model TMDBCache {

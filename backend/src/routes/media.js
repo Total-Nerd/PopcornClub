@@ -781,6 +781,79 @@ router.get('/conflicts', async (req, res) => {
       }
     }
 
+    // --- Missing Episodes Logic ---
+    const ignoredRecords = await prisma.ignoredMissingEpisode.findMany({
+      where: { userId: req.user.id }
+    });
+    const ignoredSet = new Set(ignoredRecords.map(r => `${r.mediaId}-${r.season}-${r.episode}`));
+
+    const userEpCols = await prisma.episodeCollection.findMany({
+      where: { userId: req.user.id },
+      select: { mediaId: true, season: true, episode: true }
+    });
+    
+    const collectedByMedia = {};
+    for (const ec of userEpCols) {
+      if (!collectedByMedia[ec.mediaId]) collectedByMedia[ec.mediaId] = [];
+      collectedByMedia[ec.mediaId].push(`${ec.season}-${ec.episode}`);
+    }
+
+    const tvMediaList = mediaList.filter(m => m.type === 'tv' && collectedByMedia[m.id]);
+    const settings = await prisma.systemSettings.findFirst();
+    const apiKey = settings?.tmdbApiKey;
+
+    if (apiKey) {
+      for (const media of tvMediaList) {
+        try {
+          const tmdbData = await fetchTMDB(`/3/tv/${media.tmdbId}`, apiKey);
+          if (!tmdbData || !tmdbData.seasons) continue;
+
+          const collected = new Set(collectedByMedia[media.id]);
+          
+          for (const season of tmdbData.seasons) {
+            if (season.season_number <= 0) continue; // Skip specials
+
+            let expectedCount = season.episode_count;
+            
+            if (tmdbData.last_episode_to_air && tmdbData.last_episode_to_air.season_number === season.season_number) {
+              expectedCount = tmdbData.last_episode_to_air.episode_number;
+            } else if (tmdbData.next_episode_to_air && tmdbData.next_episode_to_air.season_number === season.season_number) {
+              expectedCount = tmdbData.next_episode_to_air.episode_number - 1;
+            } else if (tmdbData.last_episode_to_air && tmdbData.last_episode_to_air.season_number < season.season_number) {
+              expectedCount = 0;
+            }
+
+            let seasonData = null;
+            for (let ep = 1; ep <= expectedCount; ep++) {
+              if (!collected.has(`${season.season_number}-${ep}`)) {
+                if (!seasonData) {
+                  seasonData = await fetchTMDB(`/3/tv/${media.tmdbId}/season/${season.season_number}`, apiKey).catch(() => null);
+                }
+                const epData = seasonData?.episodes?.find(e => e.episode_number === ep);
+                const isIgnored = ignoredSet.has(`${media.id}-${season.season_number}-${ep}`);
+                conflicts.push({
+                  id: `missing-${media.id}-${season.season_number}-${ep}`,
+                  conflictType: 'missing-episode',
+                  mediaId: media.id,
+                  tmdbId: media.tmdbId,
+                  title: media.title,
+                  posterPath: media.posterPath,
+                  season: season.season_number,
+                  episode: ep,
+                  epName: epData ? epData.name : '',
+                  epStillPath: epData ? epData.still_path : null,
+                  epOverview: epData ? epData.overview : '',
+                  ignored: isIgnored
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to fetch TMDB for missing episodes check (tmdbId ${media.tmdbId}):`, err.message);
+        }
+      }
+    }
+
     res.json(conflicts);
   } catch (error) {
     console.error('Failed to get media conflicts:', error);
@@ -1955,12 +2028,16 @@ router.post('/correct-file', async (req, res) => {
         await syncShowWatchHistory(oldMedia.id, oldMedia.tmdbId, apiKey, req.user.id);
       }
 
-      // 8. Auto-cleanup: if old media has no local files left AND no watch logs and no collections, delete it!
+      // 8. Auto-cleanup: if old media has no local files left
       const remainingFiles = await prisma.localFile.count({ where: { mediaId: oldMedia.id } });
       if (remainingFiles === 0) {
-        const remainingCollections = await prisma.collection.count({ where: { mediaId: oldMedia.id } });
+        // Remove from collection
+        await prisma.episodeCollection.deleteMany({ where: { mediaId: oldMedia.id } });
+        await prisma.collection.deleteMany({ where: { mediaId: oldMedia.id } });
+
+        // Delete media entirely if there is no watch history
         const remainingLogs = await prisma.watchHistoryLog.count({ where: { mediaId: oldMedia.id } });
-        if (remainingCollections === 0 && remainingLogs === 0) {
+        if (remainingLogs === 0) {
           await prisma.media.delete({ where: { id: oldMedia.id } });
           console.log(`[Correct File] Cleaned up empty orphaned media ID: ${oldMedia.id}`);
         }
@@ -2541,6 +2618,52 @@ router.get('/person/:personId', async (req, res) => {
   } catch (error) {
     console.error('Failed to fetch person details:', error.message);
     res.status(500).json({ error: 'Failed to fetch person details' });
+  }
+});
+
+// --- Missing Episodes Management ---
+router.post('/missing-episodes/ignore', async (req, res) => {
+  const { mediaId, season, episode } = req.body;
+  if (!mediaId || season === undefined || episode === undefined) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const existing = await prisma.ignoredMissingEpisode.findFirst({
+      where: { userId: req.user.id, mediaId, season, episode }
+    });
+    
+    if (!existing) {
+      await prisma.ignoredMissingEpisode.create({
+        data: {
+          userId: req.user.id,
+          mediaId,
+          season,
+          episode
+        }
+      });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to ignore missing episode:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/missing-episodes/unignore', async (req, res) => {
+  const { mediaId, season, episode } = req.body;
+  if (!mediaId || season === undefined || episode === undefined) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    await prisma.ignoredMissingEpisode.deleteMany({
+      where: { userId: req.user.id, mediaId, season, episode }
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to unignore missing episode:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 

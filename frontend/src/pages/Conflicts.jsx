@@ -9,7 +9,8 @@ const Conflicts = () => {
 
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'title_mismatch', 'year_mismatch', 'missing_metadata', 'no_files'
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'title_mismatch', 'year_mismatch', 'missing_metadata', 'no_files', 'missing_episode'
+  const [showIgnoredEpisodes, setShowIgnoredEpisodes] = useState(false);
 
   // Correction Modal States
   const [correctionTarget, setCorrectionTarget] = useState(null); // conflict item being corrected
@@ -21,6 +22,10 @@ const Conflicts = () => {
   const [searching, setSearching] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  // Missing Episodes Group Modal State
+  const [missingGroupTarget, setMissingGroupTarget] = useState(null);
+  const [expandedSeasons, setExpandedSeasons] = useState({});
 
   const parseFilenameFromPath = (filePath) => {
     const filename = filePath.split(/[/\\]/).pop();
@@ -76,6 +81,124 @@ const Conflicts = () => {
     }
   };
 
+  const handleIgnoreEpisode = async (item) => {
+    try {
+      await api.post('/media/missing-episodes/ignore', {
+        mediaId: item.mediaId,
+        season: item.season,
+        episode: item.episode
+      });
+      fetchConflicts();
+    } catch (err) {
+      showAlert('Failed to ignore episode.', 'error');
+    }
+  };
+
+  const handleUnignoreEpisode = async (item) => {
+    try {
+      await api.post('/media/missing-episodes/unignore', {
+        mediaId: item.mediaId,
+        season: item.season,
+        episode: item.episode
+      });
+      fetchConflicts();
+    } catch (err) {
+      showAlert('Failed to unignore episode.', 'error');
+    }
+  };
+
+  const handleScanEpisode = async (item) => {
+    try {
+      showAlert(`Scanning for ${item.title} S${item.season}E${item.episode}...`, 'info');
+      await api.post(`/media/scan/tv/${item.tmdbId}?season=${item.season}&episode=${item.episode}`);
+      showAlert('Scan completed.', 'success');
+      fetchConflicts();
+    } catch (err) {
+      showAlert('Scan failed.', 'error');
+    }
+  };
+
+  const handleIgnoreGroup = async (group) => {
+    try {
+      await Promise.all(group.episodes.map(ep => 
+        api.post('/media/missing-episodes/ignore', {
+          mediaId: ep.mediaId,
+          season: ep.season,
+          episode: ep.episode
+        }).catch(e => console.error(e))
+      ));
+      fetchConflicts();
+      if (missingGroupTarget?.mediaId === group.mediaId) closeMissingGroupModal();
+    } catch (err) {
+      showAlert('Failed to ignore some episodes.', 'error');
+    }
+  };
+
+  const handleUnignoreGroup = async (group) => {
+    try {
+      await Promise.all(group.episodes.map(ep => 
+        api.post('/media/missing-episodes/unignore', {
+          mediaId: ep.mediaId,
+          season: ep.season,
+          episode: ep.episode
+        }).catch(e => console.error(e))
+      ));
+      fetchConflicts();
+      if (missingGroupTarget?.mediaId === group.mediaId) closeMissingGroupModal();
+    } catch (err) {
+      showAlert('Failed to unignore some episodes.', 'error');
+    }
+  };
+
+  const handleIgnoreSeason = async (episodes) => {
+    try {
+      await Promise.all(episodes.map(ep => 
+        api.post('/media/missing-episodes/ignore', {
+          mediaId: ep.mediaId,
+          season: ep.season,
+          episode: ep.episode
+        }).catch(e => console.error(e))
+      ));
+      fetchConflicts();
+      setMissingGroupTarget(prev => ({
+        ...prev,
+        episodes: prev.episodes.filter(e => !episodes.some(ignored => ignored.id === e.id))
+      }));
+    } catch (err) {
+      showAlert('Failed to ignore season episodes.', 'error');
+    }
+  };
+
+  const handleUnignoreSeason = async (episodes) => {
+    try {
+      await Promise.all(episodes.map(ep => 
+        api.post('/media/missing-episodes/unignore', {
+          mediaId: ep.mediaId,
+          season: ep.season,
+          episode: ep.episode
+        }).catch(e => console.error(e))
+      ));
+      fetchConflicts();
+      setMissingGroupTarget(prev => ({
+        ...prev,
+        episodes: prev.episodes.filter(e => !episodes.some(unignored => unignored.id === e.id))
+      }));
+    } catch (err) {
+      showAlert('Failed to unignore season episodes.', 'error');
+    }
+  };
+
+  const handleScanGroup = async (group) => {
+    try {
+      showAlert(`Scanning for ${group.title}...`, 'info');
+      await api.post(`/media/scan/tv/${group.tmdbId}`);
+      showAlert('Scan completed.', 'success');
+      fetchConflicts();
+    } catch (err) {
+      showAlert('Scan failed.', 'error');
+    }
+  };
+
   const openCorrectionModal = (item, filePath = null) => {
     setCorrectionTarget(item);
     setCorrectingFilePath(filePath);
@@ -96,6 +219,16 @@ const Conflicts = () => {
   const closeCorrectionModal = () => {
     setCorrectionTarget(null);
     setCorrectingFilePath(null);
+  };
+
+  const openMissingGroupModal = (group, isIgnored = false) => {
+    setMissingGroupTarget({ ...group, isIgnored });
+    setExpandedSeasons({});
+  };
+  const closeMissingGroupModal = () => setMissingGroupTarget(null);
+
+  const toggleSeason = (seasonNum) => {
+    setExpandedSeasons(prev => ({ ...prev, [seasonNum]: !prev[seasonNum] }));
   };
 
   const handleSearchCorrection = async () => {
@@ -184,11 +317,49 @@ const Conflicts = () => {
     }
   };
 
-  const filteredConflicts = activeTab === 'all' 
-    ? conflicts 
+  let filteredConflicts = activeTab === 'all' 
+    ? conflicts.filter(c => c.conflictType !== 'missing-episode') 
     : conflicts.filter(c => c.conflictType === activeTab);
 
-  const getCounts = (type) => conflicts.filter(c => c.conflictType === type).length;
+  const getCounts = (type) => conflicts.filter(c => c.conflictType === type && !c.ignored).length;
+  const missingEpisodes = conflicts.filter(c => c.conflictType === 'missing-episode' && !c.ignored);
+  const ignoredEpisodes = conflicts.filter(c => c.conflictType === 'missing-episode' && c.ignored);
+
+  const groupedMissing = Object.values(missingEpisodes.reduce((acc, curr) => {
+    if (!acc[curr.mediaId]) {
+      acc[curr.mediaId] = {
+        conflictType: 'missing-episode-group',
+        mediaId: curr.mediaId,
+        tmdbId: curr.tmdbId,
+        title: curr.title,
+        posterPath: curr.posterPath,
+        type: 'tv',
+        episodes: []
+      };
+    }
+    acc[curr.mediaId].episodes.push(curr);
+    return acc;
+  }, {})).sort((a, b) => b.episodes.length - a.episodes.length);
+
+  const groupedIgnored = Object.values(ignoredEpisodes.reduce((acc, curr) => {
+    if (!acc[curr.mediaId]) {
+      acc[curr.mediaId] = {
+        conflictType: 'missing-episode-group',
+        mediaId: curr.mediaId,
+        tmdbId: curr.tmdbId,
+        title: curr.title,
+        posterPath: curr.posterPath,
+        type: 'tv',
+        episodes: []
+      };
+    }
+    acc[curr.mediaId].episodes.push(curr);
+    return acc;
+  }, {})).sort((a, b) => b.episodes.length - a.episodes.length);
+
+  if (activeTab === 'missing-episode') {
+    filteredConflicts = groupedMissing;
+  }
 
   return (
     <div style={{ padding: '8px 0' }}>
@@ -204,7 +375,7 @@ const Conflicts = () => {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '24px', borderBottom: '1px solid var(--border-color)' }}>
         <button onClick={() => setActiveTab('all')} className={`filter-btn ${activeTab === 'all' ? 'active' : ''}`}>
-          All ({conflicts.length})
+          All ({conflicts.filter(c => c.conflictType !== 'missing-episode').length})
         </button>
         <button onClick={() => setActiveTab('title_mismatch')} className={`filter-btn ${activeTab === 'title_mismatch' ? 'active' : ''}`}>
           Title Mismatches ({getCounts('title_mismatch')})
@@ -217,6 +388,9 @@ const Conflicts = () => {
         </button>
         <button onClick={() => setActiveTab('no_files')} className={`filter-btn ${activeTab === 'no_files' ? 'active' : ''}`}>
           Orphaned Records ({getCounts('no_files')})
+        </button>
+        <button onClick={() => setActiveTab('missing-episode')} className={`filter-btn ${activeTab === 'missing-episode' ? 'active' : ''}`}>
+          Missing Episodes ({missingEpisodes.length})
         </button>
       </div>
 
@@ -262,17 +436,43 @@ const Conflicts = () => {
                     <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--overlay-medium)', color: 'var(--text-muted)' }}>
                       {isMovie ? 'Movie' : 'TV Show'}
                     </span>
-                    <span className="badge" style={{ fontSize: '0.75rem', padding: '2px 8px', ...getConflictBadgeStyle(item.conflictType) }}>
-                      {getConflictBadgeName(item.conflictType)}
-                    </span>
+                    {item.conflictType !== 'missing-episode-group' && (
+                      <span className="badge" style={{ fontSize: '0.75rem', padding: '2px 8px', ...getConflictBadgeStyle(item.conflictType) }}>
+                        {getConflictBadgeName(item.conflictType)}
+                      </span>
+                    )}
                   </div>
 
-                  <p style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: '500', marginBottom: '12px' }}>
-                    {item.message}
-                  </p>
+                  {item.conflictType === 'missing-episode-group' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', margin: 0 }}>
+                        <span style={{ color: '#ef4444', fontWeight: '600' }}>{item.episodes.length}</span> missing episodes.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button 
+                          onClick={() => openMissingGroupModal(item, false)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'fit-content' }}
+                        >
+                          View Missing Episodes
+                        </button>
+                        <button 
+                          onClick={() => handleIgnoreGroup(item)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'fit-content' }}
+                        >
+                          Ignore All
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: '500', marginBottom: '12px' }}>
+                      {item.message}
+                    </p>
+                  )}
 
                   {/* Associated Local Files */}
-                  {item.files.length > 0 && (
+                  {item.files?.length > 0 && (
                     <div style={{ background: 'rgba(0,0,0,0.15)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem', marginTop: '12px' }}>
                       <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '6px' }}>Linked Local Files:</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -295,7 +495,7 @@ const Conflicts = () => {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '160px', flexShrink: 0 }}>
-                  {item.conflictType !== 'no_files' && (
+                  {item.conflictType !== 'no_files' && item.conflictType !== 'missing-episode-group' && (
                     <button
                       onClick={() => openCorrectionModal(item)}
                       className="btn btn-secondary"
@@ -304,27 +504,118 @@ const Conflicts = () => {
                       <RefreshCw size={14} /> Re-match All
                     </button>
                   )}
-                  <button
-                    onClick={() => handleForceRemove(item)}
-                    className="btn"
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      color: 'var(--danger)',
-                      border: '1px solid rgba(239, 68, 68, 0.25)'
-                    }}
-                  >
-                    <Trash2 size={14} /> Force Remove
-                  </button>
+                  {item.conflictType !== 'missing-episode-group' && (
+                    <button
+                      onClick={() => handleForceRemove(item)}
+                      className="btn"
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        color: 'var(--danger)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)'
+                      }}
+                    >
+                      <Trash2 size={14} /> Force Remove
+                    </button>
+                  )}
+                  {item.conflictType === 'missing-episode-group' && (
+                    <>
+                      <button
+                        onClick={() => handleScanGroup(item)}
+                        className="btn btn-primary"
+                        style={{ padding: '8px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Search size={14} /> Scan Show
+                      </button>
+                      <button
+                        onClick={() => handleIgnoreGroup(item)}
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <X size={14} /> Ignore All
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Ignored Episodes Section */}
+      {!loading && activeTab === 'missing-episode' && ignoredEpisodes.length > 0 && (
+        <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+          <button 
+            onClick={() => setShowIgnoredEpisodes(!showIgnoredEpisodes)}
+            className="btn btn-secondary"
+            style={{ width: '100%', display: 'flex', justifyContent: 'space-between', padding: '12px 16px' }}
+          >
+            <span>Ignored Episodes ({ignoredEpisodes.length})</span>
+            <span>{showIgnoredEpisodes ? 'Hide' : 'Show'}</span>
+          </button>
+          
+          {showIgnoredEpisodes && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+              {groupedIgnored.map((item, idx) => (
+                <div key={idx} className="glass-panel" style={{ display: 'flex', gap: '20px', padding: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  {/* Poster */}
+                  <div style={{ width: '80px', height: '120px', borderRadius: '6px', overflow: 'hidden', background: 'var(--overlay-subtle)', border: '1px solid var(--border-color)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {item.posterPath ? (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w92${item.posterPath}`}
+                        alt={item.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div style={{ color: 'var(--text-muted)' }}>
+                        <Tv size={32} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Details */}
+                  <div style={{ flex: 1, minWidth: '240px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      <Link to={`/shows/${item.tmdbId}`} className="hover-underline" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)' }}>
+                        {item.title}
+                      </Link>
+                      <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--overlay-medium)', color: 'var(--text-muted)' }}>
+                        TV Show
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', margin: 0 }}>
+                        <span style={{ color: '#ef4444', fontWeight: '600' }}>{item.episodes.length}</span> ignored episodes.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button 
+                          onClick={() => openMissingGroupModal(item, true)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'fit-content' }}
+                        >
+                          View Ignored Episodes
+                        </button>
+                        <button 
+                          onClick={() => handleUnignoreGroup(item)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'fit-content' }}
+                        >
+                          Unignore All
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -448,6 +739,155 @@ const Conflicts = () => {
             <div className="custom-modal-footer">
               <button className="btn btn-secondary" onClick={closeCorrectionModal}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Missing Group Modal */}
+      {missingGroupTarget && (
+        <div className="custom-modal-backdrop" onClick={closeMissingGroupModal}>
+          <div className="custom-modal-content" style={{ width: '90%', maxWidth: '1000px', height: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div className="custom-modal-header">
+              <h3 style={{ margin: 0, fontWeight: '700' }}>{missingGroupTarget.isIgnored ? 'Ignored Episodes' : 'Missing Episodes'} - {missingGroupTarget.title}</h3>
+              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={closeMissingGroupModal}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="custom-modal-body" style={{ flex: 1, overflowY: 'auto', padding: 0 }}>
+              <div style={{ padding: '20px', display: 'flex', gap: '20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-main)' }}>
+                <div style={{ width: '100px', height: '150px', borderRadius: '8px', overflow: 'hidden', background: 'var(--overlay-subtle)', flexShrink: 0 }}>
+                  {missingGroupTarget.posterPath ? (
+                    <img src={`https://image.tmdb.org/t/p/w154${missingGroupTarget.posterPath}`} alt={missingGroupTarget.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}><Tv size={32} /></div>}
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <h2 style={{ margin: '0 0 12px 0', fontSize: '1.5rem', color: 'var(--text-main)' }}>{missingGroupTarget.title}</h2>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button onClick={() => handleScanGroup(missingGroupTarget)} className="btn btn-primary" style={{ padding: '8px 16px' }}>
+                      <RefreshCw size={16} /> Scan Show
+                    </button>
+                    {missingGroupTarget.isIgnored ? (
+                      <button onClick={() => handleUnignoreGroup(missingGroupTarget)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                        <RefreshCw size={16} /> Unignore All
+                      </button>
+                    ) : (
+                      <button onClick={() => handleIgnoreGroup(missingGroupTarget)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                        <Trash2 size={16} /> Ignore All
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+                {(() => {
+                  const activeEpisodes = missingGroupTarget.isIgnored 
+                    ? missingGroupTarget.episodes.filter(ep => ep.ignored) 
+                    : missingGroupTarget.episodes.filter(ep => !ep.ignored);
+                  
+                  if (activeEpisodes.length === 0 && !missingGroupTarget.isIgnored) {
+                    return <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>All missing episodes have been ignored.</div>;
+                  }
+
+                  // Group by season
+                  const bySeason = {};
+                  activeEpisodes.forEach(ep => {
+                    if (!bySeason[ep.season]) bySeason[ep.season] = [];
+                    bySeason[ep.season].push(ep);
+                  });
+
+                  return Object.keys(bySeason).sort((a,b) => Number(a) - Number(b)).map(season => {
+                    const eps = bySeason[season];
+                    const isExpanded = expandedSeasons[season];
+                    return (
+                      <div key={season} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', background: 'var(--overlay-subtle)' }}>
+                        <button 
+                          onClick={() => toggleSeason(season)}
+                          style={{ width: '100%', padding: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600', fontSize: '1.05rem', transition: 'background 0.2s' }}
+                          className="hover-bg"
+                        >
+                          <span>Season {season}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{eps.length} missing episode{eps.length > 1 ? 's' : ''}</span>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); missingGroupTarget.isIgnored ? handleUnignoreSeason(eps) : handleIgnoreSeason(eps); }}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                            >
+                              {missingGroupTarget.isIgnored ? 'Unignore Season' : 'Ignore Season'}
+                            </button>
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {eps.map(ep => (
+                              <div key={ep.id} style={{ display: 'flex', gap: '16px', padding: '16px', background: 'var(--overlay-medium)', borderRadius: '6px', border: '1px solid var(--border-color)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                {/* Episode Image */}
+                                <div style={{ width: '160px', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', background: 'rgba(0,0,0,0.3)', flexShrink: 0 }}>
+                                  {ep.epStillPath ? (
+                                    <img src={`https://image.tmdb.org/t/p/w300${ep.epStillPath}`} alt={ep.epName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}><Tv size={24}/></div>
+                                  )}
+                                </div>
+                                
+                                {/* Info */}
+                                <div style={{ flex: 1, minWidth: '200px' }}>
+                                  <div style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>
+                                    {ep.episode}. {ep.epName || `Episode ${ep.episode}`}
+                                  </div>
+                                  {ep.epOverview && (
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: '8px 0', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                      {ep.epOverview}
+                                    </p>
+                                  )}
+                                  <div style={{ display: 'flex', gap: '12px', marginTop: '12px', fontSize: '0.8rem' }}>
+                                    <a href={`https://www.themoviedb.org/tv/${ep.tmdbId}/season/${ep.season}/episode/${ep.episode}`} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <ExternalLink size={12}/> TMDB
+                                    </a>
+                                    <a href={`https://www.imdb.com/find/?q=${encodeURIComponent(ep.title)}`} target="_blank" rel="noreferrer" style={{ color: '#f5c518', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <ExternalLink size={12}/> IMDB Search
+                                    </a>
+                                  </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '100px' }}>
+                                  <button onClick={() => handleScanEpisode(ep)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.85rem', width: '100%' }}>
+                                    Scan
+                                  </button>
+                                  <button 
+                                    onClick={() => { 
+                                      if (missingGroupTarget.isIgnored) {
+                                        handleUnignoreEpisode(ep);
+                                      } else {
+                                        handleIgnoreEpisode(ep); 
+                                      }
+                                      setMissingGroupTarget(prev => ({...prev, episodes: prev.episodes.filter(e => e.id !== ep.id)}));
+                                    }} 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '6px 12px', fontSize: '0.85rem', width: '100%' }}
+                                  >
+                                    {missingGroupTarget.isIgnored ? 'Unignore' : 'Ignore'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            <div className="custom-modal-footer">
+              <button className="btn btn-secondary" onClick={closeMissingGroupModal}>
+                Close
               </button>
             </div>
           </div>

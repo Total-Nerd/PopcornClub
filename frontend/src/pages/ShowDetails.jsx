@@ -1745,7 +1745,7 @@ const ShowDetails = () => {
                     <button
                       className="btn btn-secondary"
                       onClick={() => {
-                        setCorrectingFile(null);
+                        setCorrectingFiles([]);
                         setCorrectTitle(showDetails?.name || '');
                         const airYear = showDetails?.first_air_date ? showDetails.first_air_date.substring(0, 4) : '';
                         setCorrectYear(airYear);
@@ -1757,13 +1757,13 @@ const ShowDetails = () => {
                     >
                       Correct Match
                     </button>
-                    <button className="btn btn-primary" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                    <button className="btn btn-primary" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFiles([]); setModalError(''); setSearchResults([]); }}>
                       Close
                     </button>
                   </>
                 ) : (
                   <>
-                    <button className="btn btn-secondary" onClick={() => { setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
+                    <button className="btn btn-secondary" onClick={() => { setCorrectMode(false); setCorrectingFiles([]); setModalError(''); setSearchResults([]); }}>
                       Cancel
                     </button>
                   </>
