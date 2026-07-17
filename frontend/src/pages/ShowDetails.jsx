@@ -838,7 +838,7 @@ const ShowDetails = () => {
                       </button>
                     )}
 
-                    <div style={{ position: 'relative' }}>
+                    <div className="info-dropdown-container show-dropdown-container">
                       <button
                         className="btn btn-secondary"
                         style={{
@@ -859,35 +859,39 @@ const ShowDetails = () => {
                         <span>{isShowInAnyList() ? 'Added to List' : 'Add to List'}</span>
                       </button>
                       {isListDropdownOpen && (
-                        <div style={{
-                          position: 'absolute',
-                          bottom: '48px',
-                          left: 0,
-                          zIndex: 10,
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                          padding: '8px',
-                          minWidth: '180px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px'
-                        }} onClick={e => e.stopPropagation()}>
-                          {lists.map(list => {
-                            const inList = listMemberships[list.id];
-                            return (
-                              <label key={list.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', padding: '4px', color: 'var(--text-main)' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={!!inList}
-                                  onChange={() => handleToggleList(list.id)}
-                                />
-                                {list.name}
-                              </label>
-                            );
-                          })}
-                        </div>
+                        <>
+                          <div className="info-dropdown-menu" onClick={e => e.stopPropagation()}>
+                            {lists.map(list => {
+                              const inList = listMemberships[list.id];
+                              return (
+                                <label key={list.id} className="info-dropdown-item" style={{ cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!inList}
+                                    onChange={() => handleToggleList(list.id)}
+                                  />
+                                  {list.name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <MobileBottomSheet title="Add to List" onClose={() => setIsListDropdownOpen(false)}>
+                            {lists.map(list => {
+                              const inList = listMemberships[list.id];
+                              return (
+                                <label key={list.id} className="mobile-sheet-option" style={{ cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!inList}
+                                    onChange={() => handleToggleList(list.id)}
+                                    style={{ transform: 'scale(1.2)' }}
+                                  />
+                                  {list.name}
+                                </label>
+                              );
+                            })}
+                          </MobileBottomSheet>
+                        </>
                       )}
                     </div>
 
