@@ -1130,6 +1130,66 @@ router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
   }
 });
 
+// GET TV episode details (merged with local watched/collected episode state and files)
+router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', async (req, res) => {
+  const { tmdbId, seasonNumber, episodeNumber } = req.params;
+  const parsedId = parseInt(tmdbId);
+  const parsedSeason = parseInt(seasonNumber);
+  const parsedEpisode = parseInt(episodeNumber);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}/episode/${parsedEpisode}`, systemSettings.tmdbApiKey, {
+      append_to_response: 'credits,images'
+    });
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        episodeCollections: { where: { userId: req.user.id, season: parsedSeason, episode: parsedEpisode } },
+        episodeWatchHistory: { where: { userId: req.user.id, season: parsedSeason, episode: parsedEpisode } },
+        localFiles: { where: { season: parsedSeason, episode: parsedEpisode } }
+      }
+    });
+
+    const isCollected = media ? media.episodeCollections.length > 0 : false;
+    const isWatched = media ? media.episodeWatchHistory.length > 0 : false;
+    
+    // Check if any file exists on disk
+    let localFile = null;
+    if (media && media.localFiles.length > 0) {
+      const fs = require('fs');
+      const validFiles = media.localFiles.filter(f => fs.existsSync(f.path));
+      if (validFiles.length > 0) {
+        localFile = validFiles[0];
+      }
+    }
+
+    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
+    const tvCacheKey = `/3/tv/${parsedId}`;
+    const tvCache = await prisma.tMDBCache.findUnique({
+      where: { key: tvCacheKey }
+    });
+    const originCountries = tvCache?.data?.origin_country || [];
+    const airDateTime = getAiringDateTime(tmdbData.air_date, originCountries, parsedId);
+
+    res.json({
+      ...tmdbData,
+      airDateTime,
+      isCollected,
+      isWatched,
+      localFile
+    });
+  } catch (error) {
+    console.error('Failed to fetch episode details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch episode details' });
+  }
+});
+
 // Toggle episode watch status
 router.post('/episode/watch', async (req, res) => {
   const { tmdbId, season, episode, watched, title, posterPath, watchedAt } = req.body;

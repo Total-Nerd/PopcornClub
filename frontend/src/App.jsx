@@ -12,6 +12,7 @@ import MyMovies from './pages/MyMovies';
 import Lists from './pages/Lists';
 import SettingsPage from './pages/SettingsPage';
 import ShowDetails from './pages/ShowDetails';
+import EpisodeDetails from './pages/EpisodeDetails';
 import MovieDetails from './pages/MovieDetails';
 import PersonDetails from './pages/PersonDetails';
 import WatchHistory from './pages/WatchHistory';
@@ -38,6 +39,7 @@ const AppRoutes = () => {
         <Route path="discover" element={<Search />} />
         <Route path="shows" element={<MyShows />} />
         <Route path="shows/:tmdbId" element={<ShowDetails />} />
+        <Route path="shows/:tmdbId/season/:seasonNumber/episode/:episodeNumber" element={<EpisodeDetails />} />
         <Route path="movies" element={<MyMovies />} />
         <Route path="movies/:tmdbId" element={<MovieDetails />} />
         <Route path="person/:personId" element={<PersonDetails />} />

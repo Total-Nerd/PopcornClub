@@ -1279,19 +1279,23 @@ const ShowDetails = () => {
                         >
                           {/* Episode Thumbnail */}
                           <div className="episode-thumbnail">
-                            {ep.still_path ? (
-                              <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} alt={ep.name} loading="lazy" />
-                            ) : (
-                              <div className="episode-thumbnail-fallback">
-                                <span>No Image</span>
-                              </div>
-                            )}
+                            <Link to={`/shows/${tmdbId}/season/${activeSeason}/episode/${ep.episode_number}`}>
+                              {ep.still_path ? (
+                                <img src={`https://image.tmdb.org/t/p/w300${ep.still_path}`} alt={ep.name} loading="lazy" />
+                              ) : (
+                                <div className="episode-thumbnail-fallback">
+                                  <span>No Image</span>
+                                </div>
+                              )}
+                            </Link>
                           </div>
 
                           <div className="episode-card-body">
                             <div className="episode-card-header">
                               <h4 style={{ fontSize: '0.95rem', fontWeight: '600' }}>
-                                Ep {ep.episode_number}. {ep.name}
+                                <Link to={`/shows/${tmdbId}/season/${activeSeason}/episode/${ep.episode_number}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                                  Ep {ep.episode_number}. {ep.name}
+                                </Link>
                               </h4>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 {ep.airDateTime ? (
