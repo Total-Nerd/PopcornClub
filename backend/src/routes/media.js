@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const prisma = require('../prismaClient');
+const fs = require('fs');
 const { authenticateToken } = require('../middleware/auth');
 const { fetchTMDB } = require('../utils/tmdb');
 const { resolveDuration } = require('../utils/durationResolver');
@@ -1602,19 +1603,34 @@ router.post('/correct', async (req, res) => {
     });
 
     if (newMedia) {
+      const localFiles = await prisma.localFile.findMany({ where: { mediaId: oldMedia.id } });
+      const validIds = [];
+      for (const f of localFiles) {
+        if (!fs.existsSync(f.path)) {
+          console.log(`[Correct] File no longer exists on disk, skipping and deleting record: ${f.path}`);
+          await prisma.localFile.delete({ where: { id: f.id } });
+        } else {
+          validIds.push(f.id);
+        }
+      }
+
       if (newMedia.id === oldMedia.id) {
-        await prisma.localFile.updateMany({
-          where: { mediaId: oldMedia.id },
-          data: { manuallyCorrected: true }
-        });
+        if (validIds.length > 0) {
+          await prisma.localFile.updateMany({
+            where: { id: { in: validIds } },
+            data: { manuallyCorrected: true }
+          });
+        }
         return res.json({ success: true, message: 'Media match confirmed and all files marked as corrected.', media: newMedia });
       }
 
       // Merge: move oldMedia's LocalFiles to newMedia
-      await prisma.localFile.updateMany({
-        where: { mediaId: oldMedia.id },
-        data: { mediaId: newMedia.id, manuallyCorrected: true }
-      });
+      if (validIds.length > 0) {
+        await prisma.localFile.updateMany({
+          where: { id: { in: validIds } },
+          data: { mediaId: newMedia.id, manuallyCorrected: true }
+        });
+      }
 
       // Move Collections
       const oldColls = await prisma.collection.findMany({ where: { mediaId: oldMedia.id } });
@@ -1747,10 +1763,22 @@ router.post('/correct', async (req, res) => {
       });
       
       // Mark all files linked to this media as manually corrected
-      await prisma.localFile.updateMany({
-        where: { mediaId: oldMedia.id },
-        data: { manuallyCorrected: true }
-      });
+      const localFiles = await prisma.localFile.findMany({ where: { mediaId: oldMedia.id } });
+      const validIds = [];
+      for (const f of localFiles) {
+        if (!fs.existsSync(f.path)) {
+          console.log(`[Correct] File no longer exists on disk, skipping and deleting record: ${f.path}`);
+          await prisma.localFile.delete({ where: { id: f.id } });
+        } else {
+          validIds.push(f.id);
+        }
+      }
+      if (validIds.length > 0) {
+        await prisma.localFile.updateMany({
+          where: { id: { in: validIds } },
+          data: { manuallyCorrected: true }
+        });
+      }
 
       // Keep existing episode collections, watch history, and logs so they follow the metadata correction
 
@@ -1875,6 +1903,12 @@ router.post('/correct-file', async (req, res) => {
 
     // Process all files
     for (const file of filesToProcess) {
+      if (!fs.existsSync(file.path)) {
+        console.log(`[Correct File] File no longer exists on disk, skipping and deleting record: ${file.path}`);
+        await prisma.localFile.delete({ where: { id: file.id } });
+        continue;
+      }
+
       const oldMediaId = file.mediaId;
       const oldMedia = file.media;
       
