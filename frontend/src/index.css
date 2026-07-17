@@ -3372,7 +3372,8 @@ select option {
   gap: 16px;
   padding: 8px 16px;
   border-radius: 12px;
-  width: fit-content;
+  /* width: fit-content; */
+  justify-content: space-between;
 }
 
 .calendar-navigation-controls {
@@ -3431,7 +3432,6 @@ select option {
 @media (max-width: 768px) {
   .calendar-navigation-container {
     width: 100% !important;
-    justify-content: space-between;
     border-radius: 0 !important;
     border-left: none !important;
     border-right: none !important;
