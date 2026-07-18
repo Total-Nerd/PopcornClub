@@ -237,6 +237,161 @@
   --success-bg-solid: #02130d;
 }
 
+
+.theme-colourful {
+  --bg-dark: #0f0c29;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --text-main: #ffffff;
+  --text-muted: #a6b1e1;
+  --border-color: rgba(255, 0, 204, 0.4);
+  --bg-input: rgba(36, 36, 62, 0.85);
+  --overlay-subtle: rgba(0, 255, 255, 0.15);
+  --overlay-medium: rgba(0, 255, 255, 0.25);
+  --overlay-strong: rgba(0, 255, 255, 0.4);
+
+  --loading-overlay-bg: linear-gradient(135deg, rgba(15, 12, 41, 0.8) 0%, rgba(48, 43, 99, 0.8) 100%);
+  --loading-card-bg: rgba(255, 0, 204, 0.2);
+
+  --accent-bg: rgba(0, 255, 255, 0.2);
+  --accent-border: #00ffff;
+  --accent: #00ffff;
+  --accent-hover: #00cccc;
+  --text-h: #ff00cc;
+  --social-bg: var(--overlay-subtle);
+  --border: var(--border-color);
+  --shadow: 0 4px 20px rgba(255, 0, 204, 0.4);
+
+  --warning-color: #fffc00;
+  --warning-bg: rgba(255, 252, 0, 0.2);
+  --warning-border: rgba(255, 252, 0, 0.5);
+  --warning-border-hover: rgba(255, 252, 0, 0.8);
+  --danger-bg-subtle: rgba(255, 0, 85, 0.2);
+  --danger-border-subtle: #ff0055;
+  --danger-bg-subtle-hover: rgba(255, 0, 85, 0.3);
+  --success-bg-subtle: rgba(0, 255, 170, 0.2);
+  --success-border-subtle: #00ffaa;
+  --info-bg: rgba(0, 255, 255, 0.15);
+  --notification-bg: rgba(255, 0, 204, 0.4);
+
+  --code-text-color: #fffc00;
+  --rating-color: #fffc00;
+  --dot-tv: #00ffff;
+  --dot-movie: #ff00cc;
+  --dot-watched: #00ffaa;
+
+  --text-on-accent: #000000;
+  --text-on-image: #ffffff;
+  --disabled-btn-text: rgba(255, 255, 255, 0.4);
+  --disabled-btn-bg: rgba(255, 255, 255, 0.1);
+  --bg-card-solid: #24243e;
+  --success-bg-solid: #002211;
+  
+  --backdrop-bg: rgba(15, 12, 41, 0.75);
+  --mobile-backdrop-bg: rgba(15, 12, 41, 0.7);
+  --header-nav-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-profile-bg: rgba(0, 255, 255, 0.1);
+  --rating-overlay-bg: rgba(15, 12, 41, 0.9);
+  --tooltip-bg: rgba(36, 36, 62, 0.95);
+  --tooltip-border: #00ffff;
+  --tooltip-text: #ffffff;
+  --mobile-sheet-handle-bg: #ff00cc;
+  --backdrop-btn-bg: rgba(255, 0, 204, 0.4);
+  --backdrop-btn-bg-hover: rgba(255, 0, 204, 0.7);
+  
+  --plex-brand: #ff00cc;
+  --plex-brand-hover: #ff33dd;
+  --plex-brand-subtle: rgba(255, 0, 204, 0.2);
+  --plex-brand-border: #ff00cc;
+  --plex-brand-border-active: #ff33dd;
+  --plex-brand-overlay: rgba(255, 0, 204, 0.1);
+  --plex-shadow-glow: rgba(255, 0, 204, 0.3);
+  --plex-shadow-glow-active: rgba(255, 0, 204, 0.6);
+  --plex-pulse-shadow: rgba(255, 0, 204, 0.8);
+  --plex-pulse-shadow-empty: rgba(255, 0, 204, 0);
+  --plex-paused-border: rgba(166, 177, 225, 0.3);
+}
+
+.theme-colourful body {
+  background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%) fixed;
+}
+
+.theme-retro {
+  --bg-dark: #050505;
+  --bg-card: rgba(0, 25, 0, 0.8);
+  --text-main: #33ff00;
+  --text-muted: #22aa00;
+  --border-color: #115500;
+  --bg-input: rgba(0, 20, 0, 0.85);
+  --overlay-subtle: rgba(51, 255, 0, 0.05);
+  --overlay-medium: rgba(51, 255, 0, 0.1);
+  --overlay-strong: rgba(51, 255, 0, 0.2);
+
+  --loading-overlay-bg: linear-gradient(135deg, rgba(0,0,0, 0.9) 0%, rgba(0, 20, 0, 0.9) 100%);
+  --loading-card-bg: rgba(0, 40, 0, 0.6);
+
+  --accent-bg: rgba(51, 255, 0, 0.15);
+  --accent-border: rgba(51, 255, 0, 0.5);
+  --accent: #33ff00;
+  --accent-hover: #66ff33;
+  --text-h: var(--text-main);
+  --social-bg: var(--overlay-subtle);
+  --border: var(--border-color);
+  --shadow: 0 4px 12px rgba(51, 255, 0, 0.1);
+
+  --warning-color: #ffcc00;
+  --warning-bg: rgba(255, 204, 0, 0.15);
+  --warning-border: rgba(255, 204, 0, 0.3);
+  --warning-border-hover: rgba(255, 204, 0, 0.6);
+  --danger-bg-subtle: rgba(255, 0, 0, 0.15);
+  --danger-border-subtle: rgba(255, 0, 0, 0.4);
+  --danger-bg-subtle-hover: rgba(255, 0, 0, 0.5);
+  --success-bg-subtle: rgba(51, 255, 0, 0.15);
+  --success-border-subtle: rgba(51, 255, 0, 0.4);
+  --info-bg: rgba(51, 255, 0, 0.05);
+  --notification-bg: rgba(51, 255, 0, 0.2);
+
+  --code-text-color: #66ff33;
+  --rating-color: #33ff00;
+  --dot-tv: #33ff00;
+  --dot-movie: #22aa00;
+  --dot-watched: #33ff00;
+
+  --text-on-accent: #000000;
+  --text-on-image: #33ff00;
+  --disabled-btn-text: rgba(51, 255, 0, 0.4);
+  --disabled-btn-bg: rgba(0, 20, 0, 0.5);
+  --bg-card-solid: #001100;
+  --success-bg-solid: #002200;
+  
+  --backdrop-bg: rgba(0, 0, 0, 0.85);
+  --mobile-backdrop-bg: rgba(0, 0, 0, 0.85);
+  --header-nav-bg: rgba(0, 20, 0, 0.8);
+  --sidebar-profile-bg: rgba(0, 20, 0, 0.6);
+  --rating-overlay-bg: rgba(0, 0, 0, 0.95);
+  --tooltip-bg: rgba(0, 20, 0, 0.95);
+  --tooltip-border: #33ff00;
+  --tooltip-text: #33ff00;
+  --mobile-sheet-handle-bg: rgba(51, 255, 0, 0.4);
+  --backdrop-btn-bg: rgba(0, 40, 0, 0.8);
+  --backdrop-btn-bg-hover: rgba(51, 255, 0, 0.2);
+  
+  --plex-brand: #33ff00;
+  --plex-brand-hover: #66ff33;
+  --plex-brand-subtle: rgba(51, 255, 0, 0.15);
+  --plex-brand-border: rgba(51, 255, 0, 0.4);
+  --plex-brand-border-active: rgba(51, 255, 0, 0.8);
+  --plex-brand-overlay: rgba(51, 255, 0, 0.1);
+  --plex-shadow-glow: rgba(51, 255, 0, 0.2);
+  --plex-shadow-glow-active: rgba(51, 255, 0, 0.5);
+  --plex-pulse-shadow: rgba(51, 255, 0, 0.7);
+  --plex-pulse-shadow-empty: rgba(51, 255, 0, 0);
+  --plex-paused-border: rgba(17, 136, 0, 0.4);
+}
+
+.theme-retro body, .theme-retro button, .theme-retro input, .theme-retro select, .theme-retro textarea {
+  font-family: 'Courier New', Courier, monospace;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -3531,3 +3686,52 @@ select option {
   display: inline-flex;
   align-items: center;
 }
+
+.theme-colourful .sticky-header-container {
+  background: linear-gradient(to bottom, rgba(15, 12, 41, 0.9) 0%, rgba(15, 12, 41, 0) 100%);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 0, 204, 0.2);
+}
+
+.theme-colourful .glass-panel,
+.theme-colourful .media-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 8px 32px 0 rgba(255, 0, 204, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.theme-colourful .btn-primary {
+  background: linear-gradient(135deg, #ff00cc 0%, #3333ff 100%);
+  border: none;
+}
+
+.theme-colourful .btn-primary:hover {
+  background: linear-gradient(135deg, #ff33dd 0%, #5555ff 100%);
+}
+
+
+.theme-retro .glass-panel,
+.theme-retro .input-field,
+.theme-retro .btn,
+.theme-retro .media-card,
+.theme-retro .plex-session-widget-container,
+.theme-retro .plex-media-poster,
+.theme-retro .calendar-week-column,
+.theme-retro .calendar-month-day,
+.theme-retro .search-history-dropdown,
+.theme-retro .type-toggle-group,
+.theme-retro .type-toggle-btn,
+.theme-retro .display-options-btn,
+.theme-retro .media-rating-overlay,
+.theme-retro .calendar-navigation-controls,
+.theme-retro .settings-sidebar,
+.theme-retro .settings-menu-item {
+  border-radius: 0 !important;
+}
+
+.theme-retro .app-container {
+  border: 2px solid #115500;
+  margin: 4px;
+  min-height: calc(100vh - 8px);
+}
+

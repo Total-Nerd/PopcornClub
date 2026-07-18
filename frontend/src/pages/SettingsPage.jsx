@@ -1541,6 +1541,8 @@ const SettingsPage = () => {
                     <option value="dark">Dark Mode (Sleek Slate)</option>
                     <option value="light">Light Mode (Clean Harmonious)</option>
                     <option value="oled">OLED Mode (Pure Ink Black)</option>
+                    <option value="colourful">Colourful (Vibrant & Bold)</option>
+                    <option value="retro">Retro (Vintage Terminal)</option>
                   </select>
                 </div>
               </div>
