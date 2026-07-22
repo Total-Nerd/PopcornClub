@@ -35,8 +35,8 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
-      - G:\Movies:/movies
-      - G:\TV Shows:/tv
+      - ${MOVIES_DIR}:/movies:ro
+      - ${TV_SHOWS_DIR}:/tv:ro
 
   frontend:
     build:
