@@ -33,9 +33,9 @@ services:
     depends_on:
       - db
     volumes:
-      - ./backend:/app
-      - /app/node_modules
       - ${MOVIES_DIR}:/movies:ro
+      - ${MOVIES_4K_DIR}:/4k_movies:ro
+      - ${DOCS_DIR}:/documentaries:ro
       - ${TV_SHOWS_DIR}:/tv:ro
 
   frontend:
