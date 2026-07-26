@@ -2,12 +2,35 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../api';
 import { 
   RefreshCw, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, HardDrive, 
-  Download, Wifi, Folder, FolderOpen, Trash2, Play, ChevronRight, Check, X, 
+  Download, Wifi, Folder, FolderOpen, Trash2, Play, ChevronRight, Check, X, XCircle, 
   Palette, User, UserPlus, LogOut, Copy, ShieldAlert, Key, Lock, Mail
 } from 'lucide-react';
 import { syncCalendarOffline, getCachedEventsCount, registerInstallListener, triggerInstallPrompt } from '../utils/pwaHelper';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
+
+const FolderScanIcon = ({ onCancel }) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onCancel}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: 'none',
+        border: 'none',
+        color: hover ? '#ef4444' : 'var(--accent)',
+        cursor: 'pointer',
+        padding: '6px',
+        display: 'flex',
+        alignItems: 'center'
+      }}
+      title="Cancel scanning this folder"
+    >
+      {hover ? <XCircle size={16} /> : <RefreshCw size={16} className="spin" />}
+    </button>
+  );
+};
 
 const SettingsPage = () => {
   const { showConfirm } = useModal();
@@ -36,6 +59,8 @@ const SettingsPage = () => {
 
   // System states (Admin only)
   const [tmdbApiKey, setTmdbApiKey] = useState(user?.tmdbApiKey || '');
+  const [tvNamingFormat, setTvNamingFormat] = useState(user?.tvNamingFormat || '');
+  const [movieNamingFormat, setMovieNamingFormat] = useState(user?.movieNamingFormat || '');
 
   // User management states (Admin only)
   const [usersList, setUsersList] = useState([]);
@@ -86,6 +111,8 @@ const SettingsPage = () => {
       setTraktClientId(user.traktClientId || '');
       setAvatarPreview(user.avatarPath || '');
       setTmdbApiKey(user.tmdbApiKey || '');
+      setTvNamingFormat(user.tvNamingFormat || '');
+      setMovieNamingFormat(user.movieNamingFormat || '');
     }
   }, [user]);
 
@@ -282,8 +309,9 @@ const SettingsPage = () => {
     setIsError(false);
     setMessage('');
     try {
-      const res = await api.put('/settings/system', { tmdbApiKey });
+      const res = await api.put('/settings/system', { tmdbApiKey, tvNamingFormat, movieNamingFormat });
       if (res.data.success) {
+        setUser({ ...user, tmdbApiKey: res.data.tmdbApiKey, tvNamingFormat: res.data.tvNamingFormat, movieNamingFormat: res.data.movieNamingFormat });
         setMessage('Global system settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       }
@@ -446,6 +474,15 @@ const SettingsPage = () => {
       setScannerStatus(prev => ({ ...prev, isScanning: true, currentProgress: 'Starting folder scan...' }));
     } catch (err) {
       console.error('Failed to trigger folder scan', err);
+    }
+  };
+
+  const handleCancelFolderScan = async () => {
+    try {
+      await api.post('/folders/scan/cancel');
+      setScannerStatus(prev => ({ ...prev, currentProgress: 'Cancelling folder scan...' }));
+    } catch (err) {
+      console.error('Failed to cancel folder scan', err);
     }
   };
 
@@ -1306,8 +1343,36 @@ const SettingsPage = () => {
                   </small>
                 </div>
 
+                <div className="input-group">
+                  <label>TV Show Naming Format</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={tvNamingFormat}
+                    onChange={e => setTvNamingFormat(e.target.value)}
+                    placeholder="e.g. G:\TV Shows\${title}\Season ${season}\${title} - s${season}e${episode}"
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Javascript template literal format. Available variables: title, year, season, episode, tmdbId, resolution, videoCodec, genre.
+                  </small>
+                </div>
+
+                <div className="input-group">
+                  <label>Movie Naming Format</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={movieNamingFormat}
+                    onChange={e => setMovieNamingFormat(e.target.value)}
+                    placeholder="e.g. G:\Movies\${title} [${year}]\${title} [${year}]"
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Javascript template literal format.
+                  </small>
+                </div>
+
                 <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-                  Save Global Key
+                  Save Global Configuration
                 </button>
               </form>
 
@@ -1386,10 +1451,10 @@ const SettingsPage = () => {
                                 borderRadius: '4px',
                                 fontSize: '0.7rem',
                                 fontWeight: '600',
-                                background: f.type === 'movie' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                                color: f.type === 'movie' ? '#34d399' : '#60a5fa'
+                                background: f.type === 'movie' ? 'rgba(16, 185, 129, 0.15)' : f.type === 'downloads' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                color: f.type === 'movie' ? '#34d399' : f.type === 'downloads' ? '#fbbf24' : '#60a5fa'
                               }}>
-                                {f.type === 'movie' ? 'Movies' : 'TV Shows'}
+                                {f.type === 'movie' ? 'Movies' : f.type === 'downloads' ? 'Downloads' : 'TV Shows'}
                               </span>
                               <span
                                 onClick={() => handleToggleWatch(f.id, f.watch)}
@@ -1410,21 +1475,25 @@ const SettingsPage = () => {
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              onClick={() => handleScanFolder(f.id)}
-                              disabled={scannerStatus.isScanning}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--accent)',
-                                cursor: scannerStatus.isScanning ? 'default' : 'pointer',
-                                padding: '6px',
-                                opacity: scannerStatus.isScanning ? 0.5 : 0.8
-                              }}
-                              title="Scan folder"
-                            >
-                              <Play size={16} />
-                            </button>
+                            {scannerStatus.currentScanningFolderId === f.id ? (
+                              <FolderScanIcon onCancel={handleCancelFolderScan} />
+                            ) : (
+                              <button
+                                onClick={() => handleScanFolder(f.id)}
+                                disabled={scannerStatus.isScanning}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--accent)',
+                                  cursor: scannerStatus.isScanning ? 'default' : 'pointer',
+                                  padding: '6px',
+                                  opacity: scannerStatus.isScanning ? 0.5 : 0.8
+                                }}
+                                title="Scan folder"
+                              >
+                                <Play size={16} />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteFolder(f.id)}
                               style={{
@@ -1489,6 +1558,7 @@ const SettingsPage = () => {
                       >
                         <option value="movie">Movies</option>
                         <option value="tv">TV Shows</option>
+                        <option value="downloads">Downloads (Staging)</option>
                       </select>
                     </div>
 

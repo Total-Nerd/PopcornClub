@@ -24,6 +24,7 @@ const listsRoutes = require('./routes/lists');
 const calendarRoutes = require('./routes/calendar');
 const foldersRoutes = require('./routes/folders');
 const statsRoutes = require('./routes/stats');
+const downloadsRoutes = require('./routes/downloads');
 const { initFolderScanner } = require('./utils/folderScanner');
 const { seedWatchHistoryLogs, backfillMediaGenres } = require('./utils/historyMigration');
 
@@ -39,6 +40,7 @@ app.use('/api/lists', listsRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/folders', foldersRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/downloads', downloadsRoutes);
 
 const plexRoutes = require('./routes/plex');
 const http = require('http');

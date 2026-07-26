@@ -216,6 +216,8 @@ router.get('/me', authenticateToken, async (req, res) => {
     resData.traktClientId = systemSettings.traktClientId || '';
     resData.plexGlobalWebhookToken = systemSettings.plexGlobalWebhookToken || '';
     resData.plexGlobalLastWebhookAt = systemSettings.plexGlobalLastWebhookAt || null;
+    resData.tvNamingFormat = systemSettings.tvNamingFormat || '';
+    resData.movieNamingFormat = systemSettings.movieNamingFormat || '';
   }
 
   res.json(resData);

@@ -120,14 +120,19 @@ router.put('/system', async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Only admins can modify system settings' });
   }
-  const { tmdbApiKey } = req.body;
+  const { tmdbApiKey, tvNamingFormat, movieNamingFormat } = req.body;
   try {
+    const updateData = {};
+    if (tmdbApiKey !== undefined) updateData.tmdbApiKey = tmdbApiKey;
+    if (tvNamingFormat !== undefined) updateData.tvNamingFormat = tvNamingFormat;
+    if (movieNamingFormat !== undefined) updateData.movieNamingFormat = movieNamingFormat;
+
     const updated = await prisma.systemSettings.upsert({
       where: { id: 1 },
-      update: { tmdbApiKey },
-      create: { id: 1, tmdbApiKey }
+      update: updateData,
+      create: { id: 1, ...updateData }
     });
-    res.json({ success: true, tmdbApiKey: updated.tmdbApiKey });
+    res.json({ success: true, tmdbApiKey: updated.tmdbApiKey, tvNamingFormat: updated.tvNamingFormat, movieNamingFormat: updated.movieNamingFormat });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update system settings' });
   }

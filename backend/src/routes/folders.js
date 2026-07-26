@@ -176,8 +176,8 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Folder path and type are required' });
   }
 
-  if (type !== 'movie' && type !== 'tv') {
-    return res.status(400).json({ error: 'Invalid folder type. Must be "movie" or "tv"' });
+  if (type !== 'movie' && type !== 'tv' && type !== 'downloads') {
+    return res.status(400).json({ error: 'Invalid folder type. Must be "movie", "tv", or "downloads"' });
   }
 
   // Resolve and normalize path
@@ -331,11 +331,23 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/folders/scan - Trigger manual full scan
 router.post('/scan', async (req, res) => {
-  scanAllFolders()
-    .then(() => console.log('[Folders Route] Manual full scan complete.'))
-    .catch(err => console.error('[Folders Route] Manual scan failed:', err));
+  try {
+    scanAllFolders();
+    res.json({ success: true, message: 'Scan initiated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to start scan' });
+  }
+});
 
-  res.json({ success: true, message: 'Scan started in the background.' });
+// POST /api/folders/scan/cancel - Cancel current folder scan
+router.post('/scan/cancel', async (req, res) => {
+  try {
+    const { cancelCurrentScan } = require('../utils/folderScanner');
+    cancelCurrentScan();
+    res.json({ success: true, message: 'Scan cancelled for current folder' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel scan' });
+  }
 });
 
 // POST /api/folders/:id/scan - Trigger manual scan for a specific folder

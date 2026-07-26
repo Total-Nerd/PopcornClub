@@ -10,6 +10,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let isScanning = false;
 let lastScanTime = null;
 let currentProgress = 'Idle';
+let currentScanningFolderId = null;
+let cancelCurrentScanFlag = false;
 
 // Map to store active Chokidar watchers
 const activeWatchers = new Map();
@@ -45,8 +47,11 @@ function parseFilename(filePath) {
     tmdbId = parseInt(tmdbMatch[1], 10);
   }
 
-  // Determine if it's a TV show or Movie based on path segments
-  const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/');
+  // Determine if it's a TV show or Movie based on path segments or filename patterns
+  const tvMatch1 = nameWithoutExt.match(/s(\d{1,2})e(\d{1,2})(?:[-_]*e?(\d{1,2}))?\b/i);
+  const tvMatch2 = nameWithoutExt.match(/(\d{1,2})x(\d{1,2})(?:[-_]*x?(\d{1,2}))?\b/i);
+  
+  const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/') || !!tvMatch1 || !!tvMatch2;
 
   if (isTvPath) {
     const parts = normalizedPath.split('/');
@@ -234,6 +239,51 @@ async function processSingleFile(filePath, folderType, apiKey) {
     if (!parsed) return null;
 
     console.log(`[Folder Scanner] Resolving file: "${path.basename(filePath)}" parsed as:`, parsed);
+
+    if (folderType === 'downloads') {
+      const existingStaging = await prisma.stagingItem.findUnique({ where: { path: filePath } });
+      let tmdbData = null;
+      if (parsed.tmdbId) {
+        try {
+          tmdbData = await fetchTMDB(`/3/${parsed.type}/${parsed.tmdbId}`, apiKey);
+        } catch (err) {
+          console.warn(`[Folder Scanner] Failed to fetch TMDB details directly for ID ${parsed.tmdbId}:`, err.message);
+        }
+      }
+      if (!tmdbData) {
+        if (parsed.type === 'tv') {
+          const searchParams = { query: parsed.title };
+          if (parsed.year) searchParams.first_air_date_year = parsed.year;
+          const searchRes = await fetchTMDB('/3/search/tv', apiKey, searchParams);
+          if (searchRes.results && searchRes.results.length > 0) {
+            tmdbData = searchRes.results[0];
+          }
+        } else {
+          const searchParams = { query: parsed.title };
+          if (parsed.year) searchParams.year = parsed.year;
+          const searchRes = await fetchTMDB('/3/search/movie', apiKey, searchParams);
+          if (searchRes.results && searchRes.results.length > 0) {
+            tmdbData = searchRes.results[0];
+          }
+        }
+      }
+
+      const data = {
+        filename: path.basename(filePath),
+        parsedType: parsed.type,
+        parsedTitle: parsed.title,
+        parsedYear: parsed.year,
+        parsedSeason: parsed.type === 'tv' ? parsed.season : null,
+        parsedEpisode: parsed.type === 'tv' ? parsed.episode : null,
+        tmdbId: tmdbData ? tmdbData.id : null,
+      };
+
+      if (existingStaging) {
+        return prisma.stagingItem.update({ where: { id: existingStaging.id }, data });
+      } else {
+        return prisma.stagingItem.create({ data: { path: filePath, status: 'pending', ...data } });
+      }
+    }
 
     // 2. Check if path already in database. If so, refresh lastSeen and update metadata if needed.
     const existing = await prisma.localFile.findUnique({ where: { path: filePath } });
@@ -428,11 +478,13 @@ async function processSingleFile(filePath, folderType, apiKey) {
 
 // Perform full scan on a single folder
 async function scanFolder(folderRecord, apiKey) {
-  const { path: folderPath, type: folderType } = folderRecord;
+  const { id: folderId, path: folderPath, type: folderType } = folderRecord;
+  currentScanningFolderId = folderId;
   console.log(`[Folder Scanner] Scanning folder: ${folderPath} (${folderType})`);
 
   if (!fs.existsSync(folderPath)) {
     console.error(`[Folder Scanner] Path does not exist on disk: ${folderPath}`);
+    currentScanningFolderId = null;
     return;
   }
 
@@ -447,6 +499,12 @@ async function scanFolder(folderRecord, apiKey) {
   let count = 0;
   let consecutiveErrors = 0;
   for (const filePath of videoFiles) {
+    if (cancelCurrentScanFlag) {
+      console.log(`[Folder Scanner] Scan cancelled for ${folderPath}`);
+      cancelCurrentScanFlag = false; // Reset flag
+      break;
+    }
+
     currentProgress = `Scanning folder "${folderPath}": processing ${++count}/${videoFiles.length} (${path.basename(filePath)})`;
     
     // Check database to see if we already have it to avoid TMDB lookup and delay
@@ -504,6 +562,8 @@ async function scanFolder(folderRecord, apiKey) {
       }
     }
   }
+
+  currentScanningFolderId = null;
 }
 
 // Main function to run full scan of all configured folders
@@ -531,6 +591,10 @@ async function scanAllFolders() {
     }
 
     lastScanTime = new Date();
+    await prisma.systemSettings.updateMany({
+      data: { lastScanTime }
+    });
+
     currentProgress = 'Idle';
     console.log('[Folder Scanner] Scanning completed successfully.');
   } catch (err) {
@@ -563,6 +627,10 @@ async function scanSingleFolder(folderRecord) {
     await scanFolder(folderRecord, apiKey);
 
     lastScanTime = new Date();
+    await prisma.systemSettings.updateMany({
+      data: { lastScanTime }
+    });
+
     currentProgress = 'Idle';
     console.log(`[Folder Scanner] Scan of folder ${folderRecord.path} completed successfully.`);
   } catch (err) {
@@ -782,6 +850,15 @@ async function selfHealMismatches() {
 // Initializer function for server startup
 async function initFolderScanner() {
   console.log('[Folder Scanner] Initializing scanner system...');
+
+  try {
+    const settings = await prisma.systemSettings.findFirst();
+    if (settings && settings.lastScanTime) {
+      lastScanTime = settings.lastScanTime;
+    }
+  } catch (err) {
+    console.error('[Folder Scanner] Failed to load lastScanTime:', err.message);
+  }
   
   // Clean up any existing mismatched file type references first
   await selfHealMismatches();
@@ -806,6 +883,7 @@ async function initFolderScanner() {
   // Auto-configure default folders if they exist on filesystem but not in DB
   try {
     const defaults = [
+      { path: '/downloads', type: 'downloads', watch: true },
       { path: '/movies', type: 'movie', watch: true },
       { path: '/tv', type: 'tv', watch: true }
     ];
@@ -1033,9 +1111,13 @@ module.exports = {
   startWatcher,
   stopWatcher,
   scanMediaItem,
+  cancelCurrentScan: () => {
+    cancelCurrentScanFlag = true;
+  },
   getStatus: () => ({
     isScanning,
     lastScanTime,
-    currentProgress
+    currentProgress,
+    currentScanningFolderId
   })
 };

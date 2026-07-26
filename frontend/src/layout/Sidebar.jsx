@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2 } from 'lucide-react';
+import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, FolderSync } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { AuthContext } from '../context/AuthContext';
 
@@ -49,10 +49,16 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <span>Stats</span>
         </NavLink>
         {user?.role === 'admin' && (
-          <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
-            <AlertTriangle size={20} />
-            <span>Conflicts</span>
-          </NavLink>
+          <>
+            <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Conflicts">
+              <AlertTriangle size={20} />
+              <span>Conflicts</span>
+            </NavLink>
+            <NavLink to="/downloads" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Downloads">
+              <FolderSync size={20} />
+              <span>Downloads</span>
+            </NavLink>
+          </>
         )}
         <NavLink to="/settings" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only nav-link-settings ${isActive ? 'active' : ''}`} data-tooltip={user?.name || user?.username || 'Settings'}>
           <div className="sidebar-avatar-wrapper">
@@ -97,10 +103,16 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
             <span>Stats</span>
           </NavLink>
           {user?.role === 'admin' && (
-            <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
-              <AlertTriangle size={18} />
-              <span>Conflicts</span>
-            </NavLink>
+            <>
+              <NavLink to="/conflicts" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+                <AlertTriangle size={18} />
+                <span>Conflicts</span>
+              </NavLink>
+              <NavLink to="/downloads" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+                <FolderSync size={18} />
+                <span>Downloads</span>
+              </NavLink>
+            </>
           )}
           <NavLink to="/lists" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <List size={18} />

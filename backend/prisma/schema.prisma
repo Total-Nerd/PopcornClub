@@ -41,6 +41,9 @@ model SystemSettings {
   traktClientId           String?
   plexGlobalWebhookToken  String?
   plexGlobalLastWebhookAt DateTime?
+  tvNamingFormat          String?
+  movieNamingFormat       String?
+  lastScanTime            DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }
@@ -200,4 +203,19 @@ model TMDBCache {
   data      Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model StagingItem {
+  id            Int      @id @default(autoincrement())
+  path          String   @unique
+  filename      String
+  parsedType    String?  // "movie" or "tv"
+  parsedTitle   String?
+  parsedYear    Int?
+  parsedSeason  Int?
+  parsedEpisode Int?
+  tmdbId        Int?
+  status        String   @default("pending") // "pending", "sorted", "error"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
