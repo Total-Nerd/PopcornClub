@@ -195,24 +195,32 @@ router.get('/discover', async (req, res) => {
 
     let upcomingPromise, popularPromise, bestRatedPromise;
 
-    const processResults = (data, mediaType) => {
+    const processResults = (data, mediaType, { isUpcoming = false } = {}) => {
       let results = data.results || [];
       if (filterForeign) {
         results = results.filter(item => item.original_language === 'en');
+      }
+      if (isUpcoming && mediaType === 'movie') {
+        const minDate = new Date();
+        minDate.setMonth(minDate.getMonth() - 6); // Allow movies up to 6 months old
+        results = results.filter(item => {
+          if (!item.release_date) return false;
+          return new Date(item.release_date) >= minDate;
+        });
       }
       return results.map(item => ({ ...item, media_type: mediaType }));
     };
 
     if (type === 'movie') {
       upcomingPromise = fetchTMDB('/3/movie/upcoming', apiKey)
-        .then(data => processResults(data, 'movie'));
+        .then(data => processResults(data, 'movie', { isUpcoming: true }));
       popularPromise = fetchTMDB('/3/movie/popular', apiKey)
         .then(data => processResults(data, 'movie'));
       bestRatedPromise = fetchTMDB('/3/movie/top_rated', apiKey)
         .then(data => processResults(data, 'movie'));
     } else if (type === 'tv') {
       upcomingPromise = fetchTMDB('/3/tv/on_the_air', apiKey)
-        .then(data => processResults(data, 'tv'));
+        .then(data => processResults(data, 'tv', { isUpcoming: true }));
       popularPromise = fetchTMDB('/3/tv/popular', apiKey)
         .then(data => processResults(data, 'tv'));
       bestRatedPromise = fetchTMDB('/3/tv/top_rated', apiKey)
@@ -220,8 +228,8 @@ router.get('/discover', async (req, res) => {
     } else {
       // all
       upcomingPromise = Promise.all([
-        fetchTMDB('/3/movie/upcoming', apiKey).then(data => processResults(data, 'movie')),
-        fetchTMDB('/3/tv/on_the_air', apiKey).then(data => processResults(data, 'tv'))
+        fetchTMDB('/3/movie/upcoming', apiKey).then(data => processResults(data, 'movie', { isUpcoming: true })),
+        fetchTMDB('/3/tv/on_the_air', apiKey).then(data => processResults(data, 'tv', { isUpcoming: true }))
       ]).then(([movies, tv]) => {
         const combined = [...movies, ...tv];
         combined.sort((a, b) => {
