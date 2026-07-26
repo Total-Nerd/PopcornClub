@@ -185,6 +185,14 @@ const Search = () => {
   // Discover list data states
   const [discoverData, setDiscoverData] = useState({ upcoming: [], popular: [], bestRated: [] });
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [includeForeign, setIncludeForeign] = useState(() => {
+    const saved = localStorage.getItem('discover_include_foreign');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('discover_include_foreign', includeForeign);
+  }, [includeForeign]);
 
   const colsRange = getColsRange(windowWidth, aspectRatio);
   const activeCols = aspectRatio === 'landscape'
@@ -225,6 +233,21 @@ const Search = () => {
   const renderDisplayOptionsContent = (extraFilters = null) => {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {!urlQuery && (
+          <div>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Filters</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={includeForeign} 
+                onChange={(e) => setIncludeForeign(e.target.checked)} 
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Include Foreign Language
+            </label>
+          </div>
+        )}
+        
         <div>
           <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Layout</div>
           <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
@@ -416,9 +439,9 @@ const Search = () => {
       fetchSearchResults(urlQuery, typeVal);
     } else {
       setResults([]);
-      fetchDiscoverData(typeVal);
+      fetchDiscoverData(typeVal, includeForeign);
     }
-  }, [urlQuery, searchParams]);
+  }, [urlQuery, searchParams, includeForeign]);
 
   const fetchSearchResults = async (searchVal, typeVal) => {
     setLoading(true);
@@ -433,11 +456,11 @@ const Search = () => {
     }
   };
 
-  const fetchDiscoverData = async (typeVal) => {
+  const fetchDiscoverData = async (typeVal, includeForeignVal = includeForeign) => {
     setDiscoverLoading(true);
     setError('');
     try {
-      const res = await api.get(`/media/discover?type=${typeVal}`);
+      const res = await api.get(`/media/discover?type=${typeVal}&includeForeign=${includeForeignVal}`);
       setDiscoverData(res.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load recommendations');

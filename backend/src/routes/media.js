@@ -184,6 +184,7 @@ async function enrichMediaItems(results, userId) {
 // Discover TMDB
 router.get('/discover', async (req, res) => {
   const type = req.query.type || 'all'; // all, movie, tv
+  const filterForeign = req.query.includeForeign !== 'true';
   
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
@@ -194,25 +195,33 @@ router.get('/discover', async (req, res) => {
 
     let upcomingPromise, popularPromise, bestRatedPromise;
 
+    const processResults = (data, mediaType) => {
+      let results = data.results || [];
+      if (filterForeign) {
+        results = results.filter(item => item.original_language === 'en');
+      }
+      return results.map(item => ({ ...item, media_type: mediaType }));
+    };
+
     if (type === 'movie') {
       upcomingPromise = fetchTMDB('/3/movie/upcoming', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+        .then(data => processResults(data, 'movie'));
       popularPromise = fetchTMDB('/3/movie/popular', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+        .then(data => processResults(data, 'movie'));
       bestRatedPromise = fetchTMDB('/3/movie/top_rated', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' })));
+        .then(data => processResults(data, 'movie'));
     } else if (type === 'tv') {
       upcomingPromise = fetchTMDB('/3/tv/on_the_air', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+        .then(data => processResults(data, 'tv'));
       popularPromise = fetchTMDB('/3/tv/popular', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+        .then(data => processResults(data, 'tv'));
       bestRatedPromise = fetchTMDB('/3/tv/top_rated', apiKey)
-        .then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })));
+        .then(data => processResults(data, 'tv'));
     } else {
       // all
       upcomingPromise = Promise.all([
-        fetchTMDB('/3/movie/upcoming', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
-        fetchTMDB('/3/tv/on_the_air', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+        fetchTMDB('/3/movie/upcoming', apiKey).then(data => processResults(data, 'movie')),
+        fetchTMDB('/3/tv/on_the_air', apiKey).then(data => processResults(data, 'tv'))
       ]).then(([movies, tv]) => {
         const combined = [...movies, ...tv];
         combined.sort((a, b) => {
@@ -224,8 +233,8 @@ router.get('/discover', async (req, res) => {
       });
 
       popularPromise = Promise.all([
-        fetchTMDB('/3/movie/popular', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
-        fetchTMDB('/3/tv/popular', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+        fetchTMDB('/3/movie/popular', apiKey).then(data => processResults(data, 'movie')),
+        fetchTMDB('/3/tv/popular', apiKey).then(data => processResults(data, 'tv'))
       ]).then(([movies, tv]) => {
         const combined = [...movies, ...tv];
         combined.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
@@ -233,8 +242,8 @@ router.get('/discover', async (req, res) => {
       });
 
       bestRatedPromise = Promise.all([
-        fetchTMDB('/3/movie/top_rated', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'movie' }))),
-        fetchTMDB('/3/tv/top_rated', apiKey).then(data => (data.results || []).map(item => ({ ...item, media_type: 'tv' })))
+        fetchTMDB('/3/movie/top_rated', apiKey).then(data => processResults(data, 'movie')),
+        fetchTMDB('/3/tv/top_rated', apiKey).then(data => processResults(data, 'tv'))
       ]).then(([movies, tv]) => {
         const combined = [...movies, ...tv];
         combined.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
