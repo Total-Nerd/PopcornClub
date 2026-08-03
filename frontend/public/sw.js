@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'tvtracker-static-v1';
+const STATIC_CACHE = 'tvtracker-static-v3';
 const IMAGE_CACHE = 'tvtracker-images-v1';
 
 // Asset types we want to cache on-the-fly
@@ -11,6 +11,12 @@ const CORE_ASSETS = [
   '/favicon.svg',
   '/manifest.json'
 ];
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -75,23 +81,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Stale-While-Revalidate for static assets
+  // 4. Network-First for JS/CSS and static assets (with Cache fallback when offline)
   const isStaticAsset = CACHEABLE_EXTENSIONS.some(ext => url.pathname.endsWith(ext)) || url.pathname.includes('/assets/');
   
   if (isStaticAsset) {
     event.respondWith(
-      caches.open(STATIC_CACHE).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          const fetchPromise = fetch(event.request).then((networkResponse) => {
-            if (networkResponse.status === 200) {
-              cache.put(event.request, networkResponse.clone());
-            }
-            return networkResponse;
-          }).catch(() => {
-            // Network failure: we rely entirely on cache
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(STATIC_CACHE).then((cache) => {
+            cache.put(event.request, responseToCache);
           });
-          return cachedResponse || fetchPromise;
-        });
+        }
+        return networkResponse;
+      }).catch(() => {
+        return caches.match(event.request);
       })
     );
   }

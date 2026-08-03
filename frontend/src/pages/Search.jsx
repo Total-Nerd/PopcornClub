@@ -865,6 +865,8 @@ const Search = () => {
       ? (item.backdrop_path ? `https://image.tmdb.org/t/p/w500${item.backdrop_path}` : null)
       : (item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null);
 
+    const targetUrl = item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`;
+
     return (
       <div 
         key={item.id} 
