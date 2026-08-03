@@ -1,7 +1,8 @@
-import React, { useContext } from 'react';
+import React, { useEffect, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { ModalProvider } from './context/ModalContext';
+import { getStoredThemeConfig, applyTheme } from './utils/themeManager';
 
 import MainLayout from './layout/MainLayout';
 import Login from './pages/Login';
@@ -54,6 +55,11 @@ const AppRoutes = () => {
 };
 
 function App() {
+  useEffect(() => {
+    const { theme, baseId, accentId } = getStoredThemeConfig();
+    applyTheme(theme, baseId, accentId);
+  }, []);
+
   return (
     <AuthProvider>
       <ModalProvider>

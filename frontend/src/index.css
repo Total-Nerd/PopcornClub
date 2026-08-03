@@ -3,6 +3,7 @@
 :root {
   --bg-dark: #0f172a;
   --bg-card: rgba(30, 41, 59, 0.7);
+  --bg-card-watched: rgba(16, 185, 129, 0.25);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --accent: #3b82f6;
@@ -85,7 +86,8 @@
 
 .theme-light {
   --bg-dark: #f1f5f9;
-  --bg-card: rgba(255, 255, 255, 0.75);
+  --bg-card: rgba(255, 255, 255, 0.3);
+  --bg-card-watched: rgba(16, 185, 129, 0.25);
   --text-main: #0f172a;
   --text-muted: #475569;
   --border-color: rgba(0, 0, 0, 0.08);
@@ -163,6 +165,7 @@
 .theme-oled {
   --bg-dark: #000000;
   --bg-card: rgba(10, 10, 10, 0.85);
+  --bg-card-watched: rgba(16, 185, 129, 0.25);
   --text-main: #f8fafc;
   --text-muted: #8a99ad;
   --border-color: rgba(255, 255, 255, 0.08);
@@ -241,6 +244,7 @@
 .theme-colourful {
   --bg-dark: #0f0c29;
   --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-card-watched: rgba(16, 185, 129, 0.25);
   --text-main: #ffffff;
   --text-muted: #a6b1e1;
   --border-color: rgba(255, 0, 204, 0.4);
@@ -285,7 +289,7 @@
   --disabled-btn-bg: rgba(255, 255, 255, 0.1);
   --bg-card-solid: #24243e;
   --success-bg-solid: #002211;
-  
+
   --backdrop-bg: rgba(15, 12, 41, 0.75);
   --mobile-backdrop-bg: rgba(15, 12, 41, 0.7);
   --header-nav-bg: rgba(255, 255, 255, 0.1);
@@ -297,7 +301,7 @@
   --mobile-sheet-handle-bg: #ff00cc;
   --backdrop-btn-bg: rgba(255, 0, 204, 0.4);
   --backdrop-btn-bg-hover: rgba(255, 0, 204, 0.7);
-  
+
   --plex-brand: #ff00cc;
   --plex-brand-hover: #ff33dd;
   --plex-brand-subtle: rgba(255, 0, 204, 0.2);
@@ -318,6 +322,7 @@
 .theme-retro {
   --bg-dark: #050505;
   --bg-card: rgba(0, 25, 0, 0.8);
+  --bg-card-watched: rgba(16, 185, 129, 0.1);
   --text-main: #33ff00;
   --text-muted: #22aa00;
   --border-color: #115500;
@@ -326,7 +331,7 @@
   --overlay-medium: rgba(51, 255, 0, 0.1);
   --overlay-strong: rgba(51, 255, 0, 0.2);
 
-  --loading-overlay-bg: linear-gradient(135deg, rgba(0,0,0, 0.9) 0%, rgba(0, 20, 0, 0.9) 100%);
+  --loading-overlay-bg: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 20, 0, 0.9) 100%);
   --loading-card-bg: rgba(0, 40, 0, 0.6);
 
   --accent-bg: rgba(51, 255, 0, 0.15);
@@ -362,7 +367,7 @@
   --disabled-btn-bg: rgba(0, 20, 0, 0.5);
   --bg-card-solid: #001100;
   --success-bg-solid: #002200;
-  
+
   --backdrop-bg: rgba(0, 0, 0, 0.85);
   --mobile-backdrop-bg: rgba(0, 0, 0, 0.85);
   --header-nav-bg: rgba(0, 20, 0, 0.8);
@@ -374,7 +379,7 @@
   --mobile-sheet-handle-bg: rgba(51, 255, 0, 0.4);
   --backdrop-btn-bg: rgba(0, 40, 0, 0.8);
   --backdrop-btn-bg-hover: rgba(51, 255, 0, 0.2);
-  
+
   --plex-brand: #33ff00;
   --plex-brand-hover: #66ff33;
   --plex-brand-subtle: rgba(51, 255, 0, 0.15);
@@ -388,7 +393,11 @@
   --plex-paused-border: rgba(17, 136, 0, 0.4);
 }
 
-.theme-retro body, .theme-retro button, .theme-retro input, .theme-retro select, .theme-retro textarea {
+.theme-retro body,
+.theme-retro button,
+.theme-retro input,
+.theme-retro select,
+.theme-retro textarea {
   font-family: 'Courier New', Courier, monospace;
 }
 
@@ -3737,4 +3746,3 @@ select option {
   margin: 4px;
   min-height: calc(100vh - 8px);
 }
-

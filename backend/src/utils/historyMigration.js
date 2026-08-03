@@ -106,6 +106,11 @@ async function backfillMediaGenres() {
         }
       }));
     }
+    console.log(`[Backfill Genres] Completed backfill for ${successCount} items.`);
+  } catch (error) {
+    console.error('[Backfill Genres] Error backfilling genres:', error);
+  }
+}
 
 async function cleanupDuplicateWatchLogs() {
   try {

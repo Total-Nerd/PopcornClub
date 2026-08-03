@@ -1076,7 +1076,7 @@ const CalendarView = () => {
           flexDirection: 'column',
           gap: '8px',
           cursor: 'pointer',
-          background: isWatched ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.03)',
+          background: isWatched ? 'var(--bg-card-watched)' : 'var(--bg-card)',
           border: '1px solid var(--border-color)',
           borderRadius: '8px',
           marginRight: '0px',

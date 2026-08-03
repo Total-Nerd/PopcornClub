@@ -1,96 +1,158 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/icon-square.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0f172a" />
-    <script>
-      (function() {
-        const theme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.className = 'theme-' + theme;
-      })();
-    </script>
-    
-    <style>
-      .app-loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #0f172a;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 99999;
-        transition: opacity 0.3s ease-out;
-      }
-      .theme-light .app-loading-screen {
-        background-color: #f1f5f9;
-      }
-      .theme-oled .app-loading-screen {
-        background-color: #000000;
-      }
-      .app-loading-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 24px;
-      }
-      .app-loading-logo {
-        width: 120px;
-        height: 120px;
-        object-fit: contain;
-        animation: app-logo-pulse 2s infinite ease-in-out;
-      }
-      .app-loading-spinner {
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(59, 130, 246, 0.1);
-        border-top-color: #3b82f6;
-        border-radius: 50%;
-        animation: app-loading-spin 1s infinite linear;
-      }
-      @keyframes app-logo-pulse {
-        0%, 100% {
-          transform: scale(1);
-          opacity: 0.9;
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/icon-square.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <script>
+    (function () {
+      const theme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.className = 'theme-' + theme;
+
+      const baseId = localStorage.getItem('theme_base_' + theme);
+      const accentId = localStorage.getItem('theme_accent_' + theme);
+
+      const configs = {
+        dark: {
+          bases: { slate: { bg: '#0f172a', card: 'rgba(30, 41, 59, 0.7)', input: 'rgba(15, 23, 42, 0.6)' }, midnight: { bg: '#0b0f19', card: 'rgba(18, 26, 43, 0.75)', input: 'rgba(11, 15, 25, 0.8)' }, amber: { bg: '#1c120c', card: 'rgba(43, 26, 15, 0.75)', input: 'rgba(28, 18, 12, 0.8)' }, charcoal: { bg: '#121212', card: 'rgba(28, 28, 28, 0.75)', input: 'rgba(18, 18, 18, 0.8)' }, purple: { bg: '#130f26', card: 'rgba(32, 23, 61, 0.75)', input: 'rgba(19, 15, 38, 0.8)' }, navy: { bg: '#0f1c2e', card: 'rgba(23, 42, 69, 0.75)', input: 'rgba(15, 28, 46, 0.8)' }, forest: { bg: '#0a1c14', card: 'rgba(18, 46, 34, 0.75)', input: 'rgba(10, 28, 20, 0.8)' } },
+          accents: { blue: { hex: '#3b82f6', rgb: '59, 130, 246' }, purple: { hex: '#8b5cf6', rgb: '139, 92, 246' }, emerald: { hex: '#10b981', rgb: '16, 185, 129' }, crimson: { hex: '#ef4444', rgb: '239, 68, 68' }, amber: { hex: '#f59e0b', rgb: '245, 158, 11' }, rose: { hex: '#ec4899', rgb: '236, 72, 153' }, cyan: { hex: '#06b6d4', rgb: '6, 182, 212' }, indigo: { hex: '#6366f1', rgb: '99, 102, 241' } }
+        },
+        light: {
+          bases: { slate: { bg: '#e2e8f0', card: 'rgba(255, 255, 255, 0.3)', text: '#0f172a' }, amber: { bg: '#ffedd5', card: 'rgba(255, 255, 255, 0.3)', text: '#7c2d12' }, cream: { bg: '#fef08a', card: 'rgba(255, 255, 255, 0.3)', text: '#713f12' }, sand: { bg: '#e5e5dc', card: 'rgba(255, 255, 255, 0.3)', text: '#1c1917' }, ice: { bg: '#bfdbfe', card: 'rgba(255, 255, 255, 0.3)', text: '#1e3a8a' }, mint: { bg: '#bbf7d0', card: 'rgba(255, 255, 255, 0.3)', text: '#064e3b' }, rose: { bg: '#fecdd3', card: 'rgba(255, 255, 255, 0.3)', text: '#881337' }, white: { bg: '#f8fafc', card: 'rgba(255, 255, 255, 0.95)', text: '#0f172a' } },
+          accents: { blue: { hex: '#3b82f6', rgb: '59, 130, 246' }, purple: { hex: '#8b5cf6', rgb: '139, 92, 246' }, emerald: { hex: '#10b981', rgb: '16, 185, 129' }, crimson: { hex: '#ef4444', rgb: '239, 68, 68' }, amber: { hex: '#d97706', rgb: '217, 119, 6' }, rose: { hex: '#ec4899', rgb: '236, 72, 153' }, cyan: { hex: '#06b6d4', rgb: '6, 182, 212' }, indigo: { hex: '#6366f1', rgb: '99, 102, 241' } }
+        },
+        oled: {
+          bases: { black: { bg: '#000000', card: 'rgba(10, 10, 10, 0.85)' } },
+          accents: { blue: { hex: '#3b82f6', rgb: '59, 130, 246' }, purple: { hex: '#8b5cf6', rgb: '139, 92, 246' }, emerald: { hex: '#10b981', rgb: '16, 185, 129' }, crimson: { hex: '#ef4444', rgb: '239, 68, 68' }, amber: { hex: '#f59e0b', rgb: '245, 158, 11' }, rose: { hex: '#ec4899', rgb: '236, 72, 153' }, cyan: { hex: '#06b6d4', rgb: '6, 182, 212' }, indigo: { hex: '#6366f1', rgb: '99, 102, 241' } }
+        },
+        colourful: {
+          bases: { cyberpunk: { bgGrad: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%) fixed', bg: '#0f0c29' }, 'amber-sunset': { bgGrad: 'linear-gradient(135deg, #381200 0%, #6e2700 50%, #4a1500 100%) fixed', bg: '#381200' }, aurora: { bgGrad: 'linear-gradient(135deg, #051923 0%, #003554 50%, #006494 100%) fixed', bg: '#051923' }, violet: { bgGrad: 'linear-gradient(135deg, #1f002b 0%, #3a0057 50%, #580080 100%) fixed', bg: '#1f002b' }, sunset: { bgGrad: 'linear-gradient(135deg, #2b0c0f 0%, #632b30 50%, #4e243e 100%) fixed', bg: '#2b0c0f' }, ocean: { bgGrad: 'linear-gradient(135deg, #0c1f29 0%, #1a3c40 50%, #142834 100%) fixed', bg: '#0c1f29' } },
+          accents: { cyan: { hex: '#00ffff', rgb: '0, 255, 255' }, magenta: { hex: '#ff00cc', rgb: '255, 0, 204' }, yellow: { hex: '#fffc00', rgb: '255, 252, 0' }, 'neon-green': { hex: '#00ff66', rgb: '0, 255, 102' }, 'hot-orange': { hex: '#ff5500', rgb: '255, 85, 0' }, 'bright-purple': { hex: '#bf00ff', rgb: '191, 0, 255' } }
+        },
+        retro: {
+          bases: { 'classic-black': { bg: '#050505' }, 'amber-glow': { bg: '#120b00' }, 'pure-black': { bg: '#000000' }, 'deep-navy': { bg: '#020714' }, 'scanline-gray': { bg: '#0d0d0d' } },
+          accents: { green: { hex: '#33ff00', rgb: '51, 255, 0' }, amber: { hex: '#ffb000', rgb: '255, 176, 0' }, cyan: { hex: '#00f0ff', rgb: '0, 240, 255' }, white: { hex: '#e0e0e0', rgb: '224, 224, 224' }, pink: { hex: '#ff33aa', rgb: '255, 51, 170' }, red: { hex: '#ff3333', rgb: '255, 51, 51' } }
         }
-        50% {
-          transform: scale(1.04);
-          opacity: 1;
-          filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.35));
+      };
+
+      const cfg = configs[theme] || configs.dark;
+      const base = baseId && cfg.bases[baseId] ? cfg.bases[baseId] : null;
+      const accent = accentId && cfg.accents[accentId] ? cfg.accents[accentId] : null;
+      const root = document.documentElement;
+
+      if (accent) {
+        root.style.setProperty('--accent', accent.hex);
+        root.style.setProperty('--accent-bg', 'rgba(' + accent.rgb + ', 0.15)');
+        root.style.setProperty('--accent-border', 'rgba(' + accent.rgb + ', 0.4)');
+        root.style.setProperty('--dot-tv', accent.hex);
+        if (theme === 'retro') {
+          root.style.setProperty('--text-main', accent.hex);
+          root.style.setProperty('--text-h', accent.hex);
+          root.style.setProperty('--border-color', accent.hex);
         }
       }
-      @keyframes app-loading-spin {
-        to {
-          transform: rotate(360deg);
-        }
+      if (base) {
+        if (base.bg) root.style.setProperty('--bg-dark', base.bg);
+        if (base.card) root.style.setProperty('--bg-card', base.card);
+        if (base.input) root.style.setProperty('--bg-input', base.input);
+        if (base.text) root.style.setProperty('--text-main', base.text);
       }
-    </style>
-    
-    <!-- PWA primary link -->
-    <link rel="manifest" href="/manifest.json" />
-    
-    <!-- Apple Web App Meta Tags -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="TVTracker" />
-    <link rel="apple-touch-icon" href="/icon-square.png" />
-    
-    <title>TVTracker</title>
-  </head>
-  <body>
-    <div id="root">
-      <!-- Loading Screen / Splash Screen -->
-      <div class="app-loading-screen">
-        <div class="app-loading-container">
-          <img src="/icon-round.png" alt="TVTracker Logo" class="app-loading-logo" />
-          <div class="app-loading-spinner"></div>
-        </div>
+    })();
+  </script>
+
+  <style>
+    .app-loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      transition: opacity 0.3s ease-out;
+    }
+
+    .theme-light .app-loading-screen {
+      background-color: #f1f5f9;
+    }
+
+    .theme-oled .app-loading-screen {
+      background-color: #000000;
+    }
+
+    .app-loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .app-loading-logo {
+      width: 120px;
+      height: 120px;
+      object-fit: contain;
+      animation: app-logo-pulse 2s infinite ease-in-out;
+    }
+
+    .app-loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(59, 130, 246, 0.1);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: app-loading-spin 1s infinite linear;
+    }
+
+    @keyframes app-logo-pulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 0.9;
+      }
+
+      50% {
+        transform: scale(1.04);
+        opacity: 1;
+        filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.35));
+      }
+    }
+
+    @keyframes app-loading-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+
+  <!-- PWA primary link -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Apple Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TVTracker" />
+  <link rel="apple-touch-icon" href="/icon-square.png" />
+
+  <title>TVTracker</title>
+</head>
+
+<body>
+  <div id="root">
+    <!-- Loading Screen / Splash Screen -->
+    <div class="app-loading-screen">
+      <div class="app-loading-container">
+        <img src="/icon-round.png" alt="TVTracker Logo" class="app-loading-logo" />
+        <div class="app-loading-spinner"></div>
       </div>
     </div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  </div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
