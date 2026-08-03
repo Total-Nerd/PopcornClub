@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { ArrowLeft, Sliders, LayoutGrid, List as ListIcon } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
@@ -311,10 +311,10 @@ const PersonDetails = () => {
     const itemYear = (item.release_date || item.first_air_date || '').substring(0, 4);
 
     return (
-      <div
+      <Link
         key={`${item.media_type}-${item.id}`}
+        to={isMovie ? `/movies/${item.id}` : `/shows/${item.id}`}
         className="media-card"
-        onClick={() => navigate(isMovie ? `/movies/${item.id}` : `/shows/${item.id}`)}
         style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}
       >
         {imageUrl ? (
@@ -326,8 +326,8 @@ const PersonDetails = () => {
         )}
 
         {isLandscape ? (
-          <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
-            <div className="media-title" style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate(isMovie ? `/movies/${item.id}` : `/shows/${item.id}`)}>
+          <div className="media-card-content-overlay">
+            <div className="media-title" style={{ fontSize: '0.9rem', marginBottom: '2px' }}>
               {item.title || item.name}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -344,7 +344,7 @@ const PersonDetails = () => {
             </div>
           </div>
         )}
-      </div>
+      </Link>
     );
   };
 
@@ -364,15 +364,17 @@ const PersonDetails = () => {
             {itemsList.map(item => {
               const isMovie = item.media_type === 'movie';
               const itemYear = (item.release_date || item.first_air_date || '').substring(0, 4);
+              const targetUrl = isMovie ? `/movies/${item.id}` : `/shows/${item.id}`;
 
               return (
                 <tr
                   key={`${item.media_type}-${item.id}`}
-                  onClick={() => navigate(isMovie ? `/movies/${item.id}` : `/shows/${item.id}`)}
+                  onClick={() => navigate(targetUrl)}
                   style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
                   className="table-row-hover"
                 >
-                  <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <td style={{ padding: '12px 8px' }}>
+                    <Link to={targetUrl} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
                     <div style={{
                       width: aspectRatio === 'landscape' ? '72px' : '36px',
                       height: aspectRatio === 'landscape' ? '40px' : '54px',
@@ -400,6 +402,7 @@ const PersonDetails = () => {
                       )}
                     </div>
                     <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{item.title || item.name}</div>
+                    </Link>
                   </td>
                   <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem', textTransform: 'uppercase' }}>
                     {item.media_type === 'movie' ? 'Movie' : 'TV Show'}

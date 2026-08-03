@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams, useNavigationType } from 'react-router-dom';
+import { useNavigate, useSearchParams, useNavigationType, Link } from 'react-router-dom';
 import { Search as SearchIcon, Plus, Eye, Check, EyeOff, Sliders, LayoutGrid, List as ListIcon, Clock, X } from 'lucide-react';
 import api from '../api';
 import { useModal } from '../context/ModalContext';
@@ -694,46 +694,50 @@ const Search = () => {
             </tr>
           </thead>
           <tbody>
-            {items.map(item => (
-              <tr
-                key={item.id}
-                onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-                style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
-                className="table-row-hover"
-              >
-                <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: aspectRatio === 'landscape' ? '72px' : '36px',
-                    height: aspectRatio === 'landscape' ? '40px' : '54px',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                    background: 'rgba(255,255,255,0.05)',
-                    flexShrink: 0,
-                    transition: 'width 0.2s, height 0.2s'
-                  }}>
-                    {aspectRatio === 'landscape' ? (
-                       item.backdrop_path ? (
-                         <img src={`https://image.tmdb.org/t/p/w92${item.backdrop_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                       ) : (
-                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
-                           No artwork
-                         </div>
-                       )
-                     ) : (item.poster_path ? (
-                       <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                     ) : (
-                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                         No Cover
-                       </div>
-                     ))}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{item.title || item.name}</div>
-                    <div className="mobile-only-meta" style={{ display: 'none' }}>
-                      {item.media_type === 'movie' ? 'Movie' : 'TV Show'} • {(item.release_date || item.first_air_date || '').substring(0, 4)}
-                    </div>
-                  </div>
-                </td>
+            {items.map(item => {
+              const targetUrl = item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`;
+              return (
+                <tr
+                  key={item.id}
+                  onClick={() => navigate(targetUrl)}
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
+                  className="table-row-hover"
+                >
+                  <td style={{ padding: '12px 8px' }}>
+                    <Link to={targetUrl} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                      <div style={{
+                        width: aspectRatio === 'landscape' ? '72px' : '36px',
+                        height: aspectRatio === 'landscape' ? '40px' : '54px',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                        background: 'rgba(255,255,255,0.05)',
+                        flexShrink: 0,
+                        transition: 'width 0.2s, height 0.2s'
+                      }}>
+                        {aspectRatio === 'landscape' ? (
+                           item.backdrop_path ? (
+                             <img src={`https://image.tmdb.org/t/p/w92${item.backdrop_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                           ) : (
+                             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                               No artwork
+                             </div>
+                           )
+                         ) : (item.poster_path ? (
+                           <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt={item.title || item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                         ) : (
+                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                             No Cover
+                           </div>
+                         ))}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{item.title || item.name}</div>
+                        <div className="mobile-only-meta" style={{ display: 'none' }}>
+                          {item.media_type === 'movie' ? 'Movie' : 'TV Show'} • {(item.release_date || item.first_air_date || '').substring(0, 4)}
+                        </div>
+                      </div>
+                    </Link>
+                  </td>
                 <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                   {item.media_type === 'movie' ? 'Movie' : 'TV Show'}
                 </td>
@@ -787,7 +791,8 @@ const Search = () => {
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>
@@ -875,19 +880,17 @@ const Search = () => {
         }}
       >
         {imageUrl ? (
-          <LazyImage
-            src={imageUrl}
-            alt={item.title || item.name}
-            onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-            style={{ cursor: 'pointer', aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }}
-          />
+          <Link to={targetUrl} style={{ display: 'block', textDecoration: 'none' }}>
+            <LazyImage
+              src={imageUrl}
+              alt={item.title || item.name}
+              style={{ cursor: 'pointer', aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }}
+            />
+          </Link>
         ) : (
-          <div
-            onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-            style={{ width: '100%', aspectRatio: isLandscape ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
-          >
+          <Link to={targetUrl} style={{ width: '100%', aspectRatio: isLandscape ? '16/9' : '2/3', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', textDecoration: 'none' }}>
             {isLandscape ? 'No artwork' : 'No Poster'}
-          </div>
+          </Link>
         )}
 
         {/* Overlapping status pills on card image - moved to top left */}
@@ -932,14 +935,14 @@ const Search = () => {
 
         {isLandscape ? (
           <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
-            <div
+            <Link
+              to={targetUrl}
               className="media-title"
               title={item.title || item.name}
-              onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-              style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }}
+              style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer', color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
               {item.title || item.name}
-            </div>
+            </Link>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
               <div className="media-meta" style={{ fontSize: '0.75rem' }}>
                 {item.media_type === 'movie' ? 'Movie' : 'TV Show'} • {(item.release_date || item.first_air_date || '').substring(0, 4)}
@@ -981,14 +984,14 @@ const Search = () => {
           </div>
         ) : (
           <div className="media-card-content">
-            <div
+            <Link
+              to={targetUrl}
               className="media-title"
               title={item.title || item.name}
-              onClick={() => navigate(item.media_type === 'movie' ? `/movies/${item.id}` : `/shows/${item.id}`)}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', color: 'inherit', textDecoration: 'none', display: 'block' }}
             >
               {item.title || item.name}
-            </div>
+            </Link>
             <div className="media-meta">{item.media_type === 'movie' ? 'Movie' : 'TV Show'} • {(item.release_date || item.first_air_date || '').substring(0, 4)}</div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { useLocation, useNavigate, useNavigationType, Link } from 'react-router-dom';
 import api from '../api';
 import { Eye, EyeOff, Search, Film, Star, Clock, Calendar, Check, Trash2, X, Sliders, LayoutGrid, List as ListIcon } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
@@ -560,7 +560,7 @@ const MyMovies = () => {
       : (movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : null);
 
     return (
-      <div key={movie.id} className="media-card" onClick={() => navigate(`/movies/${movie.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
+      <Link key={movie.id} to={`/movies/${movie.tmdbId}`} className="media-card" style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
         {imageUrl ? (
           <LazyImage src={imageUrl} alt={movie.title} style={{ aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }} />
         ) : (
@@ -572,7 +572,11 @@ const MyMovies = () => {
         {/* Watched pill indicators */}
         <div 
           style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}
-          onClick={(e) => handleToggleWatch(e, movie)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleToggleWatch(e, movie);
+          }}
         >
           <span style={{
             padding: '4px 10px',
@@ -594,8 +598,8 @@ const MyMovies = () => {
         </div>
 
         {isLandscape ? (
-          <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
-            <div className="media-title" title={movie.title} style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate(`/movies/${movie.tmdbId}`)}>{movie.title}</div>
+          <div className="media-card-content-overlay">
+            <div className="media-title" title={movie.title} style={{ fontSize: '0.9rem', marginBottom: '2px' }}>{movie.title}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
               <div className="media-meta" style={{ fontSize: '0.75rem' }}>
                 {movie.releaseDate ? movie.releaseDate.substring(0, 4) : 'Unknown Year'}
@@ -610,7 +614,7 @@ const MyMovies = () => {
             </div>
           </div>
         )}
-      </div>
+      </Link>
     );
   };
 
@@ -715,39 +719,40 @@ const MyMovies = () => {
                     {groupedMovies[letter].map(movie => (
                       <tr
                         key={movie.id}
-                        onClick={() => navigate(`/movies/${movie.tmdbId}`)}
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
                         className="table-row-hover"
                       >
-                        <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: aspectRatio === 'landscape' ? '72px' : '36px',
-                            height: aspectRatio === 'landscape' ? '40px' : '54px',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                            background: 'rgba(255,255,255,0.05)',
-                            flexShrink: 0,
-                            transition: 'width 0.2s, height 0.2s'
-                          }}>
-                            {aspectRatio === 'landscape' ? (
-                              movie.backdropPath ? (
-                                <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <td style={{ padding: '12px 8px' }}>
+                          <Link to={`/movies/${movie.tmdbId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                            <div style={{
+                              width: aspectRatio === 'landscape' ? '72px' : '36px',
+                              height: aspectRatio === 'landscape' ? '40px' : '54px',
+                              borderRadius: '4px',
+                              overflow: 'hidden',
+                              background: 'rgba(255,255,255,0.05)',
+                              flexShrink: 0,
+                              transition: 'width 0.2s, height 0.2s'
+                            }}>
+                              {aspectRatio === 'landscape' ? (
+                                movie.backdropPath ? (
+                                  <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                    No artwork
+                                  </div>
+                                )
+                              ) : (movie.posterPath ? (
+                                <img src={`https://image.tmdb.org/t/p/w92${movie.posterPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
-                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
-                                  No artwork
+                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                                  No Cover
                                 </div>
-                              )
-                            ) : (movie.posterPath ? (
-                              <img src={`https://image.tmdb.org/t/p/w92${movie.posterPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                                No Cover
-                              </div>
-                            ))}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{movie.title}</div>
-                          </div>
+                              ))}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{movie.title}</div>
+                            </div>
+                          </Link>
                         </td>
                         <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                           Movie
@@ -783,33 +788,34 @@ const MyMovies = () => {
                 sortedFilteredMovies.map(movie => (
                   <tr
                     key={movie.id}
-                    onClick={() => navigate(`/movies/${movie.tmdbId}`)}
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}
                     className="table-row-hover"
                   >
-                    <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{
-                        width: aspectRatio === 'landscape' ? '72px' : '36px',
-                        height: aspectRatio === 'landscape' ? '40px' : '54px',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                        background: 'rgba(255,255,255,0.05)',
-                        flexShrink: 0,
-                        transition: 'width 0.2s, height 0.2s'
-                      }}>
-                        {aspectRatio === 'landscape' && movie.backdropPath ? (
-                          <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (movie.posterPath ? (
-                          <img src={`https://image.tmdb.org/t/p/w92${movie.posterPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                            {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{movie.title}</div>
-                      </div>
+                    <td style={{ padding: '12px 8px' }}>
+                      <Link to={`/movies/${movie.tmdbId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                        <div style={{
+                          width: aspectRatio === 'landscape' ? '72px' : '36px',
+                          height: aspectRatio === 'landscape' ? '40px' : '54px',
+                          borderRadius: '4px',
+                          overflow: 'hidden',
+                          background: 'rgba(255,255,255,0.05)',
+                          flexShrink: 0,
+                          transition: 'width 0.2s, height 0.2s'
+                        }}>
+                          {aspectRatio === 'landscape' && movie.backdropPath ? (
+                            <img src={`https://image.tmdb.org/t/p/w92${movie.backdropPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (movie.posterPath ? (
+                            <img src={`https://image.tmdb.org/t/p/w92${movie.posterPath}`} alt={movie.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                              {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{movie.title}</div>
+                        </div>
+                      </Link>
                     </td>
                     <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                       Movie

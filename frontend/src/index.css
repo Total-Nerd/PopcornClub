@@ -574,6 +574,9 @@ button {
   border: 1px solid var(--border-color);
   transition: transform 0.2s;
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
 
 .media-card:hover {

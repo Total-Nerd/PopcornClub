@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { Plus, Trash2, LayoutGrid, List as ListIcon, ChevronDown, ChevronRight, Sliders } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
@@ -407,11 +407,11 @@ const Lists = () => {
                       ? `https://image.tmdb.org/t/p/w500${media.backdropPath}` 
                       : (media.posterPath ? `https://image.tmdb.org/t/p/w500${media.posterPath}` : null);
                     return (
-                      <div 
+                      <Link 
                         key={media.id} 
+                        to={media.type === 'movie' ? `/movies/${media.tmdbId}` : `/shows/${media.tmdbId}`}
                         className="media-card" 
-                        onClick={() => handleItemClick(media)}
-                        style={{ position: 'relative', cursor: 'pointer', overflow: 'hidden', aspectRatio: hasArtwork ? '16/9' : 'auto' }}
+                        style={{ position: 'relative', overflow: 'hidden', aspectRatio: hasArtwork ? '16/9' : 'auto' }}
                       >
                         {imageUrl ? (
                           <LazyImage src={imageUrl} alt={media.title} style={{ aspectRatio: hasArtwork ? '16/9' : '2/3', objectFit: 'cover' }} />
@@ -436,13 +436,17 @@ const Lists = () => {
                           </div>
                         )}
                         <button 
-                          onClick={(e) => handleRemoveItem(e, list.id, media.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleRemoveItem(e, list.id, media.id);
+                          }}
                           style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(239, 68, 68, 0.95)', color: 'white', padding: '8px', borderRadius: '50%', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', zIndex: 10 }}
                           title="Remove from list"
                         >
                           <Trash2 size={14} />
                         </button>
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
@@ -465,32 +469,34 @@ const Lists = () => {
                           style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
                           className="table-row-hover"
                         >
-                          <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ 
-                               width: aspectRatio === 'landscape' ? '72px' : '36px', 
-                               height: aspectRatio === 'landscape' ? '40px' : '54px', 
-                               borderRadius: '4px', 
-                               overflow: 'hidden', 
-                               background: 'rgba(255,255,255,0.05)', 
-                               flexShrink: 0,
-                               transition: 'width 0.2s, height 0.2s'
-                             }}>
-                               {aspectRatio === 'landscape' && media.backdropPath ? (
-                                 <img src={`https://image.tmdb.org/t/p/w92${media.backdropPath}`} alt={media.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                               ) : (media.posterPath ? (
-                                 <img src={`https://image.tmdb.org/t/p/w92${media.posterPath}`} alt={media.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                               ) : (
-                                 <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                                   {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
-                                 </div>
-                               ))}
-                             </div>
-                             <div>
-                              <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{media.title}</div>
-                              <div style={{ display: 'none' /* fallback mobile label */ }} className="mobile-only-meta">
-                                {media.type === 'movie' ? 'Movie' : 'TV Show'} • {(media.releaseDate || '').substring(0, 4)}
+                          <td style={{ padding: '12px 8px' }}>
+                            <Link to={media.type === 'movie' ? `/movies/${media.tmdbId}` : `/shows/${media.tmdbId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                              <div style={{ 
+                                 width: aspectRatio === 'landscape' ? '72px' : '36px', 
+                                 height: aspectRatio === 'landscape' ? '40px' : '54px', 
+                                 borderRadius: '4px', 
+                                 overflow: 'hidden', 
+                                 background: 'rgba(255,255,255,0.05)', 
+                                 flexShrink: 0,
+                                 transition: 'width 0.2s, height 0.2s'
+                               }}>
+                                 {aspectRatio === 'landscape' && media.backdropPath ? (
+                                   <img src={`https://image.tmdb.org/t/p/w92${media.backdropPath}`} alt={media.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                 ) : (media.posterPath ? (
+                                   <img src={`https://image.tmdb.org/t/p/w92${media.posterPath}`} alt={media.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                 ) : (
+                                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                                     {aspectRatio === 'landscape' ? 'No Art' : 'No Cover'}
+                                   </div>
+                                 ))}
+                               </div>
+                               <div>
+                                <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{media.title}</div>
+                                <div style={{ display: 'none' /* fallback mobile label */ }} className="mobile-only-meta">
+                                  {media.type === 'movie' ? 'Movie' : 'TV Show'} • {(media.releaseDate || '').substring(0, 4)}
+                                </div>
                               </div>
-                            </div>
+                            </Link>
                           </td>
                           <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                             {media.type === 'movie' ? 'Movie' : 'TV Show'}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { useLocation, useNavigate, useNavigationType, Link } from 'react-router-dom';
 import api from '../api';
 import { Tv, Search, Star, Play, Check, Trash2, X, ChevronRight, Eye, Plus, Calendar, Sliders, LayoutGrid, List as ListIcon } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
@@ -504,7 +504,8 @@ const MyShows = () => {
   const renderShowCard = (show) => {
     const completionRate = show.totalEpisodes > 0 ? (show.watchedCount / show.totalEpisodes) : 0;
     const percentage = Math.round(completionRate * 100);
-    const unwatchedCount = Math.max(0, show.totalEpisodes - show.watchedCount);
+    const airedCount = show.airedEpisodes !== undefined ? show.airedEpisodes : show.totalEpisodes;
+    const unwatchedCount = Math.max(0, airedCount - show.watchedCount);
 
     const isLandscape = aspectRatio === 'landscape';
     const imageUrl = isLandscape
@@ -512,7 +513,7 @@ const MyShows = () => {
       : (show.posterPath ? `https://image.tmdb.org/t/p/w500${show.posterPath}` : null);
 
     return (
-      <div key={show.id} className="media-card" onClick={() => navigate(`/shows/${show.tmdbId}`)} style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
+      <Link key={show.id} to={`/shows/${show.tmdbId}`} className="media-card" style={{ position: 'relative', overflow: 'hidden', aspectRatio: isLandscape ? '16/9' : 'auto' }}>
         {imageUrl ? (
           <LazyImage src={imageUrl} alt={show.title} style={{ aspectRatio: isLandscape ? '16/9' : '2/3', objectFit: 'cover' }} />
         ) : (
@@ -537,7 +538,7 @@ const MyShows = () => {
             </span>
           </div>
         )}
-        {unwatchedCount === 0 && show.totalEpisodes > 0 && (
+        {unwatchedCount === 0 && airedCount > 0 && (
           <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}>
             <span style={{
               padding: '4px 10px',
@@ -548,14 +549,14 @@ const MyShows = () => {
               color: '#fff',
               backdropFilter: 'blur(4px)'
             }}>
-              Completed
+              {show.watchedCount >= show.totalEpisodes ? 'Completed' : 'Up to Date'}
             </span>
           </div>
         )}
 
         {isLandscape ? (
-          <div className="media-card-content-overlay" onClick={e => e.stopPropagation()}>
-            <div className="media-title" title={show.title} style={{ fontSize: '0.9rem', marginBottom: '2px', cursor: 'pointer' }} onClick={() => navigate(`/shows/${show.tmdbId}`)}>{show.title}</div>
+          <div className="media-card-content-overlay">
+            <div className="media-title" title={show.title} style={{ fontSize: '0.9rem', marginBottom: '2px' }}>{show.title}</div>
             <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
               <div style={{ width: `${percentage}%`, height: '100%', background: percentage === 100 ? 'var(--success)' : 'var(--accent)', borderRadius: '2px' }}></div>
             </div>
@@ -580,7 +581,7 @@ const MyShows = () => {
             </div>
           </div>
         )}
-      </div>
+      </Link>
     );
   };
 
@@ -699,35 +700,37 @@ const MyShows = () => {
                           style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
                           className="table-row-hover"
                         >
-                          <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ 
-                              width: aspectRatio === 'landscape' ? '72px' : '36px', 
-                              height: aspectRatio === 'landscape' ? '40px' : '54px', 
-                              borderRadius: '4px', 
-                              overflow: 'hidden', 
-                              background: 'rgba(255,255,255,0.05)', 
-                              flexShrink: 0,
-                              transition: 'width 0.2s, height 0.2s'
-                            }}>
-                              {aspectRatio === 'landscape' ? (
-                                show.backdropPath ? (
-                                  <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <td style={{ padding: '12px 8px' }}>
+                            <Link to={`/shows/${show.tmdbId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                              <div style={{ 
+                                width: aspectRatio === 'landscape' ? '72px' : '36px', 
+                                height: aspectRatio === 'landscape' ? '40px' : '54px', 
+                                borderRadius: '4px', 
+                                overflow: 'hidden', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                flexShrink: 0,
+                                transition: 'width 0.2s, height 0.2s'
+                              }}>
+                                {aspectRatio === 'landscape' ? (
+                                  show.backdropPath ? (
+                                    <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                      No artwork
+                                    </div>
+                                  )
+                                ) : (show.posterPath ? (
+                                  <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
-                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
-                                    No artwork
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                                    No Cover
                                   </div>
-                                )
-                              ) : (show.posterPath ? (
-                                <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                                  No Cover
-                                </div>
-                              ))}
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{show.title}</div>
-                            </div>
+                                ))}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{show.title}</div>
+                              </div>
+                            </Link>
                           </td>
                           <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                             TV Show
@@ -759,35 +762,37 @@ const MyShows = () => {
                       style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', transition: 'background 0.2s' }}
                       className="table-row-hover"
                     >
-                      <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ 
-                          width: aspectRatio === 'landscape' ? '72px' : '36px', 
-                          height: aspectRatio === 'landscape' ? '40px' : '54px', 
-                          borderRadius: '4px', 
-                          overflow: 'hidden', 
-                          background: 'rgba(255,255,255,0.05)', 
-                          flexShrink: 0,
-                          transition: 'width 0.2s, height 0.2s'
-                        }}>
-                          {aspectRatio === 'landscape' ? (
-                            show.backdropPath ? (
-                              <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <td style={{ padding: '12px 8px' }}>
+                        <Link to={`/shows/${show.tmdbId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+                          <div style={{ 
+                            width: aspectRatio === 'landscape' ? '72px' : '36px', 
+                            height: aspectRatio === 'landscape' ? '40px' : '54px', 
+                            borderRadius: '4px', 
+                            overflow: 'hidden', 
+                            background: 'rgba(255,255,255,0.05)', 
+                            flexShrink: 0,
+                            transition: 'width 0.2s, height 0.2s'
+                          }}>
+                            {aspectRatio === 'landscape' ? (
+                              show.backdropPath ? (
+                                <img src={`https://image.tmdb.org/t/p/w92${show.backdropPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
+                                  No artwork
+                                </div>
+                              )
+                            ) : (show.posterPath ? (
+                              <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem', fontWeight: '600' }}>
-                                No artwork
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                                No Cover
                               </div>
-                            )
-                          ) : (show.posterPath ? (
-                            <img src={`https://image.tmdb.org/t/p/w92${show.posterPath}`} alt={show.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
-                              No Cover
-                            </div>
-                          ))}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{show.title}</div>
-                        </div>
+                            ))}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem' }}>{show.title}</div>
+                          </div>
+                        </Link>
                       </td>
                       <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                         TV Show

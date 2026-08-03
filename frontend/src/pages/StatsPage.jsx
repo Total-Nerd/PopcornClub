@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { AuthContext } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
@@ -113,8 +113,8 @@ const ParallaxSpotlight = ({ media, type, rank = 1, navigate }) => {
       <div style={{ position: 'relative', zIndex: 3, width: '100%', maxWidth: '1200px', display: 'flex', gap: '48px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
         
         {/* Left Side: Glowing Poster */}
-        <div 
-          onClick={() => navigate(type === 'tv' ? `/shows/${media.tmdbId}` : `/movies/${media.tmdbId}`)}
+        <Link 
+          to={type === 'tv' ? `/shows/${media.tmdbId}` : `/movies/${media.tmdbId}`}
           style={{ 
             width: '280px', 
             borderRadius: '16px', 
@@ -123,7 +123,8 @@ const ParallaxSpotlight = ({ media, type, rank = 1, navigate }) => {
             border: type === 'tv' ? '2px solid rgba(124,58,237,0.6)' : '2px solid rgba(59,130,246,0.6)',
             cursor: 'pointer',
             transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-            flexShrink: 0
+            flexShrink: 0,
+            textDecoration: 'none'
           }}
           className={`spotlight-poster-card spotlight-${type}`}
         >
@@ -132,7 +133,7 @@ const ParallaxSpotlight = ({ media, type, rank = 1, navigate }) => {
           ) : (
             <div style={{ width: '100%', height: '420px', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No Poster</div>
           )}
-        </div>
+        </Link>
 
         {/* Right Side: Informative & Stylized Wrapped Text */}
         <div style={{ flex: '1 1 500px', minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -827,9 +828,9 @@ const StatsPage = () => {
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
               {runnerUpShows.map((show, idx) => (
-                <div 
+                <Link 
                   key={idx}
-                  onClick={() => navigate(`/shows/${show.tmdbId}`)}
+                  to={`/shows/${show.tmdbId}`}
                   className="ranked-gallery-card"
                   style={{
                     position: 'relative',
@@ -839,7 +840,9 @@ const StatsPage = () => {
                     aspectRatio: '2/3',
                     border: '1px solid rgba(255,255,255,0.08)',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.3s ease',
+                    textDecoration: 'none',
+                    display: 'block'
                   }}
                 >
                   {show.posterPath ? (
@@ -889,7 +892,7 @@ const StatsPage = () => {
                       {formatWatchTime(show.minutes)}
                     </span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -904,9 +907,9 @@ const StatsPage = () => {
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
               {runnerUpMovies.map((movie, idx) => (
-                <div 
+                <Link 
                   key={idx}
-                  onClick={() => navigate(`/movies/${movie.tmdbId}`)}
+                  to={`/movies/${movie.tmdbId}`}
                   className="ranked-gallery-card"
                   style={{
                     position: 'relative',
@@ -916,7 +919,9 @@ const StatsPage = () => {
                     aspectRatio: '2/3',
                     border: '1px solid rgba(255,255,255,0.08)',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.3s ease',
+                    textDecoration: 'none',
+                    display: 'block'
                   }}
                 >
                   {movie.posterPath ? (
@@ -966,7 +971,7 @@ const StatsPage = () => {
                       {formatWatchTime(movie.minutes)}
                     </span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -1042,13 +1047,13 @@ const StatsPage = () => {
                       )}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div 
-                        onClick={() => navigate(`/person/${actor.id}`)}
+                      <Link 
+                        to={`/person/${actor.id}`}
                         className="actionable-text"
-                        style={{ fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer' }}
+                        style={{ fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }}
                       >
                         {actor.name}
-                      </div>
+                      </Link>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                         {actor.weight} viewings
                       </div>
@@ -1080,13 +1085,13 @@ const StatsPage = () => {
                       )}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div 
-                        onClick={() => navigate(`/person/${actor.id}`)}
+                      <Link 
+                        to={`/person/${actor.id}`}
                         className="actionable-text"
-                        style={{ fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer' }}
+                        style={{ fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }}
                       >
                         {actor.name}
-                      </div>
+                      </Link>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                         {actor.weight} viewings
                       </div>

@@ -496,7 +496,7 @@ const WatchHistory = () => {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                           {showPosters && (
-                            <div style={{ width: '40px', height: '56px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: 'var(--overlay-subtle)', border: '1px solid var(--border-color)' }}>
+                            <Link to={detailUrl} style={{ display: 'block', width: '40px', height: '56px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: 'var(--overlay-subtle)', border: '1px solid var(--border-color)', textDecoration: 'none' }}>
                               {log.media.posterPath ? (
                                 <LazyImage
                                   src={`https://image.tmdb.org/t/p/w92${log.media.posterPath}`}
@@ -508,7 +508,7 @@ const WatchHistory = () => {
                                   {isMovie ? <Film size={18} /> : <Tv size={18} />}
                                 </div>
                               )}
-                            </div>
+                            </Link>
                           )}
                           <div>
                             <Link to={detailUrl} style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.98rem' }} className="hover-underline">

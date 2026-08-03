@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers, Sliders, Check } from 'lucide-react';
@@ -321,52 +321,38 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
       >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
           {poster ? (
-            <img
-              src={`https://image.tmdb.org/t/p/w185${poster}`}
-              alt={title}
-              style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+            <Link
+              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
               className="actionable-poster"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (ev.type === 'tv') {
-                  navigate(`/shows/${ev.tmdbId}`);
-                } else {
-                  navigate(`/movies/${ev.tmdbId}`);
-                }
-              }}
-            />
+              style={{ display: 'block', textDecoration: 'none' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={`https://image.tmdb.org/t/p/w185${poster}`}
+                alt={title}
+                style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+              />
+            </Link>
           ) : (
-            <div 
-              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            <Link 
+              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
+              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'inherit' }}
               className="actionable-poster"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (ev.type === 'tv') {
-                  navigate(`/shows/${ev.tmdbId}`);
-                } else {
-                  navigate(`/movies/${ev.tmdbId}`);
-                }
-              }}
+              onClick={(e) => e.stopPropagation()}
             >
               {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
-            </div>
+            </Link>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span 
-                style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%', cursor: 'pointer' }}
+              <Link 
+                to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
+                style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%', cursor: 'pointer', color: 'inherit', textDecoration: 'none' }}
                 className="actionable-text"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (ev.type === 'tv') {
-                    navigate(`/shows/${ev.tmdbId}`);
-                  } else {
-                    navigate(`/movies/${ev.tmdbId}`);
-                  }
-                }}
+                onClick={(e) => e.stopPropagation()}
               >
                 {title}
-              </span>
+              </Link>
               {ev.isCollected && (
                 <span className="collected-badge-pill">
                   Collected
@@ -375,17 +361,14 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
             </div>
             {ev.type === 'tv' ? (
               <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span
+                <Link
+                  to={`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber}`}
                   className="actionable-text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const epNum = ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber;
-                    navigate(`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${epNum}`);
-                  }}
-                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ cursor: 'pointer', color: 'inherit', textDecoration: 'none' }}
                 >
                   {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
-                </span>
+                </Link>
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -408,16 +391,14 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <span 
-                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`);
-                  }}
+                <Link 
+                  to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
+                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
+                  onClick={(e) => e.stopPropagation()}
                   className="actionable-text"
                 >
                   S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
-                </span>
+                </Link>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={() => onToggleCollect('collect', subEv)}
@@ -1108,64 +1089,47 @@ const CalendarView = () => {
       >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
           {poster ? (
-            <img
-              src={`https://image.tmdb.org/t/p/w185${poster}`}
-              alt={title}
-              style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+            <Link
+              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
               className="actionable-poster"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (ev.type === 'tv') {
-                  navigate(`/shows/${ev.tmdbId}`);
-                } else {
-                  navigate(`/movies/${ev.tmdbId}`);
-                }
-              }}
-            />
+              style={{ display: 'block', textDecoration: 'none' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={`https://image.tmdb.org/t/p/w185${poster}`}
+                alt={title}
+                style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+              />
+            </Link>
           ) : (
-            <div 
-              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            <Link 
+              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
+              style={{ width: '60px', height: '90px', background: '#333', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'inherit' }}
               className="actionable-poster"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (ev.type === 'tv') {
-                  navigate(`/shows/${ev.tmdbId}`);
-                } else {
-                  navigate(`/movies/${ev.tmdbId}`);
-                }
-              }}
+              onClick={(e) => e.stopPropagation()}
             >
               {ev.type === 'tv' ? <Tv size={20} /> : <Film size={20} />}
-            </div>
+            </Link>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
-            <div 
-              style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+            <Link 
+              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
+              style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', color: 'inherit', textDecoration: 'none', display: 'block' }}
               className="actionable-text"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (ev.type === 'tv') {
-                  navigate(`/shows/${ev.tmdbId}`);
-                } else {
-                  navigate(`/movies/${ev.tmdbId}`);
-                }
-              }}
+              onClick={(e) => e.stopPropagation()}
             >
               {title}
-            </div>
+            </Link>
             {ev.type === 'tv' ? (
               <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span
+                <Link
+                  to={`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber}`}
                   className="actionable-text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const epNum = ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber;
-                    navigate(`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${epNum}`);
-                  }}
-                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ cursor: 'pointer', color: 'inherit', textDecoration: 'none' }}
                 >
                   {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
-                </span>
+                </Link>
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -1188,16 +1152,14 @@ const CalendarView = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <span 
-                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer' }} 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`);
-                  }}
+                <Link 
+                  to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
+                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
+                  onClick={(e) => e.stopPropagation()}
                   className="actionable-text"
                 >
                   S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
-                </span>
+                </Link>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={() => handleToggleCollect('collect', subEv)}
