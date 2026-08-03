@@ -117,6 +117,7 @@ const MyShows = () => {
     return saved ? parseInt(saved, 10) : getDefaultCols('landscape');
   });
   const [aspectRatio, setAspectRatio] = useState(() => localStorage.getItem('shows_aspect_ratio') || 'portrait');
+  const [progressMetric, setProgressMetric] = useState(() => localStorage.getItem('shows_progress_metric') || 'watched'); // 'watched' or 'collected'
   const [isDisplayMenuOpen, setIsDisplayMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -140,6 +141,9 @@ const MyShows = () => {
   useEffect(() => {
     localStorage.setItem('shows_aspect_ratio', aspectRatio);
   }, [aspectRatio]);
+  useEffect(() => {
+    localStorage.setItem('shows_progress_metric', progressMetric);
+  }, [progressMetric]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -262,6 +266,28 @@ const MyShows = () => {
           </div>
         </div>
 
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Show Progress</div>
+          <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px' }}>
+            <button 
+              type="button"
+              onClick={() => setProgressMetric('watched')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: progressMetric === 'watched' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              <Eye size={14} />
+              Watched
+            </button>
+            <button 
+              type="button"
+              onClick={() => setProgressMetric('collected')}
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none', background: progressMetric === 'collected' ? 'var(--accent)' : 'transparent', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              <Plus size={14} />
+              Collected
+            </button>
+          </div>
+        </div>
+
         {/* Visibility Filters */}
         <div>
           <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Visibility</div>
@@ -272,8 +298,8 @@ const MyShows = () => {
             style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem' }}
           >
             <option value="all">All ({shows.length})</option>
-            <option value="completed">Completed ({shows.filter(s => s.totalEpisodes > 0 && s.watchedCount >= s.totalEpisodes).length})</option>
-            <option value="progress">In Progress ({shows.filter(s => s.totalEpisodes === 0 || s.watchedCount < s.totalEpisodes).length})</option>
+            <option value="completed">Completed ({shows.filter(s => s.totalEpisodes > 0 && (progressMetric === 'collected' ? (s.collectedCount || 0) >= s.totalEpisodes : s.watchedCount >= s.totalEpisodes)).length})</option>
+            <option value="progress">In Progress ({shows.filter(s => s.totalEpisodes === 0 || (progressMetric === 'collected' ? (s.collectedCount || 0) < s.totalEpisodes : s.watchedCount < s.totalEpisodes)).length})</option>
           </select>
         </div>
 
@@ -452,7 +478,8 @@ const MyShows = () => {
     const matchesSearch = show.title.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
-    const completionRate = show.totalEpisodes > 0 ? (show.watchedCount / show.totalEpisodes) : 0;
+    const currentCount = progressMetric === 'collected' ? (show.collectedCount || 0) : show.watchedCount;
+    const completionRate = show.totalEpisodes > 0 ? (currentCount / show.totalEpisodes) : 0;
 
     if (filterType === 'completed') return completionRate >= 1 && show.totalEpisodes > 0;
     if (filterType === 'progress') return completionRate < 1 || show.totalEpisodes === 0;
@@ -502,10 +529,12 @@ const MyShows = () => {
 
   // Card renderer to prevent code duplication
   const renderShowCard = (show) => {
-    const completionRate = show.totalEpisodes > 0 ? (show.watchedCount / show.totalEpisodes) : 0;
+    const isWatchedMetric = progressMetric === 'watched';
+    const currentCount = isWatchedMetric ? show.watchedCount : (show.collectedCount || 0);
+    const completionRate = show.totalEpisodes > 0 ? (currentCount / show.totalEpisodes) : 0;
     const percentage = Math.round(completionRate * 100);
     const airedCount = show.airedEpisodes !== undefined ? show.airedEpisodes : show.totalEpisodes;
-    const unwatchedCount = Math.max(0, airedCount - show.watchedCount);
+    const remainingCount = Math.max(0, airedCount - currentCount);
 
     const isLandscape = aspectRatio === 'landscape';
     const imageUrl = isLandscape
@@ -522,8 +551,8 @@ const MyShows = () => {
           </div>
         )}
 
-        {/* Unwatched Badge */}
-        {unwatchedCount > 0 && (
+        {/* Badge */}
+        {remainingCount > 0 && (
           <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}>
             <span style={{
               padding: '4px 10px',
@@ -534,11 +563,11 @@ const MyShows = () => {
               color: '#fff',
               backdropFilter: 'blur(4px)'
             }}>
-              {unwatchedCount} Left
+              {remainingCount} Left
             </span>
           </div>
         )}
-        {unwatchedCount === 0 && airedCount > 0 && (
+        {remainingCount === 0 && airedCount > 0 && (
           <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2 }}>
             <span style={{
               padding: '4px 10px',
@@ -549,7 +578,7 @@ const MyShows = () => {
               color: '#fff',
               backdropFilter: 'blur(4px)'
             }}>
-              {show.watchedCount >= show.totalEpisodes ? 'Completed' : 'Up to Date'}
+              {currentCount >= show.totalEpisodes ? 'Completed' : 'Up to Date'}
             </span>
           </div>
         )}
@@ -561,7 +590,7 @@ const MyShows = () => {
               <div style={{ width: `${percentage}%`, height: '100%', background: percentage === 100 ? 'var(--success)' : 'var(--accent)', borderRadius: '2px' }}></div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              <span>{show.watchedCount}/{show.totalEpisodes || '?'} Ep</span>
+              <span>{currentCount}/{show.totalEpisodes || '?'} Ep</span>
               <span>{percentage}%</span>
             </div>
           </div>
@@ -569,10 +598,10 @@ const MyShows = () => {
           <div className="media-card-content">
             <div className="media-title" title={show.title}>{show.title}</div>
 
-            {/* Watched Progress bar */}
+            {/* Progress bar */}
             <div style={{ marginTop: '12px', marginBottom: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                <span>{show.watchedCount} / {show.totalEpisodes || '?'} Ep</span>
+                <span>{currentCount} / {show.totalEpisodes || '?'} Ep</span>
                 <span>{percentage}%</span>
               </div>
               <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -691,7 +720,8 @@ const MyShows = () => {
                       </td>
                     </tr>
                     {groupedShows[letter].map(show => {
-                      const completionRate = show.totalEpisodes > 0 ? (show.watchedCount / show.totalEpisodes) : 0;
+                      const currentCount = progressMetric === 'collected' ? (show.collectedCount || 0) : show.watchedCount;
+                      const completionRate = show.totalEpisodes > 0 ? (currentCount / show.totalEpisodes) : 0;
                       const percentage = Math.round(completionRate * 100);
                       return (
                         <tr 
@@ -744,7 +774,7 @@ const MyShows = () => {
                             </div>
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            {show.watchedCount} / {show.totalEpisodes || '?'}
+                            {currentCount} / {show.totalEpisodes || '?'}
                           </td>
                         </tr>
                       );
@@ -753,7 +783,8 @@ const MyShows = () => {
                 ))
               ) : (
                 sortedFilteredShows.map(show => {
-                  const completionRate = show.totalEpisodes > 0 ? (show.watchedCount / show.totalEpisodes) : 0;
+                  const currentCount = progressMetric === 'collected' ? (show.collectedCount || 0) : show.watchedCount;
+                  const completionRate = show.totalEpisodes > 0 ? (currentCount / show.totalEpisodes) : 0;
                   const percentage = Math.round(completionRate * 100);
                   return (
                     <tr 
@@ -806,7 +837,7 @@ const MyShows = () => {
                         </div>
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                        {show.watchedCount} / {show.totalEpisodes || '?'}
+                        {currentCount} / {show.totalEpisodes || '?'}
                       </td>
                     </tr>
                   );
