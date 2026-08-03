@@ -107,10 +107,48 @@ async function backfillMediaGenres() {
       }));
     }
 
-    console.log(`[Backfill Genres] Completed backfilling genres for ${successCount}/${mediaItems.length} media items.`);
+async function cleanupDuplicateWatchLogs() {
+  try {
+    const allLogs = await prisma.watchHistoryLog.findMany({
+      where: { isCompleted: true },
+      orderBy: [
+        { userId: 'asc' },
+        { mediaId: 'asc' },
+        { type: 'asc' },
+        { season: 'asc' },
+        { episode: 'asc' },
+        { watchedAt: 'asc' }
+      ]
+    });
+
+    const idsToDelete = [];
+    for (let i = 0; i < allLogs.length - 1; i++) {
+      const cur = allLogs[i];
+      const next = allLogs[i + 1];
+      if (
+        cur.userId === next.userId &&
+        cur.mediaId === next.mediaId &&
+        cur.type === next.type &&
+        cur.season === next.season &&
+        cur.episode === next.episode
+      ) {
+        const diffMs = Math.abs(new Date(next.watchedAt).getTime() - new Date(cur.watchedAt).getTime());
+        if (diffMs < 60000) { // within 60 seconds
+          idsToDelete.push(next.id);
+          i++; // skip next since it's flagged as duplicate
+        }
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      const res = await prisma.watchHistoryLog.deleteMany({
+        where: { id: { in: idsToDelete } }
+      });
+      console.log(`[Migration] Cleaned up ${res.count} duplicate watch history log entries.`);
+    }
   } catch (error) {
-    console.error('[Backfill Genres] Error backfilling media genres:', error);
+    console.error('[Migration] Error cleaning up duplicate watch history logs:', error);
   }
 }
 
-module.exports = { seedWatchHistoryLogs, backfillMediaGenres };
+module.exports = { seedWatchHistoryLogs, backfillMediaGenres, cleanupDuplicateWatchLogs };

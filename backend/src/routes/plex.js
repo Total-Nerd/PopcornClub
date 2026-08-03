@@ -8,6 +8,23 @@ const { resolveDuration } = require('../utils/durationResolver');
 const router = express.Router();
 const upload = multer(); // Plex sends multipart/form-data
 
+const recentPlexScrobbles = new Map();
+
+function isDuplicateScrobble(key) {
+  const now = Date.now();
+  const lastTime = recentPlexScrobbles.get(key);
+  if (lastTime && now - lastTime < 120000) { // 2 minute window
+    return true;
+  }
+  recentPlexScrobbles.set(key, now);
+  if (recentPlexScrobbles.size > 1000) {
+    for (const [k, time] of recentPlexScrobbles.entries()) {
+      if (now - time > 300000) recentPlexScrobbles.delete(k);
+    }
+  }
+  return false;
+}
+
 // Process Plex Webhook payload for a specific User
 async function handlePlexWebhook(payload, user, res) {
   if (!user) {
@@ -98,17 +115,15 @@ async function handlePlexWebhook(payload, user, res) {
 
       const session = {
         title: metadata.title,
-        type: metadata.type, // 'movie' or 'episode'
-        grandparentTitle: metadata.grandparentTitle || null, // TV Show name
-        parentTitle: metadata.parentTitle || null, // Season name
-        season: metadata.parentIndex || null,
-        episode: metadata.index || null,
-        viewOffset: metadata.viewOffset || 0, // offset in ms
-        duration: metadata.duration || 0, // total duration in ms
-        updatedAt: Date.now(),
-        isPlaying,
-        user: plexUser,
+        mediaTitle,
+        type: metadata.type === 'episode' ? 'tv' : 'movie',
+        season: metadata.parentIndex,
+        episode: metadata.index,
         ratingKey,
+        duration: metadata.duration ? Math.round(metadata.duration / 1000) : 0,
+        viewOffset: metadata.viewOffset ? Math.round(metadata.viewOffset / 1000) : 0,
+        isPlaying,
+        updatedAt: new Date(),
         posterPath,
         tmdbId
       };
@@ -116,77 +131,52 @@ async function handlePlexWebhook(payload, user, res) {
       plexStore.setActiveSession(user.id, session);
       const { broadcastToUser } = require('../utils/wsManager');
       broadcastToUser(user.id, { type: 'plex-session', session });
-      console.log(`[Plex Webhook] Active session set: ${metadata.title} (${isPlaying ? 'Playing' : 'Paused'}) for User ${user.username}`);
     }
   }
 
-  // 2. Permanent Db Logging (Scrobble Watch History & Library Additions)
-  if (eventType === 'media.scrobble' || eventType === 'media.stop' || eventType === 'library.new') {
-    const type = metadata.type; // 'movie' or 'episode'
-    const isMovie = type === 'movie';
-    const isEpisode = type === 'episode';
+  // 2. Scrobble / Watch History Tracking
+  if (metadata.type === 'movie') {
+    const tmdbId = metadata.tmdbId;
+    let media = null;
+    if (tmdbId) {
+      media = await prisma.media.findFirst({ where: { tmdbId, type: 'movie' } });
+    } else {
+      media = await prisma.media.findFirst({
+        where: {
+          title: {
+            equals: metadata.title,
+            mode: 'insensitive'
+          },
+          type: 'movie'
+        }
+      });
+    }
 
-    if (isMovie) {
-      let tmdbId = null;
-      if (metadata.Guid && Array.isArray(metadata.Guid)) {
-        const tmdbEntry = metadata.Guid.find(g => g.id && g.id.startsWith('tmdb://'));
-        if (tmdbEntry) {
-          tmdbId = parseInt(tmdbEntry.id.replace('tmdb://', ''), 10);
-        }
-      }
-      if (!tmdbId && metadata.guid) {
-        if (metadata.guid.startsWith('com.plexapp.agents.themoviedb://')) {
-          const match = metadata.guid.match(/themoviedb:\/\/(\d+)/);
-          if (match) {
-            tmdbId = parseInt(match[1], 10);
-          }
-        } else if (metadata.guid.startsWith('tmdb://')) {
-          tmdbId = parseInt(metadata.guid.replace('tmdb://', ''), 10);
-        }
-      }
-      if (!tmdbId) {
-        const matchedMedia = await prisma.media.findFirst({
-          where: {
-            title: {
-              equals: metadata.title,
-              mode: 'insensitive'
-            },
-            type: 'movie'
-          }
+    if (!media && tmdbApiKey && metadata.title) {
+      try {
+        const searchResults = await fetchTMDB('/3/search/movie', tmdbApiKey, {
+          query: metadata.title,
+          year: metadata.year
         });
-        if (matchedMedia) {
-          tmdbId = matchedMedia.tmdbId;
-        }
-      }
-      if (!tmdbId && tmdbApiKey) {
-        try {
-          const searchResults = await fetchTMDB('/3/search/movie', tmdbApiKey, {
-            query: metadata.title
+        if (searchResults && searchResults.results && searchResults.results.length > 0) {
+          const bestMatch = searchResults.results[0];
+          media = await prisma.media.create({
+            data: {
+              tmdbId: bestMatch.id,
+              type: 'movie',
+              title: bestMatch.title,
+              overview: bestMatch.overview || '',
+              releaseDate: bestMatch.release_date ? new Date(bestMatch.release_date) : null,
+              posterPath: bestMatch.poster_path
+            }
           });
-          if (searchResults && searchResults.results && searchResults.results.length > 0) {
-            tmdbId = searchResults.results[0].id;
-          }
-        } catch (err) {
-          console.error('[Plex Webhook] Error search-matching TMDB ID:', err.message);
         }
+      } catch (err) {
+        console.error('[Plex Webhook] Error fetching movie metadata from TMDB:', err.message);
       }
-      if (!tmdbId) {
-        tmdbId = metadata.ratingKey ? parseInt(metadata.ratingKey) : Math.floor(Math.random() * 1000000);
-      }
+    }
 
-      let media = await prisma.media.findFirst({ where: { tmdbId, type: 'movie' } });
-      if (!media) {
-        media = await prisma.media.create({
-          data: {
-            tmdbId,
-            type: 'movie',
-            title: metadata.title,
-            overview: metadata.summary || '',
-            releaseDate: metadata.originallyAvailableAt ? new Date(metadata.originallyAvailableAt) : null,
-          }
-        });
-      }
-
+    if (media) {
       if (eventType === 'media.scrobble' || eventType === 'media.stop') {
         const durationMs = metadata.duration || 0;
         const viewOffsetMs = metadata.viewOffset || (eventType === 'media.scrobble' ? durationMs : 0);
@@ -196,19 +186,25 @@ async function handlePlexWebhook(payload, user, res) {
         const isPartial = !isCompleted && viewOffsetMs > 10000;
 
         let shouldLog = true;
-        if (eventType === 'media.stop' && isCompleted) {
-          const recentLog = await prisma.watchHistoryLog.findFirst({
-            where: {
-              mediaId: media.id,
-              type: 'movie',
-              isCompleted: true,
-              userId: user.id,
-              watchedAt: { gte: new Date(Date.now() - 5 * 60000) }
-            }
-          });
-          if (recentLog) {
+        if (isCompleted) {
+          const dedupeKey = `movie_${user.id}_${media.id}`;
+          if (isDuplicateScrobble(dedupeKey)) {
             shouldLog = false;
-            console.log(`[Plex Webhook] Ignoring duplicate media.stop for Movie ${metadata.title} (User: ${user.username})`);
+            console.log(`[Plex Webhook] Ignoring concurrent/duplicate scrobble for Movie ${metadata.title} (User: ${user.username})`);
+          } else {
+            const recentLog = await prisma.watchHistoryLog.findFirst({
+              where: {
+                mediaId: media.id,
+                type: 'movie',
+                isCompleted: true,
+                userId: user.id,
+                watchedAt: { gte: new Date(Date.now() - 2 * 60000) }
+              }
+            });
+            if (recentLog) {
+              shouldLog = false;
+              console.log(`[Plex Webhook] Ignoring duplicate watch log for Movie ${metadata.title} (User: ${user.username})`);
+            }
           }
         }
 
@@ -322,21 +318,27 @@ async function handlePlexWebhook(payload, user, res) {
             const isPartial = !isCompleted && viewOffsetMs > 10000;
 
             let shouldLog = true;
-            if (eventType === 'media.stop' && isCompleted) {
-              const recentLog = await prisma.watchHistoryLog.findFirst({
-                where: {
-                  mediaId: media.id,
-                  type: 'tv',
-                  season,
-                  episode,
-                  isCompleted: true,
-                  userId: user.id,
-                  watchedAt: { gte: new Date(Date.now() - 5 * 60000) }
-                }
-              });
-              if (recentLog) {
+            if (isCompleted) {
+              const dedupeKey = `tv_${user.id}_${media.id}_${season}_${episode}`;
+              if (isDuplicateScrobble(dedupeKey)) {
                 shouldLog = false;
-                console.log(`[Plex Webhook] Ignoring duplicate media.stop for S${season}E${episode} of ${showTitle} (User: ${user.username})`);
+                console.log(`[Plex Webhook] Ignoring concurrent/duplicate scrobble for S${season}E${episode} of ${showTitle} (User: ${user.username})`);
+              } else {
+                const recentLog = await prisma.watchHistoryLog.findFirst({
+                  where: {
+                    mediaId: media.id,
+                    type: 'tv',
+                    season,
+                    episode,
+                    isCompleted: true,
+                    userId: user.id,
+                    watchedAt: { gte: new Date(Date.now() - 2 * 60000) }
+                  }
+                });
+                if (recentLog) {
+                  shouldLog = false;
+                  console.log(`[Plex Webhook] Ignoring duplicate watch log for S${season}E${episode} of ${showTitle} (User: ${user.username})`);
+                }
               }
             }
 

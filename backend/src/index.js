@@ -25,7 +25,7 @@ const calendarRoutes = require('./routes/calendar');
 const foldersRoutes = require('./routes/folders');
 const statsRoutes = require('./routes/stats');
 const { initFolderScanner } = require('./utils/folderScanner');
-const { seedWatchHistoryLogs, backfillMediaGenres } = require('./utils/historyMigration');
+const { seedWatchHistoryLogs, backfillMediaGenres, cleanupDuplicateWatchLogs } = require('./utils/historyMigration');
 
 // Basic route
 app.get('/api/health', (req, res) => {
@@ -57,6 +57,7 @@ server.listen(PORT, async () => {
   console.log(`TVTracker backend running on port ${PORT}`);
   try {
     await seedWatchHistoryLogs();
+    await cleanupDuplicateWatchLogs();
     backfillMediaGenres().catch(err => console.error('Failed to backfill media genres:', err));
     
     const prisma = require('./prismaClient');
