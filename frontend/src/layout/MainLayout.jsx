@@ -92,8 +92,10 @@ const MainLayout = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  const showWtBanner = wtState.enabled && location.pathname !== '/watch-together';
+
   return (
-    <div className={`app-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-container ${isCollapsed ? 'sidebar-collapsed' : ''} ${showWtBanner ? 'has-wt-banner' : ''}`}>
       <div className={`offline-status-bar ${showStatus ? 'show' : ''} ${transitioningToOnline ? 'online' : 'offline'}`}>
         {transitioningToOnline ? 'Online' : 'Offline'}
       </div>

@@ -503,7 +503,18 @@ button {
 /* Layout */
 .app-container {
   display: flex;
-  min-height: calc(100vh - 15px);
+  min-height: 100vh;
+  position: relative;
+}
+
+.app-container.has-wt-banner {
+  --wt-banner-offset: 42px; /* Approx height of the banner */
+}
+
+@media (max-width: 768px) {
+  .app-container.has-wt-banner {
+    --wt-banner-offset: 34px;
+  }
 }
 
 .sidebar {
@@ -569,8 +580,11 @@ button {
 }
 
 .watch-together-banner-top {
+  position: sticky;
+  top: 0;
+  z-index: 2000;
   margin: -40px -40px 24px -40px;
-  padding: 10px 20px;
+  padding: 11px 20px;
   background: var(--accent);
   color: #ffffff;
   display: flex;
@@ -582,7 +596,6 @@ button {
   letter-spacing: 0.02em;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   cursor: pointer;
-  z-index: 10;
   transition: all 0.2s ease;
   white-space: nowrap;
 }
@@ -2054,7 +2067,7 @@ body.sheet-open {
 @media (min-width: 769px) {
   .details-left-col {
     position: sticky;
-    top: 40px;
+    top: calc(40px + var(--wt-banner-offset, 0px));
     align-self: flex-start;
     z-index: 10;
   }
@@ -2480,7 +2493,7 @@ body.sheet-open {
 /* ==================== STICKY SEARCH CONTAINER ==================== */
 .sticky-search-container {
   position: sticky;
-  top: 0;
+  top: var(--wt-banner-offset, 0px);
   z-index: 100;
   background: var(--bg-dark);
   padding: 16px 0;
@@ -3555,7 +3568,7 @@ select option {
 /* Sticky Header Scroll-Up Slide-Down styles */
 .sticky-header-container {
   position: sticky;
-  top: 0;
+  top: var(--wt-banner-offset, 0px);
   z-index: 1000;
   background: var(--bg-dark);
   padding-top: 16px;
