@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
-import { History, Trash2, Film, Tv, ChevronLeft, ChevronRight, Check, Play, SlidersHorizontal, X } from 'lucide-react';
+import { History, Trash2, Film, Tv, ChevronLeft, ChevronRight, Check, Play, SlidersHorizontal, X, Users, UserPlus, UserMinus, Share2 } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 import { useModal } from '../context/ModalContext';
 import DateRangePicker from '../components/DateRangePicker';
@@ -21,6 +21,26 @@ const WatchHistory = () => {
   const [usersList, setUsersList] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [activeSession, setActiveSession] = useState(null);
+
+  // Bulk Selection & Shareable Users State
+  const [selectedLogIds, setSelectedLogIds] = useState([]);
+  const [shareableUsers, setShareableUsers] = useState([]);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedTargetUserIds, setSelectedTargetUserIds] = useState([]);
+  const [shareAction, setShareAction] = useState('add'); // 'add' or 'remove'
+  const [isSubmittingShare, setIsSubmittingShare] = useState(false);
+
+  useEffect(() => {
+    const fetchShareableUsers = async () => {
+      try {
+        const res = await api.get('/media/users/shareable');
+        setShareableUsers(res.data);
+      } catch (err) {
+        console.error('Failed to load shareable users:', err);
+      }
+    };
+    fetchShareableUsers();
+  }, []);
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -151,10 +171,60 @@ const WatchHistory = () => {
     try {
       await api.delete(`/media/watch-history/${id}`);
       showAlert('Watch history entry deleted successfully.', 'success');
+      setSelectedLogIds(prev => prev.filter(item => item !== id));
       fetchLogs();
     } catch (err) {
       console.error('Failed to delete history log:', err);
       showAlert('Failed to delete watch history log.', 'error');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLogIds.length === 0) return;
+    const confirmed = await showConfirm(`Are you sure you want to delete ${selectedLogIds.length} selected watch history entry(ies)?`);
+    if (!confirmed) return;
+    try {
+      await api.post('/media/watch-history/delete-bulk', { logIds: selectedLogIds });
+      showAlert(`Successfully deleted ${selectedLogIds.length} watch history entry(ies).`, 'success');
+      setSelectedLogIds([]);
+      fetchLogs();
+    } catch (err) {
+      console.error('Failed bulk delete:', err);
+      showAlert('Failed to delete selected watch history entries.', 'error');
+    }
+  };
+
+  const handleOpenShareModal = (idsToShare = selectedLogIds) => {
+    if (idsToShare.length === 0) return;
+    setSelectedLogIds(idsToShare);
+    setSelectedTargetUserIds([]);
+    setShareAction('add');
+    setIsShareModalOpen(true);
+  };
+
+  const handleShareSubmit = async () => {
+    if (selectedTargetUserIds.length === 0) {
+      showAlert('Please select at least one target user.', 'error');
+      return;
+    }
+    setIsSubmittingShare(true);
+    try {
+      const endpoint = shareAction === 'add' ? '/media/watch-history/share-bulk' : '/media/watch-history/unshare-bulk';
+      await api.post(endpoint, {
+        logIds: selectedLogIds,
+        targetUserIds: selectedTargetUserIds
+      });
+      const verb = shareAction === 'add' ? 'shared with' : 'removed from';
+      showAlert(`Successfully ${verb} ${selectedTargetUserIds.length} user(s) for ${selectedLogIds.length} item(s)!`, 'success');
+      setIsShareModalOpen(false);
+      setSelectedLogIds([]);
+      setSelectedTargetUserIds([]);
+      fetchLogs();
+    } catch (err) {
+      console.error('Failed to execute watch history share action:', err);
+      showAlert('Failed to update shared watch history.', 'error');
+    } finally {
+      setIsSubmittingShare(false);
     }
   };
 
@@ -477,6 +547,21 @@ const WatchHistory = () => {
             <table className="custom-table">
               <thead>
                 <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={logs.length > 0 && selectedLogIds.length === logs.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLogIds(logs.map(l => l.id));
+                        } else {
+                          setSelectedLogIds([]);
+                        }
+                      }}
+                      style={{ cursor: 'pointer', transform: 'scale(1.15)', accentColor: 'var(--accent)' }}
+                      title="Select All On Page"
+                    />
+                  </th>
                   <th>Media Info</th>
                   <th>Type</th>
                   <th>Watch Date & Time</th>
@@ -490,9 +575,24 @@ const WatchHistory = () => {
                   const isMovie = log.type === 'movie';
                   const detailUrl = isMovie ? `/movies/${log.media.tmdbId}` : `/shows/${log.media.tmdbId}`;
                   const pct = log.duration > 0 ? Math.round((log.viewOffset / log.duration) * 100) : 0;
+                  const isSelected = selectedLogIds.includes(log.id);
 
                   return (
-                    <tr key={log.id}>
+                    <tr key={log.id} style={{ background: isSelected ? 'rgba(59, 130, 246, 0.08)' : undefined }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedLogIds(prev => [...prev, log.id]);
+                            } else {
+                              setSelectedLogIds(prev => prev.filter(id => id !== log.id));
+                            }
+                          }}
+                          style={{ cursor: 'pointer', transform: 'scale(1.15)', accentColor: 'var(--accent)' }}
+                        />
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                           {showPosters && (
@@ -561,21 +661,46 @@ const WatchHistory = () => {
                         )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button
-                          onClick={() => handleDelete(log.id)}
-                          style={{
-                            color: 'var(--danger)',
-                            opacity: 0.8,
-                            padding: '8px',
-                            borderRadius: '6px',
-                            transition: 'all 0.2s',
-                            cursor: 'pointer'
-                          }}
-                          className="hover-bg-danger"
-                          title="Delete Watch Log"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            onClick={() => handleOpenShareModal([log.id])}
+                            style={{
+                              color: 'var(--accent)',
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '0.82rem',
+                              fontWeight: '600',
+                              transition: 'all 0.2s'
+                            }}
+                            title="Watched Together / Share"
+                          >
+                            <Users size={15} />
+                            <span>Together</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(log.id)}
+                            style={{
+                              color: 'var(--danger)',
+                              opacity: 0.8,
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              transition: 'all 0.2s',
+                              cursor: 'pointer',
+                              border: 'none',
+                              background: 'transparent'
+                            }}
+                            className="hover-bg-danger"
+                            title="Delete Watch Log"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -583,6 +708,59 @@ const WatchHistory = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Floating Action Bar for Bulk Selections */}
+          {selectedLogIds.length > 0 && (
+            <div style={{
+              position: 'fixed',
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 999,
+              background: 'rgba(20, 24, 33, 0.94)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '16px',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)'
+            }}>
+              <span style={{ fontWeight: '600', fontSize: '0.92rem', color: 'var(--text-main)' }}>
+                {selectedLogIds.length} item{selectedLogIds.length > 1 ? 's' : ''} selected
+              </span>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleOpenShareModal(selectedLogIds)}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  <Users size={16} />
+                  Watched Together
+                </button>
+
+                <button
+                  onClick={handleBulkDelete}
+                  className="btn btn-danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: 'var(--danger)' }}
+                >
+                  <Trash2 size={16} />
+                  Delete Selected
+                </button>
+
+                <button
+                  onClick={() => setSelectedLogIds([])}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '8px', borderRadius: '6px' }}
+                  title="Deselect All"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Pagination Controls */}
           {totalCount > 0 && (
@@ -655,7 +833,155 @@ const WatchHistory = () => {
           )}
         </>
       )}
-      
+      {/* Watched Together Modal */}
+      {isShareModalOpen && (
+        <div className="custom-modal-backdrop" onClick={() => setIsShareModalOpen(false)}>
+          <div className="custom-modal-content" style={{ maxWidth: '520px', width: '90vw' }} onClick={e => e.stopPropagation()}>
+            <div className="custom-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Users size={22} style={{ color: 'var(--accent)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '700' }}>Watched Together</h3>
+              </div>
+              <button onClick={() => setIsShareModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="custom-modal-body" style={{ padding: '20px 24px' }}>
+              <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                Apply watch history updates for <strong>{selectedLogIds.length} item{selectedLogIds.length > 1 ? 's' : ''}</strong>:
+              </p>
+
+              {/* Mode Toggle: Add vs Remove */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'var(--overlay-medium)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <button
+                  type="button"
+                  onClick={() => setShareAction('add')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    background: shareAction === 'add' ? 'var(--accent)' : 'transparent',
+                    color: shareAction === 'add' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <UserPlus size={16} />
+                  Add to History
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShareAction('remove')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    background: shareAction === 'remove' ? 'var(--danger)' : 'transparent',
+                    color: shareAction === 'remove' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <UserMinus size={16} />
+                  Remove / Uncheck
+                </button>
+              </div>
+
+              {/* Target User List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '240px', overflowY: 'auto' }}>
+                {shareableUsers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    No other user accounts found to share with.
+                  </div>
+                ) : (
+                  shareableUsers.map(u => {
+                    const isChecked = selectedTargetUserIds.includes(u.id);
+                    return (
+                      <label
+                        key={u.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          background: isChecked ? 'rgba(59, 130, 246, 0.12)' : 'var(--overlay-subtle)',
+                          border: `1px solid ${isChecked ? 'var(--accent)' : 'var(--border-color)'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.85rem' }}>
+                            {u.username.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.92rem' }}>
+                              {u.name || u.username}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              @{u.username}
+                            </div>
+                          </div>
+                        </div>
+
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTargetUserIds(prev => [...prev, u.id]);
+                            } else {
+                              setSelectedTargetUserIds(prev => prev.filter(id => id !== u.id));
+                            }
+                          }}
+                          style={{ width: '18px', height: '18px', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="custom-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '16px 24px' }}>
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '0.88rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleShareSubmit}
+                disabled={isSubmittingShare || selectedTargetUserIds.length === 0}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px', fontSize: '0.88rem', background: shareAction === 'remove' ? 'var(--danger)' : 'var(--accent)' }}
+              >
+                {isSubmittingShare ? 'Updating...' : shareAction === 'add' ? `Share with ${selectedTargetUserIds.length} User(s)` : `Remove from ${selectedTargetUserIds.length} User(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .hover-underline:hover {
           text-decoration: underline;

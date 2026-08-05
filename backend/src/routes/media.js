@@ -2586,6 +2586,269 @@ router.delete('/watch-history/:id', async (req, res) => {
   }
 });
 
+// GET shareable users (all active users except current user)
+router.get('/users/shareable', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { id: { not: req.user.id } },
+      select: { id: true, username: true, name: true, avatarPath: true }
+    });
+    res.json(users);
+  } catch (err) {
+    console.error('Error fetching shareable users:', err);
+    res.status(500).json({ error: 'Failed to fetch shareable users' });
+  }
+});
+
+// POST Bulk Share watch history entries to target users ("Watched Together")
+router.post('/watch-history/share-bulk', async (req, res) => {
+  const { logIds, targetUserIds } = req.body;
+  if (!Array.isArray(logIds) || !Array.isArray(targetUserIds) || logIds.length === 0 || targetUserIds.length === 0) {
+    return res.status(400).json({ error: 'logIds and targetUserIds arrays are required' });
+  }
+
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+
+    const logs = await prisma.watchHistoryLog.findMany({
+      where: {
+        id: { in: logIds },
+        ...(req.user.role === 'admin' ? {} : { userId: req.user.id })
+      },
+      include: { media: true }
+    });
+
+    const affectedShows = new Set();
+
+    for (const log of logs) {
+      for (const targetUserId of targetUserIds) {
+        if (targetUserId === req.user.id) continue;
+
+        const existingLog = await prisma.watchHistoryLog.findFirst({
+          where: {
+            userId: targetUserId,
+            mediaId: log.mediaId,
+            type: log.type,
+            season: log.season,
+            episode: log.episode,
+            watchedAt: log.watchedAt
+          }
+        });
+
+        if (!existingLog) {
+          await prisma.watchHistoryLog.create({
+            data: {
+              mediaId: log.mediaId,
+              type: log.type,
+              season: log.season,
+              episode: log.episode,
+              watchedAt: log.watchedAt,
+              duration: log.duration,
+              viewOffset: log.viewOffset,
+              isCompleted: log.isCompleted,
+              userId: targetUserId
+            }
+          });
+        }
+
+        if (log.isCompleted) {
+          if (log.type === 'movie') {
+            const existingMovie = await prisma.watchHistory.findFirst({
+              where: { userId: targetUserId, mediaId: log.mediaId }
+            });
+            if (!existingMovie) {
+              await prisma.watchHistory.create({
+                data: {
+                  mediaId: log.mediaId,
+                  userId: targetUserId,
+                  watchedAt: log.watchedAt
+                }
+              });
+            }
+          } else if (log.type === 'tv' && log.season !== null && log.episode !== null) {
+            await prisma.episodeWatchHistory.upsert({
+              where: {
+                userId_mediaId_season_episode: {
+                  userId: targetUserId,
+                  mediaId: log.mediaId,
+                  season: log.season,
+                  episode: log.episode
+                }
+              },
+              update: { watchedAt: log.watchedAt },
+              create: {
+                userId: targetUserId,
+                mediaId: log.mediaId,
+                season: log.season,
+                episode: log.episode,
+                watchedAt: log.watchedAt
+              }
+            });
+
+            if (tmdbApiKey && log.media?.tmdbId) {
+              affectedShows.add(`${targetUserId}:${log.mediaId}:${log.media.tmdbId}`);
+            }
+          }
+        }
+      }
+    }
+
+    for (const item of affectedShows) {
+      const [uId, mId, tmdbId] = item.split(':');
+      await syncShowWatchHistory(parseInt(mId, 10), parseInt(tmdbId, 10), tmdbApiKey, parseInt(uId, 10));
+    }
+
+    res.json({ message: 'Successfully shared watch entries', count: logs.length });
+  } catch (err) {
+    console.error('Error sharing watch history:', err);
+    res.status(500).json({ error: 'Failed to share watch history entries' });
+  }
+});
+
+// POST Bulk Unshare watch history entries from target users
+router.post('/watch-history/unshare-bulk', async (req, res) => {
+  const { logIds, targetUserIds } = req.body;
+  if (!Array.isArray(logIds) || !Array.isArray(targetUserIds) || logIds.length === 0 || targetUserIds.length === 0) {
+    return res.status(400).json({ error: 'logIds and targetUserIds arrays are required' });
+  }
+
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+
+    const logs = await prisma.watchHistoryLog.findMany({
+      where: {
+        id: { in: logIds },
+        ...(req.user.role === 'admin' ? {} : { userId: req.user.id })
+      },
+      include: { media: true }
+    });
+
+    const affectedShows = new Set();
+
+    for (const log of logs) {
+      for (const targetUserId of targetUserIds) {
+        if (targetUserId === req.user.id) continue;
+
+        await prisma.watchHistoryLog.deleteMany({
+          where: {
+            userId: targetUserId,
+            mediaId: log.mediaId,
+            type: log.type,
+            season: log.season,
+            episode: log.episode
+          }
+        });
+
+        if (log.type === 'movie') {
+          await prisma.watchHistory.deleteMany({
+            where: {
+              userId: targetUserId,
+              mediaId: log.mediaId
+            }
+          });
+        } else if (log.type === 'tv' && log.season !== null && log.episode !== null) {
+          await prisma.episodeWatchHistory.deleteMany({
+            where: {
+              userId: targetUserId,
+              mediaId: log.mediaId,
+              season: log.season,
+              episode: log.episode
+            }
+          });
+
+          if (tmdbApiKey && log.media?.tmdbId) {
+            affectedShows.add(`${targetUserId}:${log.mediaId}:${log.media.tmdbId}`);
+          }
+        }
+      }
+    }
+
+    for (const item of affectedShows) {
+      const [uId, mId, tmdbId] = item.split(':');
+      await syncShowWatchHistory(parseInt(mId, 10), parseInt(tmdbId, 10), tmdbApiKey, parseInt(uId, 10));
+    }
+
+    res.json({ message: 'Successfully unshared watch entries', count: logs.length });
+  } catch (err) {
+    console.error('Error unsharing watch history:', err);
+    res.status(500).json({ error: 'Failed to unshare watch history entries' });
+  }
+});
+
+// POST Bulk Delete watch history entries for current user
+router.post('/watch-history/delete-bulk', async (req, res) => {
+  const { logIds } = req.body;
+  if (!Array.isArray(logIds) || logIds.length === 0) {
+    return res.status(400).json({ error: 'logIds array is required' });
+  }
+
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+
+    const logs = await prisma.watchHistoryLog.findMany({
+      where: {
+        id: { in: logIds },
+        ...(req.user.role === 'admin' ? {} : { userId: req.user.id })
+      },
+      include: { media: true }
+    });
+
+    const affectedShows = new Set();
+
+    for (const log of logs) {
+      await prisma.watchHistoryLog.delete({ where: { id: log.id } });
+
+      if (log.type === 'movie') {
+        const remainingLogs = await prisma.watchHistoryLog.count({
+          where: { userId: log.userId, mediaId: log.mediaId, type: 'movie', isCompleted: true }
+        });
+        if (remainingLogs === 0) {
+          await prisma.watchHistory.deleteMany({
+            where: { userId: log.userId, mediaId: log.mediaId }
+          });
+        }
+      } else if (log.type === 'tv' && log.season !== null && log.episode !== null) {
+        const remainingLogs = await prisma.watchHistoryLog.count({
+          where: {
+            userId: log.userId,
+            mediaId: log.mediaId,
+            type: 'tv',
+            season: log.season,
+            episode: log.episode,
+            isCompleted: true
+          }
+        });
+        if (remainingLogs === 0) {
+          await prisma.episodeWatchHistory.deleteMany({
+            where: {
+              userId: log.userId,
+              mediaId: log.mediaId,
+              season: log.season,
+              episode: log.episode
+            }
+          });
+        }
+        if (tmdbApiKey && log.media?.tmdbId) {
+          affectedShows.add(`${log.userId}:${log.mediaId}:${log.media.tmdbId}`);
+        }
+      }
+    }
+
+    for (const item of affectedShows) {
+      const [uId, mId, tmdbId] = item.split(':');
+      await syncShowWatchHistory(parseInt(mId, 10), parseInt(tmdbId, 10), tmdbApiKey, parseInt(uId, 10));
+    }
+
+    res.json({ message: 'Successfully deleted history logs', count: logs.length });
+  } catch (err) {
+    console.error('Error deleting bulk watch history:', err);
+    res.status(500).json({ error: 'Failed to delete watch history logs' });
+  }
+});
+
 // Get media details (local stats fallback)
 router.get('/:tmdbId', async (req, res) => {
   const { tmdbId } = req.params;
