@@ -33,9 +33,15 @@ async function handlePlexWebhook(payload, user, res) {
   }
 
   const plexUser = payload.Account?.title;
-  if (user.plexUser && user.plexUser !== plexUser) {
-    console.log(`Ignoring Plex webhook for user ${plexUser} (Tracked for User ${user.username}: ${user.plexUser})`);
-    return res.sendStatus(200);
+  if (user.plexUser) {
+    const pUserLower = plexUser?.toLowerCase();
+    const targetPlexUserLower = user.plexUser.toLowerCase();
+    const targetUsernameLower = user.username?.toLowerCase();
+
+    if (pUserLower !== targetPlexUserLower && pUserLower !== targetUsernameLower) {
+      console.log(`[Plex Webhook] Ignoring webhook for Plex account "${plexUser}" (User ${user.username} expects "${user.plexUser}")`);
+      return res.sendStatus(200);
+    }
   }
 
   // Update last webhook timestamp for user
@@ -71,6 +77,24 @@ async function handlePlexWebhook(payload, user, res) {
     if (eventType === 'media.stop' || eventType === 'media.scrobble') {
       const current = plexStore.getActiveSession(user.id);
       if (current && current.ratingKey === ratingKey) {
+        // Fallback duration, viewOffset, season, episode if missing from Plex webhook payload
+        if (!metadata.duration && current.duration !== undefined) {
+          metadata.duration = current.duration;
+        }
+        if (!metadata.viewOffset && current.viewOffset !== undefined) {
+          const elapsed = current.isPlaying ? (Date.now() - current.updatedAt) : 0;
+          metadata.viewOffset = current.viewOffset + elapsed;
+        }
+        if (metadata.parentIndex === undefined && current.season !== undefined) {
+          metadata.parentIndex = current.season;
+        }
+        if (metadata.index === undefined && current.episode !== undefined) {
+          metadata.index = current.episode;
+        }
+        if (!metadata.grandparentTitle && (current.grandparentTitle || current.mediaTitle)) {
+          metadata.grandparentTitle = current.grandparentTitle || current.mediaTitle;
+        }
+
         plexStore.clearActiveSession(user.id);
         const { broadcastToUser } = require('../utils/wsManager');
         broadcastToUser(user.id, { type: 'plex-session', session: null });
@@ -116,14 +140,14 @@ async function handlePlexWebhook(payload, user, res) {
       const session = {
         title: metadata.title,
         mediaTitle,
-        type: metadata.type === 'episode' ? 'tv' : 'movie',
+        type: metadata.type === 'episode' ? 'episode' : 'movie',
         season: metadata.parentIndex,
         episode: metadata.index,
         ratingKey,
-        duration: metadata.duration ? Math.round(metadata.duration / 1000) : 0,
-        viewOffset: metadata.viewOffset ? Math.round(metadata.viewOffset / 1000) : 0,
+        duration: metadata.duration || 0,
+        viewOffset: metadata.viewOffset || 0,
         isPlaying,
-        updatedAt: new Date(),
+        updatedAt: Date.now(),
         posterPath,
         tmdbId
       };
@@ -272,17 +296,26 @@ async function handlePlexWebhook(payload, user, res) {
         });
         console.log(`[Plex Webhook] Logged collection for Movie ${metadata.title} (User: ${user.username})`);
       }
-    } else if (isEpisode) {
+    }
+  } else if (metadata.type === 'episode') {
       // Resolve TV Show
-      const showTitle = metadata.grandparentTitle;
+      const showTitle = metadata.grandparentTitle || metadata.title;
       if (!showTitle) {
-        console.log('[Plex Webhook] Episode webhook missing grandparentTitle (show title). Ignoring.');
+        console.log('[Plex Webhook] Episode webhook missing show title. Ignoring.');
         return res.sendStatus(200);
       }
 
-      let media = await prisma.media.findFirst({
-        where: { title: { equals: showTitle, mode: 'insensitive' }, type: 'tv' }
-      });
+      let media = null;
+      if (metadata.grandparentTitle) {
+        media = await prisma.media.findFirst({
+          where: { title: { equals: metadata.grandparentTitle, mode: 'insensitive' }, type: 'tv' }
+        });
+      }
+      if (!media && showTitle) {
+        media = await prisma.media.findFirst({
+          where: { title: { equals: showTitle, mode: 'insensitive' }, type: 'tv' }
+        });
+      }
 
       if (!media && tmdbApiKey) {
         try {
@@ -306,9 +339,9 @@ async function handlePlexWebhook(payload, user, res) {
       }
 
       if (media) {
-        const season = metadata.parentIndex;
-        const episode = metadata.index;
-        if (season !== undefined && episode !== undefined) {
+        const season = metadata.parentIndex !== undefined && metadata.parentIndex !== null ? parseInt(metadata.parentIndex, 10) : undefined;
+        const episode = metadata.index !== undefined && metadata.index !== null ? parseInt(metadata.index, 10) : undefined;
+        if (season !== undefined && episode !== undefined && !isNaN(season) && !isNaN(episode)) {
           if (eventType === 'media.scrobble' || eventType === 'media.stop') {
             const durationMs = metadata.duration || 0;
             const viewOffsetMs = metadata.viewOffset || (eventType === 'media.scrobble' ? durationMs : 0);
@@ -422,7 +455,6 @@ async function handlePlexWebhook(payload, user, res) {
         }
       }
     }
-  }
 
   res.sendStatus(200);
 }
@@ -460,10 +492,10 @@ router.post('/global/:token', upload.single('thumb'), async (req, res) => {
 
     const matchedUser = await prisma.user.findFirst({
       where: {
-        plexUser: {
-          equals: plexUser,
-          mode: 'insensitive'
-        }
+        OR: [
+          { plexUser: { equals: plexUser, mode: 'insensitive' } },
+          { username: { equals: plexUser, mode: 'insensitive' } }
+        ]
       }
     });
 
@@ -483,7 +515,13 @@ router.post('/global/:token', upload.single('thumb'), async (req, res) => {
 router.post('/:token', upload.single('thumb'), async (req, res) => {
   try {
     const { token } = req.params;
-    const payload = req.body.payload ? JSON.parse(req.body.payload) : req.body;
+    const rawPayload = req.body?.payload;
+    let payload = null;
+    if (rawPayload) {
+      try { payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload; } catch (e) {}
+    } else if (req.body) {
+      payload = req.body;
+    }
     
     if (!payload || !payload.Account || !payload.Metadata) {
       return res.sendStatus(200);
@@ -505,7 +543,13 @@ router.post('/:token', upload.single('thumb'), async (req, res) => {
 // Legacy / Fallback webhook URL (maps to default admin user)
 router.post('/', upload.single('thumb'), async (req, res) => {
   try {
-    const payload = req.body.payload ? JSON.parse(req.body.payload) : req.body;
+    const rawPayload = req.body?.payload;
+    let payload = null;
+    if (rawPayload) {
+      try { payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload; } catch (e) {}
+    } else if (req.body) {
+      payload = req.body;
+    }
     
     if (!payload || !payload.Account || !payload.Metadata) {
       return res.sendStatus(200);
