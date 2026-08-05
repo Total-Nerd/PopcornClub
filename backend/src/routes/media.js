@@ -2215,7 +2215,7 @@ router.get('/watch-history', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const type = req.query.type || 'all'; // 'all', 'movie', 'tv', 'episode'
-    const includePartial = req.query.includePartial === 'true';
+    const includePartial = req.query.includePartial === true || req.query.includePartial === 'true';
     const search = req.query.search || '';
     const startDate = req.query.startDate || '';
     const endDate = req.query.endDate || '';
@@ -2224,8 +2224,11 @@ router.get('/watch-history', async (req, res) => {
     const skip = (page - 1) * limit;
 
     let targetUserId = req.user.id;
-    if (req.user.role === 'admin' && req.query.userId) {
-      targetUserId = parseInt(req.query.userId);
+    if (req.user.role === 'admin' && req.query.userId && req.query.userId !== 'undefined' && req.query.userId !== 'null') {
+      const parsedId = parseInt(req.query.userId, 10);
+      if (!isNaN(parsedId) && parsedId > 0) {
+        targetUserId = parsedId;
+      }
     }
     const where = { userId: targetUserId };
     const mappedType = type === 'episode' ? 'tv' : type;
@@ -2324,6 +2327,48 @@ router.get('/watch-history', async (req, res) => {
     });
     
     const uniqueGenres = Array.from(uniqueGenresSet).sort();
+    
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, username: true, name: true, avatarPath: true }
+    });
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+    const enrichedLogs = await Promise.all(logs.map(async (log) => {
+      let coViewerIds = [];
+      try {
+        if (log.watchedWith) {
+          coViewerIds = JSON.parse(log.watchedWith);
+        } else if (log.watchedAt) {
+          const coViewerLogs = await prisma.watchHistoryLog.findMany({
+            where: {
+              mediaId: log.mediaId,
+              type: log.type,
+              season: log.season,
+              episode: log.episode,
+              userId: { not: targetUserId },
+              watchedAt: {
+                gte: new Date(new Date(log.watchedAt).getTime() - 3 * 60000),
+                lte: new Date(new Date(log.watchedAt).getTime() + 3 * 60000)
+              }
+            },
+            select: { userId: true },
+            take: 10
+          });
+          coViewerIds = Array.from(new Set(coViewerLogs.map(l => l.userId).filter(Boolean)));
+        }
+      } catch (e) {
+        console.error('Co-viewer enrichment error for log:', log.id, e.message);
+      }
+
+      const watchedWithUsers = coViewerIds
+        .map(id => userMap.get(id))
+        .filter(Boolean);
+
+      return {
+        ...log,
+        watchedWithUsers
+      };
+    }));
 
     let activeSession = null;
     if (page === 1) {
@@ -2332,7 +2377,7 @@ router.get('/watch-history', async (req, res) => {
     }
 
     res.json({
-      logs,
+      logs: enrichedLogs,
       genres: uniqueGenres,
       activeSession,
       pagination: {
@@ -2593,7 +2638,7 @@ router.get('/users/shareable', async (req, res) => {
       where: { id: { not: req.user.id } },
       select: { id: true, username: true, name: true, avatarPath: true }
     });
-    res.json(users);
+    res.json({ users });
   } catch (err) {
     console.error('Error fetching shareable users:', err);
     res.status(500).json({ error: 'Failed to fetch shareable users' });

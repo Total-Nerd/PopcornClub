@@ -22,6 +22,7 @@ model User {
   traktClientId     String?
   plexLastWebhookAt DateTime?
 
+  watchTogetherSession WatchTogetherSession?
   collections         Collection[]
   watchHistory        WatchHistory[]
   episodeCollections  EpisodeCollection[]
@@ -32,6 +33,16 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model WatchTogetherSession {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled        Boolean  @default(false)
+  participantIds String   @default("[]") // JSON array of participant user IDs
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model SystemSettings {
@@ -84,6 +95,7 @@ model WatchHistoryLog {
   isCompleted Boolean  @default(true) // true = full watch, false = partial watch
   userId      Int?
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchedWith String?  // JSON string array of co-viewer user IDs, e.g. "[12]"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

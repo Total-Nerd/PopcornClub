@@ -37,6 +37,7 @@ services:
       - ${MOVIES_4K_DIR}:/4k_movies:ro
       - ${DOCS_DIR}:/documentaries:ro
       - ${TV_SHOWS_DIR}:/tv:ro
+      - uploads-data:/app/uploads
 
   frontend:
     build:
@@ -50,3 +51,4 @@ services:
 
 volumes:
   db-data:
+  uploads-data:

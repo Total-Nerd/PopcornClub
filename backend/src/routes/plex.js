@@ -26,14 +26,14 @@ function isDuplicateScrobble(key) {
 }
 
 // Process Plex Webhook payload for a specific User
-async function handlePlexWebhook(payload, user, res) {
+async function handlePlexWebhook(payload, user, res, isReplicated = false) {
   if (!user) {
     console.log('[Plex Webhook] No user context provided. Ignoring.');
     return res.sendStatus(200);
   }
 
   const plexUser = payload.Account?.title;
-  if (user.plexUser || user.username || user.name) {
+  if (!isReplicated && (user.plexUser || user.username || user.name)) {
     const normalize = str => str ? str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
     const pNorm = normalize(plexUser);
     const targetPlexNorm = normalize(user.plexUser);
@@ -47,6 +47,32 @@ async function handlePlexWebhook(payload, user, res) {
     if (!isMatch) {
       console.log(`[Plex Webhook] Ignoring webhook for Plex account "${plexUser}" (User ${user.username} expects "${user.plexUser}")`);
       return res.sendStatus(200);
+    }
+  }
+
+  // Watch Together Mode Fan-Out Replication
+  if (!isReplicated) {
+    try {
+      const wtSession = await prisma.watchTogetherSession.findUnique({
+        where: { userId: user.id }
+      });
+      if (wtSession && wtSession.enabled) {
+        const participantIds = JSON.parse(wtSession.participantIds || '[]');
+        if (participantIds.length > 0) {
+          const participants = await prisma.user.findMany({
+            where: { id: { in: participantIds } }
+          });
+          const mockRes = { sendStatus: () => {} };
+          for (const participant of participants) {
+            console.log(`[Watch Together] Replicating Plex webhook event "${payload.event}" from host ${user.username} to ${participant.username}`);
+            handlePlexWebhook(payload, participant, mockRes, true).catch(err => {
+              console.error(`[Watch Together] Error replicating webhook for user ${participant.username}:`, err);
+            });
+          }
+        }
+      }
+    } catch (wtErr) {
+      console.error('[Watch Together] Fan-out replication error:', wtErr);
     }
   }
 

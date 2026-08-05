@@ -32,6 +32,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
 });
 
+const watchTogetherRoutes = require('./routes/watchTogether');
+const { authenticateToken } = require('./middleware/auth');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/media', mediaRoutes);
@@ -39,6 +42,7 @@ app.use('/api/lists', listsRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/folders', foldersRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/watch-together', authenticateToken, watchTogetherRoutes);
 
 const plexRoutes = require('./routes/plex');
 const http = require('http');
