@@ -33,12 +33,18 @@ async function handlePlexWebhook(payload, user, res) {
   }
 
   const plexUser = payload.Account?.title;
-  if (user.plexUser) {
-    const pUserLower = plexUser?.toLowerCase();
-    const targetPlexUserLower = user.plexUser.toLowerCase();
-    const targetUsernameLower = user.username?.toLowerCase();
+  if (user.plexUser || user.username || user.name) {
+    const normalize = str => str ? str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
+    const pNorm = normalize(plexUser);
+    const targetPlexNorm = normalize(user.plexUser);
+    const targetUserNorm = normalize(user.username);
+    const targetNameNorm = normalize(user.name);
 
-    if (pUserLower !== targetPlexUserLower && pUserLower !== targetUsernameLower) {
+    const isMatch = (pNorm && pNorm === targetPlexNorm) ||
+                    (targetUserNorm && pNorm === targetUserNorm) ||
+                    (targetNameNorm && pNorm === targetNameNorm);
+
+    if (!isMatch) {
       console.log(`[Plex Webhook] Ignoring webhook for Plex account "${plexUser}" (User ${user.username} expects "${user.plexUser}")`);
       return res.sendStatus(200);
     }
@@ -490,18 +496,51 @@ router.post('/global/:token', upload.single('thumb'), async (req, res) => {
       return res.sendStatus(200);
     }
 
-    const matchedUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { plexUser: { equals: plexUser, mode: 'insensitive' } },
-          { username: { equals: plexUser, mode: 'insensitive' } }
-        ]
-      }
+    const allUsers = await prisma.user.findMany();
+    const normalize = str => str ? str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
+    const plexUserNorm = normalize(plexUser);
+
+    let matchedUser = allUsers.find(u => {
+      const pNorm = normalize(u.plexUser);
+      const uNorm = normalize(u.username);
+      const nNorm = normalize(u.name);
+      return (
+        (pNorm && pNorm === plexUserNorm) ||
+        (uNorm && uNorm === plexUserNorm) ||
+        (nNorm && nNorm === plexUserNorm)
+      );
     });
 
     if (!matchedUser) {
-      console.log(`[Plex Global Webhook] No user found with Plex username: "${plexUser}". Ignoring scrobble.`);
-      return res.sendStatus(200);
+      console.log(`[Plex Global Webhook] No user found for Plex account "${plexUser}". Auto-creating user...`);
+      const crypto = require('crypto');
+      const plexWebhookToken = crypto.randomBytes(16).toString('hex');
+
+      let baseUsername = plexUser;
+      let targetUsername = baseUsername;
+      let counter = 1;
+      while (allUsers.some(u => u.username.toLowerCase() === targetUsername.toLowerCase())) {
+        targetUsername = `${baseUsername} ${counter++}`;
+      }
+
+      matchedUser = await prisma.user.create({
+        data: {
+          username: targetUsername,
+          plexUser: plexUser,
+          passwordHash: '',
+          role: 'user',
+          plexWebhookToken
+        }
+      });
+
+      await prisma.customList.create({
+        data: {
+          name: 'Watchlist',
+          userId: matchedUser.id
+        }
+      });
+
+      console.log(`[Plex Global Webhook] Auto-created new user ID ${matchedUser.id} (${matchedUser.username}) for Plex account "${plexUser}".`);
     }
 
     await handlePlexWebhook(payload, matchedUser, res);
