@@ -6,12 +6,19 @@ import { useModal } from '../context/ModalContext';
 import { Tv, Film, Clock, Calendar, User, Award, Share2, Check, TrendingUp, Info } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 
-// Helper to format minutes into a friendly string (e.g. "2h 45m" or "45m")
+// Helper to format minutes into a friendly string (e.g. "5d 2h 45m" or "45m")
 const formatWatchTime = (minutes) => {
-  if (minutes < 60) return `${minutes}m`;
-  const hrs = Math.floor(minutes / 60);
+  if (!minutes) return '0m';
+  const days = Math.floor(minutes / (24 * 60));
+  const hrs = Math.floor((minutes % (24 * 60)) / 60);
   const mins = minutes % 60;
-  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+  
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hrs > 0) parts.push(`${hrs}h`);
+  if (mins > 0 || parts.length === 0) parts.push(`${mins}m`);
+  
+  return parts.join(' ');
 };
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -240,6 +247,8 @@ const StatsPage = () => {
   // Filter States
   const [mediaTypeFilter, setMediaTypeFilter] = useState('all'); // 'all', 'shows', 'movies'
   const [timeRangeFilter, setTimeRangeFilter] = useState('year'); // 'week', 'month', 'year', 'all'
+  const [heatmapTooltip, setHeatmapTooltip] = useState(null);
+  const [watchedTogetherChartType, setWatchedTogetherChartType] = useState('pie'); // 'pie', 'bar'
   
   // Link copied state
   const [copied, setCopied] = useState(false);
@@ -249,7 +258,7 @@ const StatsPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await api.get(`/stats/${username}`);
+        const res = await api.get(`/stats/${username}?range=${timeRangeFilter}`);
         setStats(res.data);
       } catch (err) {
         console.error('Failed to fetch statistics:', err);
@@ -262,7 +271,7 @@ const StatsPage = () => {
     if (username) {
       fetchStats();
     }
-  }, [username]);
+  }, [username, timeRangeFilter]);
 
   const handleCopyShareLink = () => {
     const shareUrl = `${window.location.protocol}//${window.location.host}/stats/${username}`;
@@ -291,7 +300,7 @@ const StatsPage = () => {
   }
 
   // Extract selected period summary values
-  const currentSummary = (stats.summaries || {})[timeRangeFilter] || { movieCount: 0, episodeCount: 0, totalMinutes: 0, movieMinutes: 0, tvMinutes: 0 };
+  const currentSummary = stats.summary || { movieCount: 0, episodeCount: 0, totalMinutes: 0, movieMinutes: 0, tvMinutes: 0 };
   
   // Total plays for current summary based on media type
   let activePlayCount = 0;
@@ -389,7 +398,7 @@ const StatsPage = () => {
 
     return (
       <div style={{ overflowX: 'auto', width: '100%', padding: '4px 0' }}>
-        <svg width={svgWidth} height={svgHeight} style={{ minWidth: `${svgWidth}px` }}>
+        <svg width={svgWidth} height={svgHeight} style={{ minWidth: `${svgWidth}px`, overflow: 'visible' }}>
           {months.map((m, idx) => (
             <text
               key={idx}
@@ -438,19 +447,48 @@ const StatsPage = () => {
                 fill={getCellColor(cell.count)}
                 style={{ transition: 'all 0.15s ease', cursor: 'pointer' }}
                 className="heatmap-cell"
+                onMouseEnter={(e) => {
+                  const rect = e.target.getBoundingClientRect();
+                  setHeatmapTooltip({
+                    text: tooltipText,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top - 10
+                  });
+                }}
+                onMouseLeave={() => setHeatmapTooltip(null)}
               >
-                <title>{tooltipText}</title>
               </rect>
             );
           })}
         </svg>
+        {heatmapTooltip && (
+          <div style={{
+            position: 'fixed',
+            left: heatmapTooltip.x,
+            top: heatmapTooltip.y,
+            transform: 'translate(-50%, -100%)',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            fontSize: '0.8rem',
+            color: '#fff',
+            fontWeight: '500',
+            pointerEvents: 'none',
+            zIndex: 10000,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}>
+            {heatmapTooltip.text}
+          </div>
+        )}
       </div>
     );
   };
 
   // --- SVG LINE CHART CALCULATION ---
   const drawLineChart = () => {
-    const data = (stats.timelines || {})[timeRangeFilter] || [];
+    const data = stats.timeline || [];
     if (data.length === 0) {
       return (
         <div style={{ display: 'flex', height: '160px', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
@@ -599,6 +637,101 @@ const StatsPage = () => {
         </svg>
       </div>
     );
+  };
+
+  // --- SVG WATCHED TOGETHER CHART CALCULATION ---
+  const drawWatchedTogetherChart = () => {
+    if (!stats.watchedTogether) return null;
+    const { aloneMinutes, with: withUsers } = stats.watchedTogether;
+    
+    let total = aloneMinutes;
+    withUsers.forEach(u => total += u.minutes);
+    
+    if (total === 0) return <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '16px 0' }}>No watch data available.</div>;
+
+    const topWith = withUsers.slice(0, 4);
+    const others = withUsers.slice(4).reduce((sum, u) => sum + u.minutes, 0);
+    
+    const data = [
+      { label: 'Alone', value: aloneMinutes, color: 'var(--accent)' }
+    ];
+    
+    const colors = ['#60a5fa', '#34d399', '#fb7185', '#fcd34d', '#a78bfa'];
+    topWith.forEach((u, i) => {
+      data.push({ label: u.username, value: u.minutes, color: colors[i % colors.length] });
+    });
+    if (others > 0) {
+      data.push({ label: 'Others', value: others, color: '#94a3b8' });
+    }
+
+    if (watchedTogetherChartType === 'pie') {
+      let cumulativePercent = 0;
+      const getCoordinatesForPercent = (percent) => {
+        const x = Math.cos(2 * Math.PI * percent);
+        const y = Math.sin(2 * Math.PI * percent);
+        return [x, y];
+      };
+
+      let paths = [];
+      data.forEach((slice, idx) => {
+        const slicePercent = slice.value / total;
+        if (slicePercent === 0) return;
+        if (slicePercent === 1) {
+          paths.push(<circle key={idx} cx="0" cy="0" r="1" fill={slice.color} />);
+          return;
+        }
+        
+        const [startX, startY] = getCoordinatesForPercent(cumulativePercent);
+        cumulativePercent += slicePercent;
+        const [endX, endY] = getCoordinatesForPercent(cumulativePercent);
+        const largeArcFlag = slicePercent > 0.5 ? 1 : 0;
+        const pathData = `M ${startX} ${startY} A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY} L 0 0`;
+        
+        paths.push(<path key={idx} d={pathData} fill={slice.color} title={`${slice.label}: ${formatWatchTime(slice.value)}`} />);
+      });
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+          <svg viewBox="-1.2 -1.2 2.4 2.4" style={{ width: '120px', height: '120px', transform: 'rotate(-90deg)', overflow: 'visible' }}>
+            {paths}
+          </svg>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            {data.map((d, i) => d.value > 0 && (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: d.color }}></div>
+                  <span style={{ color: '#fff', fontWeight: '500' }}>{d.label}</span>
+                </div>
+                <span style={{ color: 'var(--text-muted)' }}>{Math.round((d.value/total)*100)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    } else {
+      // Horizontal Bar Chart
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '10px' }}>
+          <div style={{ width: '100%', height: '24px', borderRadius: '12px', overflow: 'hidden', display: 'flex' }}>
+            {data.map((d, i) => d.value > 0 && (
+              <div 
+                key={i} 
+                title={`${d.label}: ${formatWatchTime(d.value)}`}
+                style={{ height: '100%', width: `${(d.value / total) * 100}%`, background: d.color, borderRight: i < data.length - 1 ? '2px solid var(--bg-card)' : 'none' }}
+              />
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '0.8rem' }}>
+            {data.map((d, i) => d.value > 0 && (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: d.color }}></div>
+                <span style={{ color: 'var(--text-muted)' }}>{d.label} ({Math.round((d.value/total)*100)}%)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
   };
 
   // Spotlights from minutes duration (fallback to play count)
@@ -1014,6 +1147,34 @@ const StatsPage = () => {
             {drawLineChart()}
           </div>
         </div>
+
+        {/* Watched Together */}
+        <div className="glass-panel" style={{ padding: '24px', borderRadius: '20px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#fff', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <User size={18} style={{ color: 'var(--accent)' }} />
+                Watched Together
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Breakdown of time watched alone versus with other users in your sessions.
+              </p>
+            </div>
+            <div style={{ display: 'flex', background: 'var(--overlay-subtle)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <button 
+                onClick={() => setWatchedTogetherChartType('pie')}
+                style={{ padding: '4px 10px', border: 'none', background: watchedTogetherChartType === 'pie' ? 'var(--accent)' : 'transparent', color: watchedTogetherChartType === 'pie' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}
+              >Pie</button>
+              <button 
+                onClick={() => setWatchedTogetherChartType('bar')}
+                style={{ padding: '4px 10px', border: 'none', background: watchedTogetherChartType === 'bar' ? 'var(--accent)' : 'transparent', color: watchedTogetherChartType === 'bar' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}
+              >Bar</button>
+            </div>
+          </div>
+          <div style={{ marginTop: 'auto' }}>
+            {drawWatchedTogetherChart()}
+          </div>
+        </div>
       </div>
 
       {/* 8. Actors & TV Networks (Circular grid) */}
@@ -1116,9 +1277,9 @@ const StatsPage = () => {
                   {(stats?.topNetworks || []).map((net, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-muted)', width: '24px', textAlign: 'center' }}>#{idx + 1}</div>
-                      <div className="network-logo-container" style={{ width: '54px', height: '30px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '4px', border: '1px solid rgba(255,255,255,0.08)', transition: 'all 0.3s ease' }}>
+                      <div className="network-logo-container" style={{ width: '54px', height: '30px', background: 'transparent', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '4px', transition: 'all 0.3s ease' }}>
                         {net.logoPath ? (
-                          <img src={`https://image.tmdb.org/t/p/w92${net.logoPath}`} alt={net.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          <img src={`https://image.tmdb.org/t/p/w92${net.logoPath}`} alt={net.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', filter: 'drop-shadow(0px 0px 4px rgba(255,255,255,0.7)) drop-shadow(0px 0px 1px rgba(255,255,255,1))' }} />
                         ) : (
                           <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>TV</span>
                         )}
@@ -1162,11 +1323,14 @@ const StatsPage = () => {
 
       {/* Global CSS Styles for Animations & Interactions */}
       <style>{`
+        .heatmap-cell {
+          transform-box: fill-box;
+          transform-origin: center;
+        }
         .heatmap-cell:hover {
-          fill: var(--accent) !important;
-          transform: scale(1.15);
           stroke: #fff;
-          stroke-width: 0.5px;
+          stroke-width: 2px;
+          filter: drop-shadow(0 0 4px var(--accent));
         }
         .spotlight-poster-card:hover {
           transform: translateY(-8px) scale(1.03);
@@ -1197,7 +1361,7 @@ const StatsPage = () => {
         }
         .network-logo-container:hover {
           transform: scale(1.08);
-          background: rgba(255,255,255,0.08) !important;
+          background: #f0f0f0 !important;
           border-color: var(--accent) !important;
         }
         .actionable-text {

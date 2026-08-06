@@ -2272,9 +2272,9 @@ router.get('/watch-history', async (req, res) => {
       }
     }
 
-    if (search || genre) {
+    if ((search && !where.mediaId) || genre) {
       where.media = {};
-      if (search) {
+      if (search && !where.mediaId) {
         where.media.title = {
           contains: search,
           mode: 'insensitive'
