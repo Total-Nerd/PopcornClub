@@ -684,7 +684,7 @@ const MovieDetails = () => {
                               className="info-dropdown-item"
                               onClick={() => {
                                 setIsDropdownOpen(false);
-                                navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
+                                navigate(`/history?type=movie&tmdbId=${movieDetails.id}&title=${encodeURIComponent(movieDetails.title)}`);
                               }}
                             >
                               <History size={14} /> View Watch History
@@ -716,7 +716,7 @@ const MovieDetails = () => {
                               className="mobile-sheet-option"
                               onClick={() => {
                                 setIsDropdownOpen(false);
-                                navigate(`/history?search=${encodeURIComponent(movieDetails.title)}&type=movie&mediaId=${movieDetails.localId || ''}`);
+                                navigate(`/history?type=movie&tmdbId=${movieDetails.id}&title=${encodeURIComponent(movieDetails.title)}`);
                               }}
                             >
                               <History size={16} /> View Watch History

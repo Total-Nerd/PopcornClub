@@ -64,6 +64,8 @@ const WatchHistory = () => {
   const initSeason = searchParams.get('season') || '';
   const initEpisode = searchParams.get('episode') || '';
   const initMediaId = searchParams.get('mediaId') || '';
+  const initTmdbId = searchParams.get('tmdbId') || '';
+  const initTitle = searchParams.get('title') || '';
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [type, setType] = useState(initType);
@@ -78,6 +80,8 @@ const WatchHistory = () => {
   });
 
   const [mediaIdFilter, setMediaIdFilter] = useState(initMediaId);
+  const [tmdbIdFilter, setTmdbIdFilter] = useState(initTmdbId);
+  const [mediaTitle, setMediaTitle] = useState(initTitle);
   const [seasonFilter, setSeasonFilter] = useState(initSeason);
   const [episodeFilter, setEpisodeFilter] = useState(initEpisode);
 
@@ -104,7 +108,7 @@ const WatchHistory = () => {
   useEffect(() => {
     localStorage.setItem('history_include_partial', JSON.stringify(includePartial));
     setPage(1);
-  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter, selectedUserId]);
+  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId]);
 
   useEffect(() => {
     localStorage.setItem('history_show_posters', JSON.stringify(showPosters));
@@ -145,6 +149,7 @@ const WatchHistory = () => {
           endDate,
           genre: selectedGenre,
           mediaId: mediaIdFilter || undefined,
+          tmdbId: tmdbIdFilter || undefined,
           season: seasonFilter || undefined,
           episode: episodeFilter || undefined,
           userId: selectedUserId || undefined
@@ -164,7 +169,7 @@ const WatchHistory = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, seasonFilter, episodeFilter, selectedUserId]);
+  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId]);
 
   const handleDelete = async (id) => {
     const confirmed = await showConfirm('Are you sure you want to delete this watch history entry?');
@@ -283,6 +288,8 @@ const WatchHistory = () => {
     setSelectedGenre('');
     setIncludePartial(true);
     setMediaIdFilter('');
+    setTmdbIdFilter('');
+    setMediaTitle('');
     setSeasonFilter('');
     setEpisodeFilter('');
     setSelectedUserId('');
@@ -308,13 +315,13 @@ const WatchHistory = () => {
       </div>
       
       {/* Active Filter Chips */}
-      {(mediaIdFilter || seasonFilter || episodeFilter) && (
+      {(mediaIdFilter || tmdbIdFilter || seasonFilter || episodeFilter) && (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Active Filters:</span>
-          {mediaIdFilter && (
+          {(mediaIdFilter || tmdbIdFilter) && (
             <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '4px 10px', borderRadius: '8px' }}>
-              Specific Media ID: {mediaIdFilter}
-              <X size={12} style={{ cursor: 'pointer', opacity: 0.8 }} onClick={() => { setMediaIdFilter(''); setSearchParams(prev => { prev.delete('mediaId'); return prev; }); }} />
+              {mediaTitle ? `Media: ${mediaTitle}` : `Specific Media ID: ${mediaIdFilter || tmdbIdFilter}`}
+              <X size={12} style={{ cursor: 'pointer', opacity: 0.8 }} onClick={() => { setMediaIdFilter(''); setTmdbIdFilter(''); setMediaTitle(''); setSearchParams(prev => { prev.delete('mediaId'); prev.delete('tmdbId'); prev.delete('title'); return prev; }); }} />
             </span>
           )}
           {(seasonFilter || episodeFilter) && (

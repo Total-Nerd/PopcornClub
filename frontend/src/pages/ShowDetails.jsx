@@ -964,7 +964,7 @@ const ShowDetails = () => {
                               className="info-dropdown-item"
                               onClick={() => {
                                 setIsDropdownOpen(false);
-                                navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&mediaId=${showDetails.localId || ''}`);
+                                navigate(`/history?type=tv&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                               }}
                             >
                               <History size={14} /> View Watch History
@@ -996,7 +996,7 @@ const ShowDetails = () => {
                               className="mobile-sheet-option"
                               onClick={() => {
                                 setIsDropdownOpen(false);
-                                navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&mediaId=${showDetails.localId || ''}`);
+                                navigate(`/history?type=tv&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                               }}
                             >
                               <History size={16} /> View Watch History
@@ -1172,7 +1172,7 @@ const ShowDetails = () => {
                                   className="info-dropdown-item"
                                   onClick={() => {
                                     setIsSeasonDropdownOpen(false);
-                                    navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&season=${activeSeason}&mediaId=${showDetails.localId || ''}`);
+                                    navigate(`/history?type=tv&season=${activeSeason}&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                                   }}
                                 >
                                   <History size={12} /> View Season Watch History
@@ -1213,7 +1213,7 @@ const ShowDetails = () => {
                                   className="mobile-sheet-option"
                                   onClick={() => {
                                     setIsSeasonDropdownOpen(false);
-                                    navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&season=${activeSeason}&mediaId=${showDetails.localId || ''}`);
+                                    navigate(`/history?type=tv&season=${activeSeason}&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                                   }}
                                 >
                                   <History size={16} /> View Season Watch History
@@ -1409,7 +1409,7 @@ const ShowDetails = () => {
                                       className="episode-dropdown-item"
                                       onClick={() => {
                                         setActiveEpisodeMenu(null);
-                                        navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&season=${ep.season_number}&episode=${ep.episode_number}&mediaId=${showDetails.localId || ''}`);
+                                        navigate(`/history?type=tv&season=${ep.season_number}&episode=${ep.episode_number}&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                                       }}
                                     >
                                       <History size={14} /> View Watch History
@@ -1461,7 +1461,7 @@ const ShowDetails = () => {
                                       className="mobile-sheet-option"
                                       onClick={() => {
                                         setActiveEpisodeMenu(null);
-                                        navigate(`/history?search=${encodeURIComponent(showDetails.name)}&type=tv&season=${ep.season_number}&episode=${ep.episode_number}&mediaId=${showDetails.localId || ''}`);
+                                        navigate(`/history?type=tv&season=${ep.season_number}&episode=${ep.episode_number}&tmdbId=${showDetails.id}&title=${encodeURIComponent(showDetails.name)}`);
                                       }}
                                     >
                                       <History size={16} /> View Watch History
