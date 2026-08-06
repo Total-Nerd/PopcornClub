@@ -6,16 +6,12 @@ async function seedWatchHistoryLogs() {
     const currentCount = await prisma.watchHistoryLog.count();
     const totalOldCount = (await prisma.watchHistory.count()) + (await prisma.episodeWatchHistory.count());
 
-    if (currentCount > 0 && currentCount >= totalOldCount) {
+    if (currentCount > 0) {
       console.log('[Migration] WatchHistoryLog already has data. Skipping migration.');
       return;
     }
 
     console.log('[Migration] Migrating existing watch history in bulk...');
-
-    if (currentCount > 0) {
-      await prisma.watchHistoryLog.deleteMany();
-    }
 
     // 1. Migrate Movies (WatchHistory)
     const moviesHistory = await prisma.watchHistory.findMany();

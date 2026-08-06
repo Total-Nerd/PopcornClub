@@ -213,10 +213,10 @@ router.get('/:username', async (req, res) => {
     const tvAggregates = Object.values(mediaAggregates).filter(a => a.media.type === 'tv');
     const movieAggregates = Object.values(mediaAggregates).filter(a => a.media.type === 'movie');
 
-    const topShowsByCount = [...tvAggregates].sort((a, b) => b.count - a.count).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
-    const topMoviesByCount = [...movieAggregates].sort((a, b) => b.count - a.count).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
-    const topShowsByMinutes = [...tvAggregates].sort((a, b) => b.viewOffsetSum - a.viewOffsetSum).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
-    const topMoviesByMinutes = [...movieAggregates].sort((a, b) => b.viewOffsetSum - a.viewOffsetSum).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
+    const topShowsByCount = [...tvAggregates].sort((a, b) => (b.count - a.count) || (b.viewOffsetSum - a.viewOffsetSum)).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
+    const topMoviesByCount = [...movieAggregates].sort((a, b) => (b.count - a.count) || (b.viewOffsetSum - a.viewOffsetSum)).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
+    const topShowsByMinutes = [...tvAggregates].sort((a, b) => (b.viewOffsetSum - a.viewOffsetSum) || (b.count - a.count)).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
+    const topMoviesByMinutes = [...movieAggregates].sort((a, b) => (b.viewOffsetSum - a.viewOffsetSum) || (b.count - a.count)).slice(0, 5).map(a => ({ id: a.media.id, tmdbId: a.media.tmdbId, title: a.media.title, posterPath: a.media.posterPath, backdropPath: a.media.backdropPath, count: a.count, minutes: Math.round(a.viewOffsetSum / 60) }));
 
     // 8. TMDB Meta Aggregations
     const actorAggregate = {};
