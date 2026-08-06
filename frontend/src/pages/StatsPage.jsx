@@ -920,7 +920,15 @@ const StatsPage = () => {
         <div className="glass-panel wrapped-metric-card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', position: 'relative', overflow: 'hidden' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Time Spent</div>
           <div style={{ fontSize: '2.5rem', fontWeight: '800', color: '#60a5fa', marginTop: '12px' }}>{formatWatchTime(activeMinutes)}</div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>of screen time</div>
+          {mediaTypeFilter === 'all' ? (
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span title="TV Shows"><Tv size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}/>{formatWatchTime(currentSummary.tvMinutes)}</span>
+              <span>&bull;</span>
+              <span title="Movies"><Film size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}/>{formatWatchTime(currentSummary.movieMinutes)}</span>
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>of screen time</div>
+          )}
         </div>
 
         {mediaTypeFilter !== 'shows' && (
@@ -959,7 +967,7 @@ const StatsPage = () => {
               <Tv size={20} style={{ color: 'var(--accent)' }} />
               Top TV Show Runner-ups
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mediaTypeFilter === 'all' ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '16px' }}>
               {runnerUpShows.map((show, idx) => (
                 <Link 
                   key={idx}
@@ -1038,7 +1046,7 @@ const StatsPage = () => {
               <Film size={20} style={{ color: 'var(--accent)' }} />
               Top Movie Runner-ups
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mediaTypeFilter === 'all' ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '16px' }}>
               {runnerUpMovies.map((movie, idx) => (
                 <Link 
                   key={idx}
