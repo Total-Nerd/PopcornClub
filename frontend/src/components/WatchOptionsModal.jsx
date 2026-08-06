@@ -14,6 +14,9 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
   const [historyLogs, setHistoryLogs] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [addSequentially, setAddSequentially] = useState(true);
+
+  const isBulk = media?.type === 'show' || media?.type === 'season';
 
   const fetchHistory = async () => {
     if (!media) return;
@@ -57,7 +60,7 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
   if (!isOpen) return null;
 
   const handleOption = (choice, watchedAt = null) => {
-    onSelect({ choice, watchedAt });
+    onSelect({ choice, watchedAt, addSequentially: isBulk ? addSequentially : false });
     onClose();
   };
 
@@ -108,43 +111,45 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
 
   const renderContent = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <button
-        type="button"
-        className="mobile-sheet-option"
-        onClick={() => handleOption('watching-now')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: '14px',
-          textAlign: 'left',
-          padding: '14px 18px',
-          borderRadius: '12px',
-          background: 'var(--overlay-subtle)',
-          border: '1px solid var(--border-color)',
-          color: 'var(--text-main)',
-          cursor: 'pointer',
-          fontSize: '0.95rem',
-          width: '100%',
-          marginBottom: '0px'
-        }}
-      >
-        <div style={{
-          background: 'rgba(59, 130, 246, 0.15)',
-          color: 'var(--accent)',
-          borderRadius: '50%',
-          padding: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <Play size={18} fill="currentColor" />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span style={{ fontWeight: '600' }}>Watching Now</span>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Show floating progress & track duration</span>
-        </div>
-      </button>
+      {!isBulk && (
+        <button
+          type="button"
+          className="mobile-sheet-option"
+          onClick={() => handleOption('watching-now')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: '14px',
+            textAlign: 'left',
+            padding: '14px 18px',
+            borderRadius: '12px',
+            background: 'var(--overlay-subtle)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-main)',
+            cursor: 'pointer',
+            fontSize: '0.95rem',
+            width: '100%',
+            marginBottom: '0px'
+          }}
+        >
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            color: 'var(--accent)',
+            borderRadius: '50%',
+            padding: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Play size={18} fill="currentColor" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontWeight: '600' }}>Watching Now</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Show floating progress & track duration</span>
+          </div>
+        </button>
+      )}
 
       <button
         type="button"
@@ -184,11 +189,11 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
         </div>
       </button>
 
-      {releaseDateVal && (
+      {(releaseDateVal || isBulk) && (
         <button
           type="button"
           className="mobile-sheet-option"
-          onClick={() => handleOption('release-date', new Date(releaseDateVal).toISOString())}
+          onClick={() => handleOption('release-date', releaseDateVal ? new Date(releaseDateVal).toISOString() : new Date().toISOString())}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -218,8 +223,10 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
             <Calendar size={18} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontWeight: '600' }}>Release Date</span>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Set date to release ({formattedReleaseDate})</span>
+            <span style={{ fontWeight: '600' }}>{isBulk ? 'Original Release Dates' : 'Release Date'}</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {isBulk ? "Set each episode's watch time to its air date" : `Set date to release (${formattedReleaseDate})`}
+            </span>
           </div>
         </button>
       )}
@@ -286,7 +293,32 @@ const WatchOptionsModal = ({ isOpen, onClose, media, onSelect, onWatchStatusChan
         </form>
       )}
 
-      {media?.isWatched && (
+      {isBulk && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '12px 18px',
+          borderRadius: '12px',
+          background: 'var(--overlay-subtle)',
+          border: '1px solid var(--border-color)',
+          cursor: 'pointer',
+          marginTop: '4px'
+        }}>
+          <input
+            type="checkbox"
+            checked={addSequentially}
+            onChange={(e) => setAddSequentially(e.target.checked)}
+            style={{ accentColor: 'var(--accent)', width: '18px', height: '18px' }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.95rem', color: 'var(--text-main)', fontWeight: '500' }}>Add sequentially</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Calculate watch times using episode runtimes</span>
+          </div>
+        </label>
+      )}
+
+      {!isBulk && media?.isWatched && (
         <>
           <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 0' }} />
           

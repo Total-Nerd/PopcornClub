@@ -1256,7 +1256,7 @@ router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', async (req
 
 // Toggle episode watch status
 router.post('/episode/watch', async (req, res) => {
-  const { tmdbId, season, episode, watched, title, posterPath, watchedAt } = req.body;
+  const { tmdbId, season, episode, watched, title, posterPath, watchedAt, choice } = req.body;
   if (!tmdbId || season === undefined || episode === undefined) {
     return res.status(400).json({ error: 'Missing required episode fields' });
   }
@@ -1266,7 +1266,23 @@ router.post('/episode/watch', async (req, res) => {
     const systemSettings = await prisma.systemSettings.findFirst();
 
     if (watched) {
-      const watchDate = watchedAt ? new Date(watchedAt) : new Date();
+      let watchDate = watchedAt ? new Date(watchedAt) : new Date();
+
+      if (choice === 'release-date' && systemSettings?.tmdbApiKey) {
+        try {
+          const showData = await fetchTMDB(`/3/tv/${tmdbId}`, systemSettings.tmdbApiKey);
+          const epData = await fetchTMDB(`/3/tv/${tmdbId}/season/${season}/episode/${episode}`, systemSettings.tmdbApiKey);
+          if (showData && epData && epData.air_date) {
+            const originCountries = showData.origin_country || [];
+            const exactAirTime = getAiringDateTime(epData.air_date, originCountries, tmdbId);
+            if (exactAirTime) {
+              watchDate = new Date(exactAirTime);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to get exact air date for episode:', err);
+        }
+      }
       const history = await prisma.episodeWatchHistory.upsert({
         where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season, episode } },
         update: { watchedAt: watchDate },
@@ -1312,6 +1328,146 @@ router.post('/episode/watch', async (req, res) => {
   } catch (error) {
     console.error('Failed to toggle episode watch:', error);
     res.status(500).json({ error: 'Failed to toggle episode watch status' });
+  }
+});
+
+// Bulk watch for show or season
+router.post('/tv/watch-bulk', async (req, res) => {
+  const { tmdbId, type, season, title, posterPath, watchedAt, choice, addSequentially } = req.body;
+  if (!tmdbId || !type) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const apiKey = systemSettings?.tmdbApiKey;
+    if (!apiKey) return res.status(500).json({ error: 'TMDB API key not configured' });
+
+    const media = await getOrCreateMediaRecord({ tmdbId, type: 'tv', title, posterPath });
+    const showData = await fetchTMDB(`/3/tv/${tmdbId}`, apiKey);
+    if (!showData) return res.status(404).json({ error: 'Show not found on TMDB' });
+
+    let episodesToMark = [];
+
+    // 1. Gather all episodes
+    if (type === 'season') {
+      if (season === undefined || season === null) return res.status(400).json({ error: 'Missing season number' });
+      const seasonData = await fetchTMDB(`/3/tv/${tmdbId}/season/${season}`, apiKey).catch(() => null);
+      if (seasonData && seasonData.episodes) {
+        episodesToMark = seasonData.episodes;
+      }
+    } else if (type === 'show') {
+      for (const s of showData.seasons || []) {
+        if (s.season_number === 0) continue; // Skip specials by default
+        const seasonData = await fetchTMDB(`/3/tv/${tmdbId}/season/${s.season_number}`, apiKey).catch(() => null);
+        if (seasonData && seasonData.episodes) {
+          episodesToMark = episodesToMark.concat(seasonData.episodes);
+        }
+      }
+    }
+
+    if (episodesToMark.length === 0) {
+      return res.json({ success: true, message: 'No episodes found to mark' });
+    }
+
+    // Sort episodes correctly just in case
+    episodesToMark.sort((a, b) => {
+      if (a.season_number !== b.season_number) return a.season_number - b.season_number;
+      return a.episode_number - b.episode_number;
+    });
+
+    // 2. Calculate watch times
+    const baseTime = watchedAt ? new Date(watchedAt).getTime() : Date.now();
+    let currentMs = baseTime;
+
+    if (choice === 'just-watched' && addSequentially) {
+      // Work backwards from the end
+      for (let i = episodesToMark.length - 1; i >= 0; i--) {
+        const ep = episodesToMark[i];
+        let durationMin = ep.runtime;
+        if (!durationMin || durationMin <= 0) {
+           durationMin = (showData.episode_run_time && showData.episode_run_time.length > 0) 
+                         ? showData.episode_run_time[0] 
+                         : 45;
+        }
+        if (durationMin <= 0) durationMin = 45;
+
+        const durationMs = durationMin * 60 * 1000;
+        ep.calculatedWatchTime = new Date(currentMs);
+        currentMs -= durationMs; // shift back for the next episode (which is earlier)
+      }
+    } else if (choice === 'other-time' && addSequentially) {
+      // Work forwards from the start
+      for (let i = 0; i < episodesToMark.length; i++) {
+        const ep = episodesToMark[i];
+        ep.calculatedWatchTime = new Date(currentMs);
+        
+        let durationMin = ep.runtime;
+        if (!durationMin || durationMin <= 0) {
+           durationMin = (showData.episode_run_time && showData.episode_run_time.length > 0) 
+                         ? showData.episode_run_time[0] 
+                         : 45;
+        }
+        if (durationMin <= 0) durationMin = 45;
+
+        const durationMs = durationMin * 60 * 1000;
+        currentMs += durationMs;
+      }
+    } else {
+      // release-date or non-sequential: use same time or release date
+      const originCountries = showData.origin_country || [];
+      for (const ep of episodesToMark) {
+        if (choice === 'release-date') {
+          if (ep.air_date) {
+            const exactAirTime = getAiringDateTime(ep.air_date, originCountries, tmdbId);
+            ep.calculatedWatchTime = new Date(exactAirTime);
+          } else {
+            ep.calculatedWatchTime = new Date(baseTime);
+          }
+        } else {
+          ep.calculatedWatchTime = new Date(baseTime);
+        }
+      }
+    }
+
+    // 3. Save to database
+    for (const ep of episodesToMark) {
+      const wDate = ep.calculatedWatchTime;
+      const s = ep.season_number;
+      const e = ep.episode_number;
+      
+      await prisma.episodeWatchHistory.upsert({
+        where: { userId_mediaId_season_episode: { userId: req.user.id, mediaId: media.id, season: s, episode: e } },
+        update: { watchedAt: wDate },
+        create: { userId: req.user.id, mediaId: media.id, season: s, episode: e, watchedAt: wDate }
+      });
+
+      let durationMin = ep.runtime || ((showData.episode_run_time && showData.episode_run_time.length > 0) ? showData.episode_run_time[0] : 45);
+      if (!durationMin || durationMin <= 0) durationMin = 45;
+      const durationSec = durationMin * 60;
+
+      await prisma.watchHistoryLog.create({
+        data: {
+          userId: req.user.id,
+          mediaId: media.id,
+          type: 'tv',
+          season: s,
+          episode: e,
+          watchedAt: wDate,
+          isCompleted: true,
+          duration: durationSec,
+          viewOffset: durationSec
+        }
+      });
+    }
+
+    // 4. Sync show stats
+    await syncShowWatchHistory(media.id, media.tmdbId, apiKey, req.user.id);
+
+    res.json({ success: true, message: `Marked ${episodesToMark.length} episodes as watched` });
+  } catch (error) {
+    console.error('Failed to process bulk watch:', error);
+    res.status(500).json({ error: 'Failed to process bulk watch' });
   }
 });
 

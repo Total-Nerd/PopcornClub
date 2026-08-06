@@ -521,8 +521,34 @@ const ShowDetails = () => {
   const [watchOptionsMedia, setWatchOptionsMedia] = useState(null);
   const [activeWatchEpisode, setActiveWatchEpisode] = useState(null);
 
-  const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
-    if (!activeWatchEpisode || !showDetails) return;
+  const handleWatchOptionsSelect = async ({ choice, watchedAt, addSequentially }) => {
+    if (!showDetails) return;
+
+    if (watchOptionsMedia?.type === 'show' || watchOptionsMedia?.type === 'season') {
+      try {
+        await api.post('/media/tv/watch-bulk', {
+          tmdbId: showDetails.id,
+          type: watchOptionsMedia.type,
+          season: watchOptionsMedia.season,
+          title: showDetails.name,
+          posterPath: showDetails.poster_path,
+          watched: true,
+          watchedAt,
+          choice,
+          addSequentially
+        });
+        showAlert(`Marked ${watchOptionsMedia.type} as watched`, 'success');
+        const detailsRes = await api.get(`/media/tv/${tmdbId}`);
+        setShowDetails(detailsRes.data);
+        if (activeSeason) handleSelectSeason(activeSeason);
+      } catch (err) {
+        console.error('Failed to log bulk watch:', err);
+        showAlert('Failed to update watch status', 'error');
+      }
+      return;
+    }
+
+    if (!activeWatchEpisode) return;
     const episode = activeWatchEpisode;
     try {
       if (choice === 'watching-now') {
@@ -567,7 +593,8 @@ const ShowDetails = () => {
           watched: true,
           title: showDetails.name,
           posterPath: showDetails.poster_path,
-          watchedAt
+          watchedAt,
+          choice
         });
 
         // Update episodes array in local state
@@ -945,6 +972,22 @@ const ShowDetails = () => {
                               className="info-dropdown-item"
                               onClick={() => {
                                 setIsDropdownOpen(false);
+                                setWatchOptionsMedia({
+                                  type: 'show',
+                                  tmdbId: showDetails.id,
+                                  title: showDetails.name,
+                                  releaseDate: showDetails.first_air_date
+                                });
+                                setIsWatchOptionsOpen(true);
+                              }}
+                            >
+                              <History size={16} /> Mark Show as Watched
+                            </button>
+                            <button
+                              type="button"
+                              className="info-dropdown-item"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
                                 handleScanShow();
                               }}
                             >
@@ -974,6 +1017,28 @@ const ShowDetails = () => {
                           {/* Mobile Bottom Sheet Menu */}
                           <MobileBottomSheet title="Show Options" onClose={() => setIsDropdownOpen(false)}>
                             <button
+                              className="mobile-sheet-option"
+                              onClick={() => {
+                                setIsDropdownOpen(false);
+                                setWatchOptionsMedia({
+                                  type: 'show',
+                                  tmdbId: showDetails.id,
+                                  title: showDetails.name,
+                                  releaseDate: showDetails.first_air_date
+                                });
+                                setIsWatchOptionsOpen(true);
+                              }}
+                            >
+                              <div className="icon-wrapper" style={{ color: 'var(--accent)', background: 'rgba(59, 130, 246, 0.15)' }}>
+                                <History size={18} />
+                              </div>
+                              <div className="text-wrapper">
+                                <span className="title">Mark Show as Watched</span>
+                                <span className="subtitle">Mark all episodes as watched</span>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
                               className="mobile-sheet-option"
                               onClick={() => {
                                 setIsDropdownOpen(false);
@@ -1162,6 +1227,21 @@ const ShowDetails = () => {
                                   className="info-dropdown-item"
                                   onClick={() => {
                                     setIsSeasonDropdownOpen(false);
+                                    setWatchOptionsMedia({
+                                      type: 'season',
+                                      season: activeSeason,
+                                      tmdbId: showDetails.id,
+                                      title: `Season ${activeSeason}`
+                                    });
+                                    setIsWatchOptionsOpen(true);
+                                  }}
+                                >
+                                  <History size={16} /> Mark Season as Watched
+                                </button>
+                                <button
+                                  className="info-dropdown-item"
+                                  onClick={() => {
+                                    setIsSeasonDropdownOpen(false);
                                     setShowSeasonRawModal(true);
                                     fetchRawData();
                                   }}
@@ -1182,6 +1262,28 @@ const ShowDetails = () => {
                               {/* Mobile Bottom Sheet Menu */}
                               <MobileBottomSheet title={`Season ${activeSeason} Options`} onClose={() => setIsSeasonDropdownOpen(false)}>
                                 <button
+                                  className="mobile-sheet-option"
+                                  onClick={() => {
+                                    setIsSeasonDropdownOpen(false);
+                                    setWatchOptionsMedia({
+                                      type: 'season',
+                                      season: activeSeason,
+                                      tmdbId: showDetails.id,
+                                      title: `Season ${activeSeason}`
+                                    });
+                                    setIsWatchOptionsOpen(true);
+                                  }}
+                                >
+                                  <div className="icon-wrapper" style={{ color: 'var(--accent)', background: 'rgba(59, 130, 246, 0.15)' }}>
+                                    <History size={18} />
+                                  </div>
+                                  <div className="text-wrapper">
+                                    <span className="title">Mark Season as Watched</span>
+                                    <span className="subtitle">Mark all season episodes as watched</span>
+                                  </div>
+                                </button>
+                                <button
+                                  type="button"
                                   className="mobile-sheet-option"
                                   onClick={() => {
                                     setIsSeasonDropdownOpen(false);
