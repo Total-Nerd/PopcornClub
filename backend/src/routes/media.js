@@ -2823,8 +2823,20 @@ router.post('/watch-history/share-bulk', async (req, res) => {
     const affectedShows = new Set();
 
     for (const log of logs) {
+      let sourceWatchedWith = [];
+      try {
+        if (log.watchedWith) sourceWatchedWith = JSON.parse(log.watchedWith);
+      } catch (e) {}
+      
+      let sourceChanged = false;
+
       for (const targetUserId of targetUserIds) {
         if (targetUserId === req.user.id) continue;
+
+        if (!sourceWatchedWith.includes(targetUserId)) {
+          sourceWatchedWith.push(targetUserId);
+          sourceChanged = true;
+        }
 
         const existingLog = await prisma.watchHistoryLog.findFirst({
           where: {
@@ -2837,6 +2849,17 @@ router.post('/watch-history/share-bulk', async (req, res) => {
           }
         });
 
+        let targetWatchedWith = [];
+        if (existingLog) {
+          try {
+            if (existingLog.watchedWith) targetWatchedWith = JSON.parse(existingLog.watchedWith);
+          } catch (e) {}
+        }
+        
+        if (!targetWatchedWith.includes(req.user.id)) {
+          targetWatchedWith.push(req.user.id);
+        }
+
         if (!existingLog) {
           await prisma.watchHistoryLog.create({
             data: {
@@ -2848,8 +2871,14 @@ router.post('/watch-history/share-bulk', async (req, res) => {
               duration: log.duration,
               viewOffset: log.viewOffset,
               isCompleted: log.isCompleted,
-              userId: targetUserId
+              userId: targetUserId,
+              watchedWith: JSON.stringify(targetWatchedWith)
             }
+          });
+        } else {
+          await prisma.watchHistoryLog.update({
+            where: { id: existingLog.id },
+            data: { watchedWith: JSON.stringify(targetWatchedWith) }
           });
         }
 
@@ -2893,6 +2922,13 @@ router.post('/watch-history/share-bulk', async (req, res) => {
           }
         }
       }
+      
+      if (sourceChanged) {
+        await prisma.watchHistoryLog.update({
+          where: { id: log.id },
+          data: { watchedWith: JSON.stringify(sourceWatchedWith) }
+        });
+      }
     }
 
     for (const item of affectedShows) {
@@ -2929,8 +2965,21 @@ router.post('/watch-history/unshare-bulk', async (req, res) => {
     const affectedShows = new Set();
 
     for (const log of logs) {
+      let sourceWatchedWith = [];
+      try {
+        if (log.watchedWith) sourceWatchedWith = JSON.parse(log.watchedWith);
+      } catch (e) {}
+      
+      let sourceChanged = false;
+
       for (const targetUserId of targetUserIds) {
         if (targetUserId === req.user.id) continue;
+        
+        const index = sourceWatchedWith.indexOf(targetUserId);
+        if (index !== -1) {
+          sourceWatchedWith.splice(index, 1);
+          sourceChanged = true;
+        }
 
         await prisma.watchHistoryLog.deleteMany({
           where: {
@@ -2963,6 +3012,13 @@ router.post('/watch-history/unshare-bulk', async (req, res) => {
             affectedShows.add(`${targetUserId}:${log.mediaId}:${log.media.tmdbId}`);
           }
         }
+      }
+      
+      if (sourceChanged) {
+        await prisma.watchHistoryLog.update({
+          where: { id: log.id },
+          data: { watchedWith: JSON.stringify(sourceWatchedWith) }
+        });
       }
     }
 

@@ -24,6 +24,7 @@ const WatchHistory = () => {
 
   // Bulk Selection & Shareable Users State
   const [selectedLogIds, setSelectedLogIds] = useState([]);
+  const [activeShareLogIds, setActiveShareLogIds] = useState([]);
   const [shareableUsers, setShareableUsers] = useState([]);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedTargetUserIds, setSelectedTargetUserIds] = useState([]);
@@ -201,7 +202,7 @@ const WatchHistory = () => {
   };
 
   const handleOpenShareModal = (idsToShare = selectedLogIds) => {
-    setSelectedLogIds(idsToShare);
+    setActiveShareLogIds(idsToShare);
     
     if (idsToShare.length === 1) {
       const log = logs.find(l => l.id === idsToShare[0]);
@@ -227,23 +228,23 @@ const WatchHistory = () => {
       
       if (usersToAdd.length > 0) {
         promises.push(api.post('/media/watch-history/share-bulk', {
-          logIds: selectedLogIds,
+          logIds: activeShareLogIds,
           targetUserIds: usersToAdd
         }));
       }
       
       if (usersToRemove.length > 0) {
         promises.push(api.post('/media/watch-history/unshare-bulk', {
-          logIds: selectedLogIds,
+          logIds: activeShareLogIds,
           targetUserIds: usersToRemove
         }));
       }
       
       await Promise.all(promises);
       
-      showAlert(`Successfully updated watch history sharing for ${selectedLogIds.length} item(s)!`, 'success');
+      showAlert(`Successfully updated watch history sharing for ${activeShareLogIds.length} item(s)!`, 'success');
       setIsShareModalOpen(false);
-      setSelectedLogIds([]);
+      setActiveShareLogIds([]);
       setSelectedTargetUserIds([]);
       fetchLogs();
     } catch (err) {
