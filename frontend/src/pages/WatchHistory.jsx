@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { History, Trash2, Film, Tv, ChevronLeft, ChevronRight, Check, Play, SlidersHorizontal, X, Users, UserPlus, UserMinus, Share2 } from 'lucide-react';
@@ -22,17 +22,17 @@ const WatchHistory = () => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [activeSession, setActiveSession] = useState(null);
 
-  // Bulk Selection & Shareable Users State
   const [selectedLogIds, setSelectedLogIds] = useState([]);
   const [activeShareLogIds, setActiveShareLogIds] = useState([]);
   const [shareableUsers, setShareableUsers] = useState([]);
+  const [coViewerUsers, setCoViewerUsers] = useState([]);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedTargetUserIds, setSelectedTargetUserIds] = useState([]);
 
   const [isSubmittingShare, setIsSubmittingShare] = useState(false);
 
   useEffect(() => {
-    const fetchShareableUsers = async () => {
+    const fetchUsers = async () => {
       try {
         const res = await api.get('/media/users/shareable');
         const list = Array.isArray(res.data) ? res.data : res.data?.users || [];
@@ -40,8 +40,16 @@ const WatchHistory = () => {
       } catch (err) {
         console.error('Failed to load shareable users:', err);
       }
+      
+      try {
+        const res = await api.get('/media/users/co-viewers');
+        const list = Array.isArray(res.data) ? res.data : res.data?.users || [];
+        setCoViewerUsers(list);
+      } catch (err) {
+        console.error('Failed to load co-viewers:', err);
+      }
     };
-    fetchShareableUsers();
+    fetchUsers();
   }, []);
 
   useEffect(() => {
@@ -85,6 +93,20 @@ const WatchHistory = () => {
   const [mediaTitle, setMediaTitle] = useState(initTitle);
   const [seasonFilter, setSeasonFilter] = useState(initSeason);
   const [episodeFilter, setEpisodeFilter] = useState(initEpisode);
+  
+  const [watchedWithFilter, setWatchedWithFilter] = useState([]);
+  const [showWatchedWithDropdown, setShowWatchedWithDropdown] = useState(false);
+  const watchedWithRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (watchedWithRef.current && !watchedWithRef.current.contains(e.target)) {
+        setShowWatchedWithDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Display Option
   const [showPosters, setShowPosters] = useState(() => {
@@ -109,7 +131,7 @@ const WatchHistory = () => {
   useEffect(() => {
     localStorage.setItem('history_include_partial', JSON.stringify(includePartial));
     setPage(1);
-  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId]);
+  }, [type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId, watchedWithFilter]);
 
   useEffect(() => {
     localStorage.setItem('history_show_posters', JSON.stringify(showPosters));
@@ -153,7 +175,8 @@ const WatchHistory = () => {
           tmdbId: tmdbIdFilter || undefined,
           season: seasonFilter || undefined,
           episode: episodeFilter || undefined,
-          userId: selectedUserId || undefined
+          userId: selectedUserId || undefined,
+          watchedWithUserIds: watchedWithFilter.length > 0 ? watchedWithFilter.join(',') : undefined
         }
       });
       setLogs(res.data.logs);
@@ -170,7 +193,7 @@ const WatchHistory = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId]);
+  }, [page, type, includePartial, debouncedSearch, startDate, endDate, selectedGenre, limit, mediaIdFilter, tmdbIdFilter, seasonFilter, episodeFilter, selectedUserId, watchedWithFilter]);
 
   const handleDelete = async (id) => {
     const confirmed = await showConfirm('Are you sure you want to delete this watch history entry?');
@@ -294,6 +317,7 @@ const WatchHistory = () => {
     setSeasonFilter('');
     setEpisodeFilter('');
     setSelectedUserId('');
+    setWatchedWithFilter([]);
     setSearchParams({});
   };
 
@@ -371,6 +395,81 @@ const WatchHistory = () => {
                     );
                   })}
                 </select>
+              </div>
+            )}
+
+            {/* Watched Together Filter */}
+            {coViewerUsers.length > 0 && (
+              <div className="filter-field" ref={watchedWithRef}>
+                <label>Watched Together With (Exact Match)</label>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setShowWatchedWithDropdown(!showWatchedWithDropdown)}
+                    className="input-field"
+                    style={{
+                      padding: '10px 14px',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'var(--overlay-medium)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      color: 'var(--text-main)',
+                      width: '100%',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <span>
+                      {watchedWithFilter.length === 0 
+                        ? 'Select Users...' 
+                        : `${watchedWithFilter.length} User${watchedWithFilter.length > 1 ? 's' : ''} Selected`}
+                    </span>
+                    <span style={{ transform: showWatchedWithDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', fontSize: '0.75rem', opacity: 0.7 }}>▼</span>
+                  </button>
+                  
+                  {showWatchedWithDropdown && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '4px',
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        zIndex: 10,
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        padding: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px'
+                      }}
+                    >
+                      {coViewerUsers.map(u => (
+                        <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', padding: '6px 8px', borderRadius: '4px', transition: 'background 0.2s' }} className="dropdown-item-hover">
+                          <input
+                            type="checkbox"
+                            checked={watchedWithFilter.includes(u.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setWatchedWithFilter(prev => [...prev, u.id]);
+                              } else {
+                                setWatchedWithFilter(prev => prev.filter(id => id !== u.id));
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                          />
+                          {u.name ? `${u.name} (${u.username})` : u.username}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

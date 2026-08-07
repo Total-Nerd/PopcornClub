@@ -2444,6 +2444,23 @@ router.get('/watch-history', async (req, res) => {
       }
     }
 
+    if (req.query.watchedWithUserIds) {
+      const ids = req.query.watchedWithUserIds.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (ids.length > 0) {
+        where.AND = ids.map(id => ({
+          OR: [
+            { watchedWith: { contains: `[${id}]` } },
+            { watchedWith: { contains: `[${id},` } },
+            { watchedWith: { contains: `,${id}]` } },
+            { watchedWith: { contains: `,${id},` } },
+            { watchedWith: { contains: `[${id} ` } },
+            { watchedWith: { contains: ` ${id},` } },
+            { watchedWith: { contains: ` ${id}]` } }
+          ]
+        }));
+      }
+    }
+
     const [logs, total] = await Promise.all([
       prisma.watchHistoryLog.findMany({
         where,
@@ -2798,6 +2815,34 @@ router.get('/users/shareable', async (req, res) => {
   } catch (err) {
     console.error('Error fetching shareable users:', err);
     res.status(500).json({ error: 'Failed to fetch shareable users' });
+  }
+});
+
+// GET users that the current user has actually watched with
+router.get('/users/co-viewers', async (req, res) => {
+  try {
+    const logs = await prisma.watchHistoryLog.findMany({
+      where: { userId: req.user.id, watchedWith: { not: null } },
+      select: { watchedWith: true }
+    });
+    
+    const userIds = new Set();
+    logs.forEach(log => {
+      try {
+        const ids = JSON.parse(log.watchedWith);
+        ids.forEach(id => userIds.add(id));
+      } catch (e) {}
+    });
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: Array.from(userIds) } },
+      select: { id: true, username: true, name: true, avatarPath: true }
+    });
+    
+    res.json({ users });
+  } catch (err) {
+    console.error('Error fetching co-viewers:', err);
+    res.status(500).json({ error: 'Failed to fetch co-viewers' });
   }
 });
 
