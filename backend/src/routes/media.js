@@ -2824,8 +2824,13 @@ router.get('/users/shareable', async (req, res) => {
 // GET users that the current user has actually watched with
 router.get('/users/co-viewers', async (req, res) => {
   try {
+    let targetUserId = req.user.id;
+    if (req.user.role === 'admin' && req.query.userId) {
+      targetUserId = parseInt(req.query.userId, 10);
+    }
+
     const logs = await prisma.watchHistoryLog.findMany({
-      where: { userId: req.user.id, watchedWith: { not: null } },
+      where: { userId: targetUserId, watchedWith: { not: null } },
       select: { watchedWith: true }
     });
     

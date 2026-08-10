@@ -32,7 +32,7 @@ const WatchHistory = () => {
   const [isSubmittingShare, setIsSubmittingShare] = useState(false);
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchShareableUsers = async () => {
       try {
         const res = await api.get('/media/users/shareable');
         const list = Array.isArray(res.data) ? res.data : res.data?.users || [];
@@ -40,17 +40,23 @@ const WatchHistory = () => {
       } catch (err) {
         console.error('Failed to load shareable users:', err);
       }
-      
+    };
+    fetchShareableUsers();
+  }, []);
+
+  useEffect(() => {
+    const fetchCoViewers = async () => {
       try {
-        const res = await api.get('/media/users/co-viewers');
+        const url = selectedUserId ? `/media/users/co-viewers?userId=${selectedUserId}` : '/media/users/co-viewers';
+        const res = await api.get(url);
         const list = Array.isArray(res.data) ? res.data : res.data?.users || [];
         setCoViewerUsers(list);
       } catch (err) {
         console.error('Failed to load co-viewers:', err);
       }
     };
-    fetchUsers();
-  }, []);
+    fetchCoViewers();
+  }, [selectedUserId]);
 
   useEffect(() => {
     if (user?.role === 'admin') {
