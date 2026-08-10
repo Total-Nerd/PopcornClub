@@ -2700,7 +2700,10 @@ router.delete('/watch-history/:id', async (req, res) => {
 
   try {
     const log = await prisma.watchHistoryLog.findFirst({
-      where: { id, userId: req.user.id }
+      where: {
+        id,
+        ...(req.user.role === 'admin' ? {} : { userId: req.user.id })
+      }
     });
     if (!log) return res.status(404).json({ error: 'Watch history entry not found' });
 
@@ -2714,7 +2717,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       // Find a matching WatchHistory record close to the log's watchedAt
       let match = await prisma.watchHistory.findFirst({
         where: {
-          userId: req.user.id,
+          userId: log.userId,
           mediaId: log.mediaId,
           watchedAt: {
             gte: new Date(log.watchedAt.getTime() - 60000),
@@ -2725,7 +2728,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       // Fallback: find the one closest in time
       if (!match) {
         const allHistories = await prisma.watchHistory.findMany({
-          where: { userId: req.user.id, mediaId: log.mediaId }
+          where: { userId: log.userId, mediaId: log.mediaId }
         });
         if (allHistories.length > 0) {
           allHistories.sort((a, b) => Math.abs(a.watchedAt.getTime() - log.watchedAt.getTime()) - Math.abs(b.watchedAt.getTime() - log.watchedAt.getTime()));
@@ -2738,14 +2741,14 @@ router.delete('/watch-history/:id', async (req, res) => {
       }
 
       const remainingWatchCount = await prisma.watchHistory.count({
-        where: { userId: req.user.id, mediaId: log.mediaId }
+        where: { userId: log.userId, mediaId: log.mediaId }
       });
       isWatched = remainingWatchCount > 0;
     } else if (log.type === 'tv' && log.isCompleted) {
       // Check if there are other completed watch logs for this episode
       const otherLogs = await prisma.watchHistoryLog.findFirst({
         where: {
-          userId: req.user.id,
+          userId: log.userId,
           mediaId: log.mediaId,
           type: 'tv',
           season: log.season,
@@ -2757,7 +2760,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       if (!otherLogs) {
         await prisma.episodeWatchHistory.deleteMany({
           where: {
-            userId: req.user.id,
+            userId: log.userId,
             mediaId: log.mediaId,
             season: log.season,
             episode: log.episode
@@ -2768,7 +2771,7 @@ router.delete('/watch-history/:id', async (req, res) => {
         isWatched = true;
         const latestRemainingLog = await prisma.watchHistoryLog.findFirst({
           where: {
-            userId: req.user.id,
+            userId: log.userId,
             mediaId: log.mediaId,
             type: 'tv',
             season: log.season,
@@ -2780,7 +2783,7 @@ router.delete('/watch-history/:id', async (req, res) => {
         if (latestRemainingLog) {
           await prisma.episodeWatchHistory.updateMany({
             where: {
-              userId: req.user.id,
+              userId: log.userId,
               mediaId: log.mediaId,
               season: log.season,
               episode: log.episode
@@ -2793,7 +2796,7 @@ router.delete('/watch-history/:id', async (req, res) => {
       const mediaRecord = await prisma.media.findUnique({ where: { id: log.mediaId } });
       const systemSettings = await prisma.systemSettings.findFirst();
       if (mediaRecord && systemSettings?.tmdbApiKey) {
-        await syncShowWatchHistory(mediaRecord.id, mediaRecord.tmdbId, systemSettings.tmdbApiKey, req.user.id);
+        await syncShowWatchHistory(mediaRecord.id, mediaRecord.tmdbId, systemSettings.tmdbApiKey, log.userId);
       }
     }
 
