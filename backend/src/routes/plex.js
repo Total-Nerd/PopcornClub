@@ -239,7 +239,7 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
         const durationSec = Math.round(durationMs / 1000);
         const viewOffsetSec = Math.round(viewOffsetMs / 1000);
         const isCompleted = eventType === 'media.scrobble' || (durationMs > 0 && viewOffsetMs / durationMs >= 0.90);
-        const isPartial = !isCompleted && viewOffsetMs > 10000;
+        const isPartial = !isCompleted && durationMs > 0 && (viewOffsetMs / durationMs) > 0.10;
 
         let shouldLog = true;
         if (isCompleted) {
@@ -380,7 +380,7 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
             const durationSec = Math.round(durationMs / 1000);
             const viewOffsetSec = Math.round(viewOffsetMs / 1000);
             const isCompleted = eventType === 'media.scrobble' || (durationMs > 0 && viewOffsetMs / durationMs >= 0.90);
-            const isPartial = !isCompleted && viewOffsetMs > 10000;
+            const isPartial = !isCompleted && durationMs > 0 && (viewOffsetMs / durationMs) > 0.10;
 
             let shouldLog = true;
             if (isCompleted) {
