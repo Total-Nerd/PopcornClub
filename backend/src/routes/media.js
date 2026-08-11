@@ -157,7 +157,8 @@ async function enrichMediaItems(results, userId) {
     include: {
       collections: { where: { userId } },
       watchHistory: { where: { userId } },
-      episodeWatchHistory: { where: { userId } }
+      episodeWatchHistory: { where: { userId } },
+      requests: { where: { userId, status: { in: ['pending', 'confirmed'] } } }
     }
   });
   
@@ -166,16 +167,18 @@ async function enrichMediaItems(results, userId) {
     localMediaMap[media.tmdbId] = {
       isCollected: media.collections.length > 0,
       isWatched: media.watchHistory.length > 0,
+      isRequested: media.requests && media.requests.length > 0,
       localId: media.id
     };
   }
   
   return results.map(item => {
-    const local = localMediaMap[item.id] || { isCollected: false, isWatched: false, localId: null };
+    const local = localMediaMap[item.id] || { isCollected: false, isWatched: false, isRequested: false, localId: null };
     return {
       ...item,
       isCollected: local.isCollected,
       isWatched: local.isWatched,
+      isRequested: local.isRequested,
       localId: local.localId
     };
   });
@@ -1487,6 +1490,8 @@ router.post('/episode/collect', async (req, res) => {
         update: { collectedAt: new Date() },
         create: { userId: req.user.id, mediaId: media.id, season, episode, collectedAt: new Date() }
       });
+      const { archiveRequestsOnCollect } = require('../utils/requestManager');
+      await archiveRequestsOnCollect(media.id, 'tv', season, episode);
       res.json({ success: true, collection: coll });
     } else {
       await prisma.episodeCollection.deleteMany({
@@ -1517,6 +1522,8 @@ router.post('/collect', async (req, res) => {
         update: { collectedAt: collectedAt ? new Date(collectedAt) : new Date() },
         create: { userId: req.user.id, mediaId: media.id, collectedAt: collectedAt ? new Date(collectedAt) : new Date() }
       });
+      const { archiveRequestsOnCollect } = require('../utils/requestManager');
+      await archiveRequestsOnCollect(media.id, type);
       res.json(collection);
     }
   } catch (error) {

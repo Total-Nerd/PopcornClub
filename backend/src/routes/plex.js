@@ -326,6 +326,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
           update: { collectedAt: new Date() },
           create: { mediaId: media.id, userId: user.id, collectedAt: new Date() }
         });
+        const { archiveRequestsOnCollect } = require('../utils/requestManager');
+        await archiveRequestsOnCollect(media.id, 'movie');
         console.log(`[Plex Webhook] Logged collection for Movie ${metadata.title} (User: ${user.username})`);
       }
     }
@@ -482,6 +484,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
               update: { collectedAt: new Date() },
               create: { mediaId: media.id, season, episode, userId: user.id, collectedAt: new Date() }
             });
+            const { archiveRequestsOnCollect } = require('../utils/requestManager');
+            await archiveRequestsOnCollect(media.id, 'tv', season, episode);
             console.log(`[Plex Webhook] Logged collection for Episode S${season}E${episode} of ${showTitle} (User: ${user.username})`);
           }
         }

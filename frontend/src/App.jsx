@@ -21,6 +21,7 @@ import WatchTogetherPage from './pages/WatchTogetherPage';
 import ScrollToTop from './components/ScrollToTop';
 import Conflicts from './pages/Conflicts';
 import StatsPage from './pages/StatsPage';
+import RequestsPage from './pages/RequestsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -50,6 +51,7 @@ const AppRoutes = () => {
         <Route path="watch-together" element={<WatchTogetherPage />} />
         <Route path="stats/:username" element={<StatsPage />} />
         <Route path="conflicts" element={user?.role === 'admin' ? <Conflicts /> : <Navigate to="/" />} />
+        <Route path="requests" element={<RequestsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

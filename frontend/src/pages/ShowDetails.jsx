@@ -5,6 +5,7 @@ import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, Refresh
 import { useModal } from '../context/ModalContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
+import RequestButton from '../components/RequestButton';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const ShowDetails = () => {
@@ -885,6 +886,7 @@ const ShowDetails = () => {
                         <Plus size={18} />
                         <span>{isShowInAnyList() ? 'Added to List' : 'Add to List'}</span>
                       </button>
+
                       {isListDropdownOpen && (
                         <>
                           <div className="info-dropdown-menu" onClick={e => e.stopPropagation()}>
@@ -954,6 +956,14 @@ const ShowDetails = () => {
                     >
                       TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
                     </a>
+
+                    {showDetails.collectedEpisodes < showDetails.totalEpisodes && (
+                       <RequestButton 
+                         tmdbId={showDetails.id} 
+                         type="tv" 
+                         title={showDetails.name} 
+                       />
+                    )}
 
                     <div className="info-dropdown-container show-dropdown-container">
                       <button
