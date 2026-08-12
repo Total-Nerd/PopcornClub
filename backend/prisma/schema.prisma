@@ -150,13 +150,17 @@ model EpisodeWatchHistory {
 }
 
 model CustomList {
-  id        Int        @id @default(autoincrement())
-  name      String
-  userId    Int?
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     ListItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           Int        @id @default(autoincrement())
+  name         String
+  visibility   String     @default("PRIVATE") // PUBLIC, LINK, INVITE
+  defaultOrder String     @default("added")
+  sharedWith   String     @default("[]") // JSON string of user IDs
+  userId       Int
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        ListItem[]
+  shareId      String?    @unique @default(uuid())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@unique([userId, name])
 }

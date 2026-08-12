@@ -57,16 +57,117 @@ router.get('/', async (req, res) => {
 
 // Create a list
 router.post('/', async (req, res) => {
-  const { name } = req.body;
+  const { name, visibility = 'INVITE', defaultOrder = 'added', sharedWith = '[]' } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   try {
     const list = await prisma.customList.create({
-      data: { name, userId: req.user.id }
+      data: { name, visibility, defaultOrder, sharedWith, userId: req.user.id }
     });
     res.json(list);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create list' });
+  }
+});
+
+// Update a list
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, visibility, defaultOrder, sharedWith } = req.body;
+  try {
+    const list = await prisma.customList.findFirst({
+      where: { id: parseInt(id), userId: req.user.id }
+    });
+    if (!list) return res.status(404).json({ error: 'List not found or unauthorized' });
+
+    const updatedList = await prisma.customList.update({
+      where: { id: parseInt(id) },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(visibility !== undefined && { visibility }),
+        ...(defaultOrder !== undefined && { defaultOrder }),
+        ...(sharedWith !== undefined && { sharedWith })
+      }
+    });
+    res.json(updatedList);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update list' });
+  }
+});
+
+// Get a shared list by shareId
+router.get('/shared/:shareId', async (req, res) => {
+  try {
+    const { shareId } = req.params;
+    const list = await prisma.customList.findUnique({
+      where: { shareId },
+      include: { 
+        items: { include: { media: true } }, 
+        user: { select: { id: true, username: true } } 
+      }
+    });
+
+    if (!list) return res.status(404).json({ error: 'List not found' });
+
+    // Access control
+    if (list.visibility === 'INVITE' || list.visibility === 'PRIVATE') {
+      let sharedWithArr = [];
+      try {
+        sharedWithArr = JSON.parse(list.sharedWith || '[]');
+      } catch (e) {
+        sharedWithArr = [];
+      }
+      if (req.user.id !== list.userId && !sharedWithArr.includes(req.user.id)) {
+        return res.status(403).json({ error: 'Unauthorized to view this list' });
+      }
+    }
+
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+    const { fetchTMDB } = require('../utils/tmdb');
+
+    const plainList = JSON.parse(JSON.stringify(list));
+    const items = await Promise.all(list.items.map(async (item) => {
+      const plainItem = JSON.parse(JSON.stringify(item));
+      const media = await healMediaRecordIfMissingDetails(item.media, tmdbApiKey, req.user.id);
+      
+      const collection = await prisma.collection.findFirst({ where: { userId: req.user.id, mediaId: media.id } });
+      const watchHistory = await prisma.watchHistory.findFirst({ where: { userId: req.user.id, mediaId: media.id } });
+      const request = await prisma.request.findFirst({ where: { userId: req.user.id, mediaId: media.id } });
+      
+      let backdropPath = media.backdropPath;
+      if (!backdropPath && tmdbApiKey) {
+        try {
+          const type = media.type === 'movie' ? 'movie' : 'tv';
+          const data = await fetchTMDB(`/3/${type}/${media.tmdbId}`, tmdbApiKey);
+          if (data && data.backdrop_path) {
+            backdropPath = data.backdrop_path;
+            await prisma.media.update({
+              where: { id: media.id },
+              data: { backdropPath }
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fetch cached backdrop for list item ${media.tmdbId}:`, err.message);
+        }
+      }
+
+      const plainMedia = JSON.parse(JSON.stringify(media));
+      return { 
+        ...plainItem, 
+        media: { 
+          ...plainMedia, 
+          backdropPath,
+          isCollected: !!collection,
+          isWatched: !!watchHistory,
+          isRequested: !!request
+        } 
+      };
+    }));
+
+    res.json({ ...plainList, items });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch shared list' });
   }
 });
 

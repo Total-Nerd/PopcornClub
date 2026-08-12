@@ -11,6 +11,7 @@ import Search from './pages/Search';
 import MyShows from './pages/MyShows';
 import MyMovies from './pages/MyMovies';
 import Lists from './pages/Lists';
+import ListDetails from './pages/ListDetails';
 import SettingsPage from './pages/SettingsPage';
 import ShowDetails from './pages/ShowDetails';
 import EpisodeDetails from './pages/EpisodeDetails';
@@ -47,6 +48,7 @@ const AppRoutes = () => {
         <Route path="movies/:tmdbId" element={<MovieDetails />} />
         <Route path="person/:personId" element={<PersonDetails />} />
         <Route path="lists" element={<Lists />} />
+        <Route path="lists/:shareId" element={<ListDetails />} />
         <Route path="history" element={<WatchHistory />} />
         <Route path="watch-together" element={<WatchTogetherPage />} />
         <Route path="stats/:username" element={<StatsPage />} />
