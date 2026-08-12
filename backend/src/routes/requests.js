@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const axios = require('axios');
+const { sendAdminRequestNotification, sendUserRequestUpdateNotification } = require('../utils/mailer');
+const { fetchTMDB, calculateAiredEpisodes } = require('../utils/tmdb');
 
 const prisma = new PrismaClient();
 
@@ -17,28 +19,65 @@ router.get('/', async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+
     // Enrich with collected counts for TV Shows/Seasons
     requests = await Promise.all(requests.map(async (reqItem) => {
       let collectedCount = 0;
+      let totalEpisodes = '?';
+
       if (reqItem.media.type === 'tv' && reqItem.episode === null) {
         if (reqItem.season === null) {
           // Whole show requested
-          collectedCount = await prisma.episodeCollection.count({
-            where: { mediaId: reqItem.media.id } // For all users? Or just unique episodes? Since any user having it means it's on Plex.
-          });
-          // To get unique episodes on server, we can group by season/episode or assume any record means collected.
-          // Actually, LocalFile count is better since it represents files on disk.
           collectedCount = await prisma.localFile.count({
             where: { mediaId: reqItem.media.id }
           });
+          
+          if (tmdbApiKey) {
+            try {
+              const tmdbRes = await fetchTMDB(`/3/tv/${reqItem.media.tmdbId}`, tmdbApiKey);
+              totalEpisodes = calculateAiredEpisodes(tmdbRes);
+            } catch (e) {
+              console.error("Failed to fetch TMDB for request enrichment", e.message);
+            }
+          }
         } else {
           // Season requested
           collectedCount = await prisma.localFile.count({
             where: { mediaId: reqItem.media.id, season: reqItem.season }
           });
+          
+          if (tmdbApiKey) {
+            try {
+              const tmdbRes = await fetchTMDB(`/3/tv/${reqItem.media.tmdbId}`, tmdbApiKey);
+              const seasonData = tmdbRes.seasons?.find(s => s.season_number === reqItem.season);
+              if (seasonData) {
+                totalEpisodes = seasonData.episode_count || '?';
+              }
+            } catch (e) {
+              console.error("Failed to fetch TMDB for request enrichment", e.message);
+            }
+          }
         }
       }
-      return { ...reqItem, collectedCount };
+
+      let imdbId = null;
+      if (tmdbApiKey) {
+        try {
+          if (reqItem.media.type === 'movie') {
+            const tmdbRes = await fetchTMDB(`/3/movie/${reqItem.media.tmdbId}`, tmdbApiKey);
+            imdbId = tmdbRes.imdb_id;
+          } else {
+            const extRes = await fetchTMDB(`/3/tv/${reqItem.media.tmdbId}/external_ids`, tmdbApiKey);
+            imdbId = extRes.imdb_id;
+          }
+        } catch (e) {
+          console.error("Failed to fetch IMDB ID for request enrichment", e.message);
+        }
+      }
+
+      return { ...reqItem, collectedCount, totalEpisodes, imdbId };
     }));
 
     res.json(requests);
@@ -192,6 +231,15 @@ router.post('/', async (req, res) => {
       }
     });
 
+    if (req.user.role !== 'admin') {
+      const admins = await prisma.user.findMany({ where: { role: 'admin', email: { not: null } } });
+      if (admins.length > 0) {
+        sendAdminRequestNotification(admins, newRequest.media, newRequest.user, parsedSeason, parsedEpisode).catch(err => {
+          console.error('[Mailer] Background admin notification error:', err);
+        });
+      }
+    }
+
     res.status(201).json(newRequest);
 
   } catch (error) {
@@ -208,7 +256,10 @@ router.delete('/:id', async (req, res) => {
   const userRole = req.user.role;
 
   try {
-    const request = await prisma.request.findUnique({ where: { id: requestId } });
+    const request = await prisma.request.findUnique({ 
+      where: { id: requestId },
+      include: { user: true, media: true }
+    });
     
     if (!request) {
       return res.status(404).json({ error: 'Request not found' });
@@ -219,6 +270,19 @@ router.delete('/:id', async (req, res) => {
     }
 
     await prisma.request.delete({ where: { id: requestId } });
+
+    // If an admin cancelled someone else's request, send an email
+    if (userRole === 'admin' && request.userId !== userId) {
+      sendUserRequestUpdateNotification(
+        request.user,
+        request.media,
+        'cancelled',
+        null,
+        request.season,
+        request.episode
+      ).catch(err => console.error('[Mailer] Background user cancel notification error:', err));
+    }
+
     res.json({ message: 'Request cancelled successfully' });
   } catch (error) {
     console.error('Error deleting request:', error);
@@ -245,10 +309,22 @@ router.put('/:id/status', async (req, res) => {
         autoReject: autoReject || false
       },
       include: {
-        user: { select: { id: true, username: true, avatarPath: true } },
+        user: { select: { id: true, username: true, email: true, avatarPath: true } },
         media: true
       }
     });
+    // Send notification if status changed to one of the notable ones
+    if (['confirmed', 'collected', 'rejected'].includes(status)) {
+      sendUserRequestUpdateNotification(
+        updatedRequest.user,
+        updatedRequest.media,
+        status,
+        rejectReason || null,
+        updatedRequest.season,
+        updatedRequest.episode
+      ).catch(err => console.error('[Mailer] Background user update notification error:', err));
+    }
+
     res.json(updatedRequest);
   } catch (error) {
     console.error('Error updating request status:', error);

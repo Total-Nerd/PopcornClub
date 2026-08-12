@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { getRequests, cancelRequest, updateRequestStatus, createRequest } from '../api/requests';
 import { useModal } from '../context/ModalContext';
-import { Check, X, Trash2, Archive, Loader, AlertTriangle, Film, Tv, Clock, RotateCcw, Plus } from 'lucide-react';
+import { Check, X, Trash2, Archive, Loader, AlertTriangle, Film, Tv, Clock, RotateCcw, Plus, Copy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import LazyImage from '../components/LazyImage';
 
@@ -245,6 +245,9 @@ const RequestsPage = () => {
                 <th style={{ padding: '16px', fontWeight: '600' }}>Type</th>
                 <th style={{ padding: '16px', fontWeight: '600' }}>Status / Reason</th>
                 <th style={{ padding: '16px', fontWeight: '600' }}>Requested By</th>
+                {user?.role === 'admin' && (
+                  <th style={{ padding: '16px', fontWeight: '600' }}>IMDb</th>
+                )}
                 <th style={{ padding: '16px', fontWeight: '600', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -270,12 +273,27 @@ const RequestsPage = () => {
                           )}
                         </Link>
                         <div>
-                          <Link to={targetUrl} className="hover-underline" style={{ display: 'block', fontWeight: '600', color: 'var(--text-main)', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px', textDecoration: 'none' }} title={getRequestTitle(req)}>
-                            {getRequestTitle(req)}
-                          </Link>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Link to={targetUrl} className="hover-underline" style={{ display: 'block', fontWeight: '600', color: 'var(--text-main)', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px', textDecoration: 'none' }} title={getRequestTitle(req)}>
+                              {getRequestTitle(req)}
+                            </Link>
+                            {user?.role === 'admin' && (
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  navigator.clipboard.writeText(getRequestTitle(req));
+                                  showAlert('Copied title to clipboard', 'success');
+                                }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, padding: '4px' }}
+                                title="Copy Title"
+                              >
+                                <Copy size={14} />
+                              </button>
+                            )}
+                          </div>
                           {req.media.type === 'tv' && !req.episode && (
                             <div style={{ fontSize: '0.8rem', color: 'var(--accent)', marginTop: '4px' }}>
-                              Collected Files: {req.collectedCount || 0}
+                              Collected Episodes: {req.collectedCount || 0}/{req.totalEpisodes || '?'}
                             </div>
                           )}
                         </div>
@@ -349,6 +367,29 @@ const RequestsPage = () => {
                         )}
                       </div>
                     </td>
+                    {user?.role === 'admin' && (
+                      <td style={{ padding: '12px 16px' }}>
+                        {req.imdbId ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <a href={`https://www.imdb.com/title/${req.imdbId}`} target="_blank" rel="noopener noreferrer" className="hover-underline" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+                              {req.imdbId}
+                            </a>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(req.imdbId);
+                                showAlert('Copied IMDb code to clipboard', 'success');
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                              title="Copy IMDb ID"
+                            >
+                              <Copy size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>-</span>
+                        )}
+                      </td>
+                    )}
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                         {(isUserRequest || user?.role === 'admin') && req.status === 'pending' && (

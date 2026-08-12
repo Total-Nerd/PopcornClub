@@ -1,4 +1,5 @@
 const prisma = require('../prismaClient');
+const { sendUserRequestUpdateNotification } = require('./mailer');
 
 /**
  * Automatically archives requests for a media item when it is collected.
@@ -9,40 +10,43 @@ const prisma = require('../prismaClient');
  */
 async function archiveRequestsOnCollect(mediaId, type, season = null, episode = null) {
   try {
-    if (type === 'movie') {
-      // Archive all pending/confirmed requests for this movie
+    let whereClause = {
+      mediaId,
+      status: { in: ['pending', 'confirmed'] }
+    };
+
+    if (type === 'tv' && season !== null && episode !== null) {
+      whereClause.season = season;
+      whereClause.episode = episode;
+    }
+
+    // Fetch affected requests to send notifications
+    const affectedRequests = await prisma.request.findMany({
+      where: whereClause,
+      include: {
+        user: { select: { id: true, username: true, email: true, avatarPath: true } },
+        media: true
+      }
+    });
+
+    if (affectedRequests.length > 0) {
       await prisma.request.updateMany({
-        where: {
-          mediaId,
-          status: { in: ['pending', 'confirmed'] }
-        },
+        where: whereClause,
         data: { status: 'collected' }
       });
-      console.log(`[RequestManager] Collected requests for Movie Media #${mediaId}`);
-    } else if (type === 'tv') {
-      if (season !== null && episode !== null) {
-        // Archive the specific episode request
-        await prisma.request.updateMany({
-          where: {
-            mediaId,
-            season,
-            episode,
-            status: { in: ['pending', 'confirmed'] }
-          },
-          data: { status: 'collected' }
-        });
-        
-        console.log(`[RequestManager] Collected requests for TV Episode S${season}E${episode} of Media #${mediaId}`);
-      } else {
-        // If they collected a whole show or season at once (e.g. manual /collect endpoint)
-        await prisma.request.updateMany({
-          where: {
-            mediaId,
-            status: { in: ['pending', 'confirmed'] }
-          },
-          data: { status: 'collected' }
-        });
-        console.log(`[RequestManager] Collected all requests for TV Show Media #${mediaId}`);
+      
+      console.log(`[RequestManager] Collected ${affectedRequests.length} requests for Media #${mediaId}`);
+
+      // Send notifications
+      for (const req of affectedRequests) {
+        sendUserRequestUpdateNotification(
+          req.user,
+          req.media,
+          'collected',
+          null,
+          req.season,
+          req.episode
+        ).catch(err => console.error('[Mailer] Background user update notification error:', err));
       }
     }
   } catch (error) {

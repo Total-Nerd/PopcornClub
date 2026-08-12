@@ -66,6 +66,54 @@ async function fetchTMDB(endpoint, apiKey, params = {}, ttlMs = 24 * 60 * 60 * 1
   }
 }
 
+function calculateAiredEpisodes(tmdbRes) {
+  let airedEpisodes = 0;
+  const totalEpisodes = tmdbRes.number_of_episodes || 0;
+  const nowStr = new Date().toISOString().substring(0, 10);
+  const lastEp = tmdbRes.last_episode_to_air;
+
+  if (lastEp && lastEp.season_number > 0 && Array.isArray(tmdbRes.seasons)) {
+    const lastSeasonNum = lastEp.season_number;
+    const lastEpNum = lastEp.episode_number;
+    const lastEpAirDate = lastEp.air_date ? new Date(lastEp.air_date) : null;
+    const isLastEpAired = !lastEpAirDate || lastEpAirDate <= new Date();
+
+    if (isLastEpAired) {
+      for (const season of tmdbRes.seasons) {
+        if (!season.season_number || season.season_number === 0) continue;
+        if (season.season_number < lastSeasonNum) {
+          airedEpisodes += (season.episode_count || 0);
+        } else if (season.season_number === lastSeasonNum) {
+          airedEpisodes += lastEpNum;
+        }
+      }
+    } else {
+      for (const season of tmdbRes.seasons) {
+        if (!season.season_number || season.season_number === 0) continue;
+        if (season.season_number < lastSeasonNum) {
+          airedEpisodes += (season.episode_count || 0);
+        }
+      }
+    }
+  } else if (Array.isArray(tmdbRes.seasons)) {
+    for (const season of tmdbRes.seasons) {
+      if (!season.season_number || season.season_number === 0) continue;
+      if (season.air_date && season.air_date <= nowStr) {
+        airedEpisodes += (season.episode_count || 0);
+      }
+    }
+  } else {
+    airedEpisodes = totalEpisodes;
+  }
+
+  if (totalEpisodes > 0 && airedEpisodes > totalEpisodes) {
+    airedEpisodes = totalEpisodes;
+  }
+
+  return airedEpisodes;
+}
+
 module.exports = {
-  fetchTMDB
+  fetchTMDB,
+  calculateAiredEpisodes
 };

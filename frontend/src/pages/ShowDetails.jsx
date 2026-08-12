@@ -957,7 +957,7 @@ const ShowDetails = () => {
                       TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
                     </a>
 
-                    {showDetails.collectedEpisodes < showDetails.totalEpisodes && (
+                    {(showDetails.collectedEpisodes?.length || 0) < (showDetails.number_of_episodes || 0) && (
                        <RequestButton 
                          tmdbId={showDetails.id} 
                          type="tv" 
