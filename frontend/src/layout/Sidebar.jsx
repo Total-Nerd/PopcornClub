@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users } from 'lucide-react';
+import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users, ListPlus } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { AuthContext } from '../context/AuthContext';
 
@@ -47,6 +47,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         <NavLink to="/watch-together" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Watch Together">
           <Users size={20} />
           <span>Watch Together</span>
+        </NavLink>
+        <NavLink to="/requests" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Requests">
+          <ListPlus size={20} />
+          <span>Requests</span>
         </NavLink>
         <NavLink to={`/stats/${user?.username}`} onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Stats">
           <BarChart2 size={20} />
@@ -99,6 +103,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <NavLink to="/watch-together" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <Users size={18} />
             <span>Watch Together</span>
+          </NavLink>
+          <NavLink to="/requests" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+            <ListPlus size={18} />
+            <span>Requests</span>
           </NavLink>
           <NavLink to={`/stats/${user?.username}`} onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <BarChart2 size={18} />

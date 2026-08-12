@@ -3,6 +3,7 @@ const path = require('path');
 const chokidar = require('chokidar');
 const prisma = require('../prismaClient');
 const { fetchTMDB } = require('./tmdb');
+const { archiveRequestsOnCollect } = require('./requestManager');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -392,6 +393,16 @@ async function processSingleFile(filePath, folderType, apiKey) {
             create: { userId: u.id, mediaId: media.id }
           });
         }
+      }
+      
+      // Auto-archive requests for this media item
+      if (parsed.type === 'tv' && parsed.season !== undefined && parsed.episode !== undefined) {
+        const endEp = parsed.endEpisode || parsed.episode;
+        for (let ep = parsed.episode; ep <= endEp; ep++) {
+          await archiveRequestsOnCollect(media.id, 'tv', parsed.season, ep);
+        }
+      } else {
+        await archiveRequestsOnCollect(media.id, 'movie');
       }
     } catch (err) {
       console.error('[Folder Scanner] Failed to record collection for all users:', err.message);

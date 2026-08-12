@@ -4,6 +4,7 @@ import api from '../api';
 import { ArrowLeft, Tv, Star, Calendar, Clock, Check, EyeOff, Play } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
+import RequestButton from '../components/RequestButton';
 
 const EpisodeDetails = () => {
   const { tmdbId, seasonNumber, episodeNumber } = useParams();
@@ -226,6 +227,16 @@ const EpisodeDetails = () => {
                   {isWatched ? <Check size={18} /> : <EyeOff size={18} />}
                   <span>{isWatched ? 'Watched' : 'Mark Watched'}</span>
                 </button>
+
+                {!localFile && (
+                   <RequestButton 
+                     tmdbId={showDetails?.id} 
+                     type="tv" 
+                     title={showDetails?.name} 
+                     season={seasonNumber}
+                     episode={episodeNumber}
+                   />
+                )}
               </div>
 
               {/* Overview */}

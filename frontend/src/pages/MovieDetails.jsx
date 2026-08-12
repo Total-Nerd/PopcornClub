@@ -6,6 +6,7 @@ import { useModal } from '../context/ModalContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
 import WatchOptionsModal from '../components/WatchOptionsModal';
+import RequestButton from '../components/RequestButton';
 
 const MovieDetails = () => {
   const { tmdbId } = useParams();
@@ -483,6 +484,8 @@ const MovieDetails = () => {
                       </div>
                     )}
                   </div>
+
+
                   <div className="details-poster-edit-overlay">
                     <Edit size={24} />
                     <span>Change Poster</span>
@@ -647,6 +650,14 @@ const MovieDetails = () => {
                     >
                       TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
                     </a>
+
+                    {!movieDetails.isCollected && (
+                       <RequestButton 
+                         tmdbId={movieDetails.id} 
+                         type="movie" 
+                         title={movieDetails.title} 
+                       />
+                    )}
 
                     <div className="info-dropdown-container">
                       <button

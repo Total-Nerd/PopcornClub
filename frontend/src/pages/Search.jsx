@@ -5,6 +5,7 @@ import api from '../api';
 import { useModal } from '../context/ModalContext';
 import LazyImage from '../components/LazyImage';
 import MobileBottomSheet from '../components/MobileBottomSheet';
+import RequestButton from '../components/RequestButton';
 
 const getContentWidth = (windowWidth) => {
   if (windowWidth > 768) {
@@ -804,6 +805,17 @@ const Search = () => {
 
     const content = (
       <>
+        {!item.isCollected && (
+          <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', marginBottom: '8px' }}>
+            <RequestButton 
+              tmdbId={item.id} 
+              type={item.media_type || (item.name ? 'tv' : 'movie')} 
+              title={item.title || item.name} 
+              initialRequested={item.isRequested}
+              style={{ width: '100%', justifyContent: 'center' }}
+            />
+          </div>
+        )}
         <label className="custom-checkbox-container" onClick={e => e.stopPropagation()}>
           <input
             type="checkbox"
@@ -816,6 +828,7 @@ const Search = () => {
           </span>
           <span className="custom-checkbox-label">Collection</span>
         </label>
+
         {lists.map(list => {
           const inList = listMemberships[item.id]?.[list.id];
           return (
@@ -897,6 +910,20 @@ const Search = () => {
 
         {/* Overlapping status pills on card image - moved to top left */}
         <div className="media-status-pills-left">
+          {item.isRequested && (
+            <span style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              fontSize: '0.725rem',
+              fontWeight: '600',
+              background: 'rgba(245, 158, 11, 0.9)', // Amber for Requested
+              color: '#fff',
+              backdropFilter: 'blur(4px)',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.15)'
+            }}>
+              Requested
+            </span>
+          )}
           {item.isCollected && (
             <span style={{
               padding: '4px 10px',
