@@ -327,10 +327,58 @@ async function sendListInvitationEmail(email, inviterUsername, listName, listLin
     console.error(`[Mailer] Failed to send list invitation to ${email}:`, err.message);
   }
 }
+async function sendMentionEmail(email, username, commenterName, commentContent, mediaTitle, mediaLink, mediaPoster) {
+  const subject = `${commenterName} mentioned you on ${mediaTitle}`;
+  const textBody = `Hello ${username},\n\n${commenterName} mentioned you in a comment on ${mediaTitle}:\n\n"${commentContent}"\n\nView it here: ${mediaLink}`;
+
+  const posterHtml = mediaPoster ? `<img src="https://image.tmdb.org/t/p/w200${mediaPoster}" alt="${mediaTitle}" style="width: 100px; border-radius: 8px; margin-bottom: 16px;" />` : '';
+
+  const htmlBody = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <body style="margin: 0; padding: 20px; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 20px; overflow: hidden; padding: 32px; text-align: center;">
+        ${posterHtml}
+        <h2 style="margin: 0 0 16px 0; font-size: 22px; color: #f8fafc;">You were mentioned!</h2>
+        <p style="font-size: 16px; color: #cbd5e1; margin-bottom: 24px;">
+          <strong>${commenterName}</strong> mentioned you in a comment on <strong style="color: #ffffff;">${mediaTitle}</strong>.
+        </p>
+        
+        <div style="background-color: #0f172a; padding: 16px; border-radius: 12px; text-align: left; margin-bottom: 24px; color: #94a3b8; font-style: italic;">
+          "${commentContent}"
+        </div>
+        
+        <a href="${mediaLink}" style="display: block; background-color: #3b82f6; color: #ffffff; text-align: center; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; text-decoration: none;">
+          View Comment
+        </a>
+      </div>
+    </body>
+    </html>
+  `;
+
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: `TVTracker <${from}>`,
+        to: email,
+        subject,
+        text: textBody,
+        html: htmlBody
+      });
+      console.log(`[Mailer] Successfully sent mention email to ${email}`);
+    } catch (err) {
+      console.error(`[Mailer] Failed to send mention email to ${email}:`, err.message);
+      console.log(`[Mock Mailer] TO: ${email} | SUBJECT: ${subject} | LINK: ${mediaLink}`);
+    }
+  } else {
+    console.log(`[Mock Mailer] TO: ${email} | SUBJECT: ${subject} | LINK: ${mediaLink}`);
+  }
+}
 
 module.exports = {
   sendInvitationEmail,
   sendAdminRequestNotification,
   sendUserRequestUpdateNotification,
-  sendListInvitationEmail
+  sendListInvitationEmail,
+  sendMentionEmail
 };

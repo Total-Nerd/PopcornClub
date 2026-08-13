@@ -10,6 +10,7 @@ import MobileBottomSheet from '../components/MobileBottomSheet';
 import ListConfigModal from '../components/ListConfigModal';
 import { AuthContext } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
+import CommentSection from '../components/CommentSection';
 
 const getContentWidth = (windowWidth) => {
   if (windowWidth > 768) {
@@ -694,6 +695,10 @@ const ListDetails = () => {
           </table>
         </div>
       )}
+      
+      <div style={{ marginTop: '48px', padding: '0 12px' }}>
+        <CommentSection listId={list.id} />
+      </div>
       
       <style>{`
         .table-row-hover:hover {

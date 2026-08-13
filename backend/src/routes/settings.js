@@ -37,12 +37,13 @@ const upload = multer({
 
 // Update Profile settings (name, email, avatar, password, plex/trakt details)
 router.put('/profile', upload.single('avatar'), async (req, res) => {
-  const { name, email, password, plexUser, traktUsername, traktClientId } = req.body;
+  const { name, email, password, plexUser, traktUsername, traktClientId, showSpoilers } = req.body;
   
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
     if (plexUser !== undefined) updateData.plexUser = plexUser;
+    if (showSpoilers !== undefined) updateData.showSpoilers = showSpoilers === 'true' || showSpoilers === true;
     if (req.user.role !== 'admin') {
       if (traktUsername !== undefined) updateData.traktUsername = traktUsername;
       if (traktClientId !== undefined) updateData.traktClientId = traktClientId;

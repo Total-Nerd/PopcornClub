@@ -23,6 +23,7 @@ import ScrollToTop from './components/ScrollToTop';
 import Conflicts from './pages/Conflicts';
 import StatsPage from './pages/StatsPage';
 import RequestsPage from './pages/RequestsPage';
+import SocialFeed from './pages/SocialFeed';
 
 
 const ProtectedRoute = ({ children }) => {
@@ -87,6 +88,7 @@ const AppRoutes = () => {
         <Route path="stats/:username" element={<StatsPage />} />
         <Route path="conflicts" element={user?.role === 'admin' ? <Conflicts /> : <Navigate to="/" />} />
         <Route path="requests" element={<RequestsPage />} />
+        <Route path="social" element={<SocialFeed />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

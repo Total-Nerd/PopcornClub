@@ -25,6 +25,9 @@ const calendarRoutes = require('./routes/calendar');
 const foldersRoutes = require('./routes/folders');
 const statsRoutes = require('./routes/stats');
 const requestsRoutes = require('./routes/requests');
+const commentsRoutes = require('./routes/comments');
+const reactionsRoutes = require('./routes/reactions');
+const socialRoutes = require('./routes/social');
 const { initFolderScanner } = require('./utils/folderScanner');
 const { seedWatchHistoryLogs, backfillMediaGenres, cleanupDuplicateWatchLogs } = require('./utils/historyMigration');
 
@@ -45,6 +48,9 @@ app.use('/api/folders', foldersRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/requests', authenticateToken, requestsRoutes);
 app.use('/api/watch-together', authenticateToken, watchTogetherRoutes);
+app.use('/api/comments', authenticateToken, commentsRoutes);
+app.use('/api/reactions', authenticateToken, reactionsRoutes);
+app.use('/api/social', authenticateToken, socialRoutes);
 
 const plexRoutes = require('./routes/plex');
 const http = require('http');

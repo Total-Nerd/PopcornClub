@@ -32,6 +32,12 @@ model User {
   ignoredMissingEps   IgnoredMissingEpisode[]
   requests            Request[]
   addedListItems      ListItem[] @relation("AddedListItems")
+  hiddenItems         HiddenItem[]
+  showSpoilers        Boolean    @default(false)
+  comments            Comment[]
+  reactions           Reaction[]
+  followers           Follows[]  @relation("UserFollowers")
+  following           Follows[]  @relation("UserFollowing")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -78,6 +84,9 @@ model Media {
   watchHistoryLogs    WatchHistoryLog[]
   ignoredMissingEps   IgnoredMissingEpisode[]
   requests            Request[]
+  hiddenItems         HiddenItem[]
+  comments            Comment[]
+  reactions           Reaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -161,6 +170,7 @@ model CustomList {
   items        ListItem[]
   shareId          String?    @unique @default(uuid())
   allowOthersToAdd Boolean    @default(false)
+  comments         Comment[]
   createdAt        DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -238,4 +248,68 @@ model Request {
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Comment {
+  id          Int         @id @default(autoincrement())
+  userId      Int
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  mediaId     Int?
+  media       Media?      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season      Int?
+  episode     Int?
+  
+  listId      Int?
+  list        CustomList? @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  content     String
+  hasSpoilers Boolean     @default(false)
+  
+  parentId    Int?
+  parent      Comment?    @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     Comment[]   @relation("CommentReplies")
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Reaction {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  mediaId   Int
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  season    Int?
+  episode   Int?
+  
+  emoji     String
+  
+  createdAt DateTime @default(now())
+
+  @@unique([userId, mediaId, season, episode, emoji])
+}
+
+model Follows {
+  followerId  Int
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id])
+  followingId Int
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+}
+
+model HiddenItem {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaId         Int
+  media           Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  hideInCalendar  Boolean  @default(true)
+  hideInLibrary   Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, mediaId])
 }
