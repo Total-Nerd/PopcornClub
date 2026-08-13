@@ -31,6 +31,7 @@ model User {
   customLists         CustomList[]
   ignoredMissingEps   IgnoredMissingEpisode[]
   requests            Request[]
+  addedListItems      ListItem[] @relation("AddedListItems")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -158,8 +159,9 @@ model CustomList {
   userId       Int
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items        ListItem[]
-  shareId      String?    @unique @default(uuid())
-  createdAt    DateTime   @default(now())
+  shareId          String?    @unique @default(uuid())
+  allowOthersToAdd Boolean    @default(false)
+  createdAt        DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@unique([userId, name])
@@ -178,12 +180,14 @@ model IgnoredMissingEpisode {
 }
 
 model ListItem {
-  id      Int        @id @default(autoincrement())
-  listId  Int
-  list    CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  mediaId Int
-  media   Media      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
-  addedAt DateTime   @default(now())
+  id        Int        @id @default(autoincrement())
+  listId    Int
+  list      CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  mediaId   Int
+  media     Media      @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  addedById Int?
+  addedBy   User?      @relation("AddedListItems", fields: [addedById], references: [id], onDelete: SetNull)
+  addedAt   DateTime   @default(now())
 
   @@unique([listId, mediaId])
 }

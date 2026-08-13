@@ -5,6 +5,7 @@ import api from '../api';
 const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
   const [name, setName] = useState('');
   const [visibility, setVisibility] = useState('INVITE');
+  const [allowOthersToAdd, setAllowOthersToAdd] = useState(false);
   const [defaultOrder, setDefaultOrder] = useState('added');
   const [sharedWith, setSharedWith] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,6 +20,7 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
       if (list) {
         setName(list.name || '');
         setVisibility(list.visibility || 'INVITE');
+        setAllowOthersToAdd(list.allowOthersToAdd || false);
         setDefaultOrder(list.defaultOrder || 'added');
         try {
           setSharedWith(typeof list.sharedWith === 'string' ? JSON.parse(list.sharedWith) : (list.sharedWith || []));
@@ -28,6 +30,7 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
       } else {
         setName('');
         setVisibility('INVITE');
+        setAllowOthersToAdd(false);
         setDefaultOrder('added');
         setSharedWith([]);
       }
@@ -38,10 +41,9 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
   const fetchUsers = async () => {
     try {
       // Fetch users for invites
-      const res = await api.get('/users').catch(() => ({ data: [] })); // Generic users endpoint
-      if (res.data) {
-        const meRes = await api.get('/auth/me');
-        setAvailableUsers(res.data.filter(u => u.id !== meRes.data.id));
+      const res = await api.get('/media/users/shareable').catch(() => ({ data: { users: [] } }));
+      if (res.data && res.data.users) {
+        setAvailableUsers(res.data.users);
       }
     } catch (err) {
       console.error('Failed to fetch users', err);
@@ -60,6 +62,7 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
         name,
         visibility,
         defaultOrder,
+        allowOthersToAdd,
         sharedWith: JSON.stringify(sharedWith)
       };
 
@@ -80,9 +83,14 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
   };
 
   const toggleUserShare = (userId) => {
-    setSharedWith(prev => 
-      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
-    );
+    setSharedWith(prev => {
+      const exists = prev.find(item => (typeof item === 'object' ? item.id === userId : item === userId));
+      if (exists) {
+        return prev.filter(item => (typeof item === 'object' ? item.id !== userId : item !== userId));
+      } else {
+        return [...prev, { id: userId, status: 'pending' }];
+      }
+    });
   };
 
   const renderInviteModal = () => {
@@ -113,7 +121,7 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
                 <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>No users found.</div>
               ) : (
                 filteredUsers.map(user => {
-                  const isShared = sharedWith.includes(user.id);
+                  const isShared = sharedWith.some(item => (typeof item === 'object' ? item.id === user.id : item === user.id));
                   return (
                     <div 
                       key={user.id} 
@@ -251,19 +259,37 @@ const ListConfigModal = ({ isOpen, onClose, list, onSuccess }) => {
             </div>
           </div>
 
-          {visibility === 'INVITE' && (
+          {visibility !== 'PRIVATE' && (
             <div>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => setShowInviteModal(true)}
-                style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
-              >
-                <Users size={18} />
-                Manage Invites ({sharedWith.length})
-              </button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={allowOthersToAdd} 
+                  onChange={(e) => setAllowOthersToAdd(e.target.checked)} 
+                  style={{ accentColor: 'var(--accent)', transform: 'scale(1.2)' }} 
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                  <Users size={18} style={{ color: allowOthersToAdd ? 'var(--accent)' : 'var(--text-muted)' }} />
+                  <div>
+                    <div style={{ fontWeight: '600' }}>Allow others to add to list</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Other authenticated users who can view this list will be able to add and remove items.</div>
+                  </div>
+                </div>
+              </label>
             </div>
           )}
+
+          <div>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={() => setShowInviteModal(true)}
+              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+            >
+              <Users size={18} />
+              Manage Invites ({sharedWith.length})
+            </button>
+          </div>
 
           <div className="custom-modal-footer" style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>

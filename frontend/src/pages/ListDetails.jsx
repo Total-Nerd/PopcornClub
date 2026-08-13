@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { 
   ArrowLeft, LayoutGrid, List as ListIcon, Sliders, CheckCircle, 
-  Bookmark, Edit2, Lock, Link as LinkIcon, Globe, Trash2, Search as SearchIcon
+  Bookmark, Edit2, Lock, Link as LinkIcon, Globe, Trash2, Search as SearchIcon, Copy, Users
 } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 import MobileBottomSheet from '../components/MobileBottomSheet';
@@ -62,7 +62,7 @@ const ListDetails = () => {
   const { shareId } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const { showAlert } = useModal();
+  const { showAlert, showConfirm } = useModal();
   
   const [list, setList] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -141,6 +141,10 @@ const ListDetails = () => {
       setError(null);
     } catch (err) {
       console.error('Failed to fetch list:', err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
       setError(err.response?.data?.error || 'Failed to load list');
     } finally {
       setLoading(false);
@@ -343,6 +347,46 @@ const ListDetails = () => {
     );
   }
 
+  const isPending = () => {
+    if (!list || !user) return false;
+    try {
+      const shared = JSON.parse(list.sharedWith || '[]');
+      const userShare = shared.find(s => typeof s === 'object' && s.id === user.id);
+      return userShare && userShare.status === 'pending';
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const handleRespondToInvite = async (accept) => {
+    try {
+      await api.post(`/lists/shared/${shareId}/respond`, { accept });
+      if (accept) {
+        fetchList();
+        showAlert('List invitation accepted', 'success');
+      } else {
+        navigate('/lists');
+        showAlert('List invitation rejected', 'info');
+      }
+    } catch (err) {
+      console.error('Failed to respond to invite:', err);
+      showAlert('Failed to respond to invite', 'error');
+    }
+  };
+
+  const handleCopyList = async () => {
+    const confirmed = await showConfirm("Copy this list to your own lists?");
+    if (!confirmed) return;
+    try {
+      const res = await api.post(`/lists/shared/${shareId}/copy`);
+      showAlert('List copied successfully', 'success');
+      navigate(`/lists/${res.data.shareId}`);
+    } catch (err) {
+      console.error('Failed to copy list:', err);
+      showAlert('Failed to copy list', 'error');
+    }
+  };
+
   const isOwner = user?.id === list.userId;
   const sortedItems = getSortedItems();
 
@@ -350,14 +394,20 @@ const ListDetails = () => {
     <div className="media-page-container">
       <div className="page-header page-header-discover" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', gridArea: 'title' }}>
-          <button className="btn btn-secondary" onClick={() => navigate('/lists')} style={{ padding: '8px' }}>
-            <ArrowLeft size={20} />
-          </button>
+          {user && (
+            <button className="btn btn-secondary" onClick={() => navigate('/lists')} style={{ padding: '8px' }}>
+              <ArrowLeft size={20} />
+            </button>
+          )}
           <h1 className="page-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
             {list.name}
             {list.visibility === 'PUBLIC' && <Globe size={18} style={{ color: 'var(--text-muted)' }} title="Public List" />}
             {list.visibility === 'LINK' && <LinkIcon size={18} style={{ color: 'var(--text-muted)' }} title="Link Shared List" />}
-            {list.visibility === 'INVITE' && <Lock size={18} style={{ color: 'var(--text-muted)' }} title="Invite Only List" />}
+            {list.visibility === 'INVITE' && (list.sharedWith && list.sharedWith !== '[]' && list.sharedWith !== 'null' && JSON.parse(list.sharedWith || '[]').length > 0 ? (
+              <Users size={18} style={{ color: 'var(--text-muted)' }} title="Shared List" />
+            ) : (
+              <Lock size={18} style={{ color: 'var(--text-muted)' }} title="Private List" />
+            ))}
           </h1>
         </div>
         
@@ -387,9 +437,15 @@ const ListDetails = () => {
         
         <div className="display-options-container" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {isOwner && (
-            <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>
+            <button className="btn btn-secondary display-options-btn" onClick={() => setIsModalOpen(true)}>
               <Edit2 size={16} />
               <span className="hide-on-mobile">Edit List</span>
+            </button>
+          )}
+          {user && !isOwner && (
+            <button className="btn btn-secondary display-options-btn" onClick={handleCopyList} title="Copy this list">
+              <Copy size={16} />
+              <span className="hide-on-mobile">Copy List</span>
             </button>
           )}
 
@@ -433,6 +489,19 @@ const ListDetails = () => {
         </div>
       </div>
 
+
+      {isPending() && (
+        <div style={{ background: 'var(--panel-bg)', border: '1px solid var(--accent)', padding: '16px', borderRadius: '12px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px 0' }}>You've been invited!</h3>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' }}>{list.user?.username} invited you to this list.</p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button className="btn btn-secondary" onClick={() => handleRespondToInvite(false)}>Decline</button>
+            <button className="btn btn-primary" onClick={() => handleRespondToInvite(true)}>Accept Invite</button>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
           By {list.user.username} • {list.items.length} items

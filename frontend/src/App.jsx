@@ -1,5 +1,5 @@
 import React, { useEffect, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { ModalProvider } from './context/ModalContext';
 import { getStoredThemeConfig, applyTheme } from './utils/themeManager';
@@ -24,21 +24,55 @@ import Conflicts from './pages/Conflicts';
 import StatsPage from './pages/StatsPage';
 import RequestsPage from './pages/RequestsPage';
 
+
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
+  const location = useLocation();
   if (loading) return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   return children;
 };
+
+const LoginRoute = () => {
+  const { user } = useContext(AuthContext);
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const redirect = searchParams.get('redirect') || '/';
+  
+  return user ? <Navigate to={redirect} replace /> : <Login />;
+};
+
+const OptionalAuthLayout = () => {
+  const { user, loading } = useContext(AuthContext);
+  if (loading) return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>;
+  
+  if (user) {
+    return <MainLayout />;
+  }
+  
+  return (
+    <div className="app-container public-view" style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
+      <main style={{ flex: 1, padding: 'clamp(16px, 5vw, 40px)', width: '100%', maxWidth: '100%' }}>
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
 
 const AppRoutes = () => {
   const { user } = useContext(AuthContext);
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+      <Route path="/login" element={<LoginRoute />} />
       
+      
+      <Route element={<OptionalAuthLayout />}>
+        <Route path="/lists/:shareId" element={<ListDetails />} />
+      </Route>
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+
         <Route index element={<CalendarView />} />
         <Route path="discover" element={<Search />} />
         <Route path="shows" element={<MyShows />} />
@@ -48,7 +82,6 @@ const AppRoutes = () => {
         <Route path="movies/:tmdbId" element={<MovieDetails />} />
         <Route path="person/:personId" element={<PersonDetails />} />
         <Route path="lists" element={<Lists />} />
-        <Route path="lists/:shareId" element={<ListDetails />} />
         <Route path="history" element={<WatchHistory />} />
         <Route path="watch-together" element={<WatchTogetherPage />} />
         <Route path="stats/:username" element={<StatsPage />} />

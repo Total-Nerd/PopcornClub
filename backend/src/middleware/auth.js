@@ -22,4 +22,25 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-module.exports = { authenticateToken };
+
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) return next();
+
+  jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey_change_in_production', async (err, decoded) => {
+    if (err) return next();
+    try {
+      const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+      if (user) {
+        req.user = user;
+      }
+      next();
+    } catch (dbErr) {
+      next();
+    }
+  });
+};
+
+module.exports = { authenticateToken, optionalAuth };
