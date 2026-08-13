@@ -265,8 +265,72 @@ async function sendUserRequestUpdateNotification(user, media, actionType, reason
   }
 }
 
+async function sendListInvitationEmail(email, inviterUsername, listName, listLink, posters) {
+  if (!email || !transporter) return;
+  const subject = `You've been invited to a shared list: ${listName}`;
+  
+  let gridHtml = '';
+  if (posters && posters.length > 0) {
+    const maxPosters = posters.slice(0, 4);
+    while (maxPosters.length < 4) {
+      maxPosters.push(''); // Empty filler if less than 4
+    }
+    const cells = maxPosters.map(p => p ? `<img src="${p}" style="width: 100%; height: auto; border-radius: 8px; display: block;" />` : `<div style="width: 100%; padding-top: 150%; background-color: #334155; border-radius: 8px;"></div>`);
+    
+    gridHtml = `
+      <div style="margin-bottom: 24px;">
+        <table border="0" cellpadding="4" cellspacing="0" width="100%">
+          <tr>
+            <td width="50%" valign="top">${cells[0]}</td>
+            <td width="50%" valign="top">${cells[1]}</td>
+          </tr>
+          <tr>
+            <td width="50%" valign="top">${cells[2]}</td>
+            <td width="50%" valign="top">${cells[3]}</td>
+          </tr>
+        </table>
+      </div>
+    `;
+  }
+
+  const htmlBody = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <body style="margin: 0; padding: 40px 20px; font-family: sans-serif; background-color: #0f172a; color: #f8fafc;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 20px; overflow: hidden; padding: 32px; text-align: center;">
+        <h2 style="margin: 0 0 16px 0; font-size: 22px; color: #f8fafc;">List Invitation</h2>
+        <p style="font-size: 16px; color: #cbd5e1; margin-bottom: 24px;">
+          <strong>${inviterUsername}</strong> has invited you to view their list: <strong style="color: #ffffff;">${listName}</strong>.
+        </p>
+        
+        ${gridHtml}
+        
+        <a href="${listLink}" style="display: block; background-color: #3b82f6; color: #ffffff; text-align: center; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; text-decoration: none;">
+          View List to Accept/Reject
+        </a>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const textBody = `${inviterUsername} has invited you to view their list: ${listName}.\nView here: ${listLink}`;
+
+  try {
+    await transporter.sendMail({
+      from: `TVTracker <${from}>`,
+      to: email,
+      subject,
+      text: textBody,
+      html: htmlBody
+    });
+  } catch (err) {
+    console.error(`[Mailer] Failed to send list invitation to ${email}:`, err.message);
+  }
+}
+
 module.exports = {
   sendInvitationEmail,
   sendAdminRequestNotification,
-  sendUserRequestUpdateNotification
+  sendUserRequestUpdateNotification,
+  sendListInvitationEmail
 };

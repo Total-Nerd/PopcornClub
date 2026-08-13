@@ -1,3 +1,4 @@
+import { AuthContext } from '../context/AuthContext';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api';

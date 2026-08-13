@@ -2,13 +2,260 @@ const express = require('express');
 const axios = require('axios');
 const prisma = require('../prismaClient');
 const fs = require('fs');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { fetchTMDB } = require('../utils/tmdb');
 const { resolveDuration } = require('../utils/durationResolver');
 const { getAiringDateTime } = require('../utils/airtime');
 const { scanMediaItem } = require('../utils/folderScanner');
 
 const router = express.Router();
+
+router.get('/tv/:tmdbId', optionalAuth, async (req, res) => {
+  const { tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const [tmdbData, creditsData, externalIdsData, videosData] = await Promise.all([
+      fetchTMDB(`/3/tv/${parsedId}`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/credits`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
+    ]);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        collections: { where: { userId: req.user ? req.user.id : -1 } },
+        episodeCollections: { where: { userId: req.user ? req.user.id : -1 } },
+        episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1 } }
+      }
+    });
+
+    const isCollected = media ? media.collections.length > 0 : false;
+    const collectedEpisodes = media ? media.episodeCollections.map(e => ({ season: e.season, episode: e.episode })) : [];
+    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => ({ season: e.season, episode: e.episode })) : [];
+
+    res.json({
+      ...tmdbData,
+      poster_path: media?.posterPath || tmdbData.poster_path,
+      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
+      cast: creditsData.cast?.slice(0, 30) || [],
+      videos: videosData.results || [],
+      external_ids: externalIdsData || {},
+      isCollected,
+      collectedEpisodes,
+      watchedEpisodes,
+      localId: media?.id
+    });
+  } catch (error) {
+    console.error('Failed to fetch TV details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch TV details' });
+  }
+});
+
+router.get('/movie/:tmdbId', optionalAuth, async (req, res) => {
+  const { tmdbId } = req.params;
+  const parsedId = parseInt(tmdbId);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const [tmdbData, creditsData, videosData] = await Promise.all([
+      fetchTMDB(`/3/movie/${parsedId}`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/movie/${parsedId}/credits`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/movie/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
+    ]);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'movie' },
+      include: {
+        collections: { where: { userId: req.user ? req.user.id : -1 } },
+        watchHistory: { where: { userId: req.user ? req.user.id : -1 } }
+      }
+    });
+
+    const isCollected = media ? media.collections.length > 0 : false;
+    const isWatched = media ? media.watchHistory.length > 0 : false;
+
+    res.json({
+      ...tmdbData,
+      poster_path: media?.posterPath || tmdbData.poster_path,
+      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
+      cast: creditsData.cast?.slice(0, 30) || [],
+      videos: videosData.results || [],
+      isCollected,
+      isWatched,
+      localId: media?.id
+    });
+  } catch (error) {
+    console.error('Failed to fetch movie details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch movie details' });
+  }
+});
+
+router.get('/tv/:tmdbId/season/:seasonNumber', optionalAuth, async (req, res) => {
+  const { tmdbId, seasonNumber } = req.params;
+  const parsedId = parseInt(tmdbId);
+  const parsedSeason = parseInt(seasonNumber);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}`, systemSettings.tmdbApiKey);
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        episodeCollections: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason } },
+        episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason } }
+      }
+    });
+
+    const collectedEpisodes = media ? media.episodeCollections.map(e => e.episode) : [];
+    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => e.episode) : [];
+
+    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
+    const tvCacheKey = `/3/tv/${parsedId}`;
+    const tvCache = await prisma.tMDBCache.findUnique({
+      where: { key: tvCacheKey }
+    });
+    const originCountries = tvCache?.data?.origin_country || [];
+
+    const episodes = tmdbData.episodes.map(ep => {
+      const airDateTime = getAiringDateTime(ep.air_date, originCountries, parsedId);
+      return {
+        ...ep,
+        airDateTime,
+        isCollected: collectedEpisodes.includes(ep.episode_number),
+        isWatched: watchedEpisodes.includes(ep.episode_number)
+      };
+    });
+
+    res.json({
+      ...tmdbData,
+      episodes
+    });
+  } catch (error) {
+    console.error('Failed to fetch season details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch season details' });
+  }
+});
+
+router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', optionalAuth, async (req, res) => {
+  const { tmdbId, seasonNumber, episodeNumber } = req.params;
+  const parsedId = parseInt(tmdbId);
+  const parsedSeason = parseInt(seasonNumber);
+  const parsedEpisode = parseInt(episodeNumber);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}/episode/${parsedEpisode}`, systemSettings.tmdbApiKey, {
+      append_to_response: 'credits,images'
+    });
+
+    const media = await prisma.media.findFirst({
+      where: { tmdbId: parsedId, type: 'tv' },
+      include: {
+        episodeCollections: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason, episode: parsedEpisode } },
+        episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason, episode: parsedEpisode } },
+        localFiles: { where: { season: parsedSeason, episode: parsedEpisode } }
+      }
+    });
+
+    const isCollected = media ? media.episodeCollections.length > 0 : false;
+    const isWatched = media ? media.episodeWatchHistory.length > 0 : false;
+    
+    // Check if any file exists on disk
+    let localFile = null;
+    if (media && media.localFiles.length > 0) {
+      const fs = require('fs');
+      const validFiles = media.localFiles.filter(f => fs.existsSync(f.path));
+      if (validFiles.length > 0) {
+        localFile = validFiles[0];
+      }
+    }
+
+    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
+    const tvCacheKey = `/3/tv/${parsedId}`;
+    const tvCache = await prisma.tMDBCache.findUnique({
+      where: { key: tvCacheKey }
+    });
+    const originCountries = tvCache?.data?.origin_country || [];
+    const airDateTime = getAiringDateTime(tmdbData.air_date, originCountries, parsedId);
+
+    res.json({
+      ...tmdbData,
+      airDateTime,
+      isCollected,
+      isWatched,
+      localFile
+    });
+  } catch (error) {
+    console.error('Failed to fetch episode details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch episode details' });
+  }
+});
+
+router.get('/person/:personId', optionalAuth, async (req, res) => {
+  const { personId } = req.params;
+  const parsedPersonId = parseInt(personId, 10);
+
+  try {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    if (!systemSettings || !systemSettings.tmdbApiKey) {
+      return res.status(400).json({ error: 'TMDB API Key is not configured' });
+    }
+
+    const apiKey = systemSettings.tmdbApiKey;
+    const [personData, creditsData] = await Promise.all([
+      fetchTMDB(`/3/person/${parsedPersonId}`, apiKey),
+      fetchTMDB(`/3/person/${parsedPersonId}/combined_credits`, apiKey)
+    ]);
+
+    // Find other media in local collection that this person stars in
+    let collectedMedia = [];
+    if (creditsData.cast && Array.isArray(creditsData.cast)) {
+      const tmdbIds = creditsData.cast.map(c => c.id);
+      
+      // Deduplicate TMDB IDs to keep database query efficient
+      const uniqueTmdbIds = Array.from(new Set(tmdbIds));
+
+      collectedMedia = await prisma.media.findMany({
+        where: {
+          tmdbId: { in: uniqueTmdbIds },
+          OR: [
+            { collections: { some: { userId: req.user ? req.user.id : -1 } } },
+            { episodeCollections: { some: { userId: req.user ? req.user.id : -1 } } }
+          ]
+        }
+      });
+    }
+
+    res.json({
+      person: personData,
+      credits: creditsData,
+      collectedMedia
+    });
+  } catch (error) {
+    console.error('Failed to fetch person details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch person details' });
+  }
+});
 
 router.use(authenticateToken);
 
@@ -1053,209 +1300,12 @@ router.get('/shows', async (req, res) => {
 });
 
 // GET TV show details (TMDB details + local watched/collected status details)
-router.get('/tv/:tmdbId', async (req, res) => {
-  const { tmdbId } = req.params;
-  const parsedId = parseInt(tmdbId);
-
-  try {
-    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
-      return res.status(400).json({ error: 'TMDB API Key is not configured' });
-    }
-
-    const [tmdbData, creditsData, externalIdsData, videosData] = await Promise.all([
-      fetchTMDB(`/3/tv/${parsedId}`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/credits`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
-    ]);
-
-    const media = await prisma.media.findFirst({
-      where: { tmdbId: parsedId, type: 'tv' },
-      include: {
-        collections: { where: { userId: req.user.id } },
-        episodeCollections: { where: { userId: req.user.id } },
-        episodeWatchHistory: { where: { userId: req.user.id } }
-      }
-    });
-
-    const isCollected = media ? media.collections.length > 0 : false;
-    const collectedEpisodes = media ? media.episodeCollections.map(e => ({ season: e.season, episode: e.episode })) : [];
-    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => ({ season: e.season, episode: e.episode })) : [];
-
-    res.json({
-      ...tmdbData,
-      poster_path: media?.posterPath || tmdbData.poster_path,
-      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
-      cast: creditsData.cast?.slice(0, 30) || [],
-      videos: videosData.results || [],
-      external_ids: externalIdsData || {},
-      isCollected,
-      collectedEpisodes,
-      watchedEpisodes,
-      localId: media?.id
-    });
-  } catch (error) {
-    console.error('Failed to fetch TV details:', error.message);
-    res.status(500).json({ error: 'Failed to fetch TV details' });
-  }
-});
 
 // GET movie details
-router.get('/movie/:tmdbId', async (req, res) => {
-  const { tmdbId } = req.params;
-  const parsedId = parseInt(tmdbId);
-
-  try {
-    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
-      return res.status(400).json({ error: 'TMDB API Key is not configured' });
-    }
-
-    const [tmdbData, creditsData, videosData] = await Promise.all([
-      fetchTMDB(`/3/movie/${parsedId}`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/movie/${parsedId}/credits`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/movie/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
-    ]);
-
-    const media = await prisma.media.findFirst({
-      where: { tmdbId: parsedId, type: 'movie' },
-      include: {
-        collections: { where: { userId: req.user.id } },
-        watchHistory: { where: { userId: req.user.id } }
-      }
-    });
-
-    const isCollected = media ? media.collections.length > 0 : false;
-    const isWatched = media ? media.watchHistory.length > 0 : false;
-
-    res.json({
-      ...tmdbData,
-      poster_path: media?.posterPath || tmdbData.poster_path,
-      backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
-      cast: creditsData.cast?.slice(0, 30) || [],
-      videos: videosData.results || [],
-      isCollected,
-      isWatched,
-      localId: media?.id
-    });
-  } catch (error) {
-    console.error('Failed to fetch movie details:', error.message);
-    res.status(500).json({ error: 'Failed to fetch movie details' });
-  }
-});
 
 // GET TV season details (proxy season episodes merged with local watched/collected episode state)
-router.get('/tv/:tmdbId/season/:seasonNumber', async (req, res) => {
-  const { tmdbId, seasonNumber } = req.params;
-  const parsedId = parseInt(tmdbId);
-  const parsedSeason = parseInt(seasonNumber);
-
-  try {
-    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
-      return res.status(400).json({ error: 'TMDB API Key is not configured' });
-    }
-
-    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}`, systemSettings.tmdbApiKey);
-
-    const media = await prisma.media.findFirst({
-      where: { tmdbId: parsedId, type: 'tv' },
-      include: {
-        episodeCollections: { where: { userId: req.user.id, season: parsedSeason } },
-        episodeWatchHistory: { where: { userId: req.user.id, season: parsedSeason } }
-      }
-    });
-
-    const collectedEpisodes = media ? media.episodeCollections.map(e => e.episode) : [];
-    const watchedEpisodes = media ? media.episodeWatchHistory.map(e => e.episode) : [];
-
-    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
-    const tvCacheKey = `/3/tv/${parsedId}`;
-    const tvCache = await prisma.tMDBCache.findUnique({
-      where: { key: tvCacheKey }
-    });
-    const originCountries = tvCache?.data?.origin_country || [];
-
-    const episodes = tmdbData.episodes.map(ep => {
-      const airDateTime = getAiringDateTime(ep.air_date, originCountries, parsedId);
-      return {
-        ...ep,
-        airDateTime,
-        isCollected: collectedEpisodes.includes(ep.episode_number),
-        isWatched: watchedEpisodes.includes(ep.episode_number)
-      };
-    });
-
-    res.json({
-      ...tmdbData,
-      episodes
-    });
-  } catch (error) {
-    console.error('Failed to fetch season details:', error.message);
-    res.status(500).json({ error: 'Failed to fetch season details' });
-  }
-});
 
 // GET TV episode details (merged with local watched/collected episode state and files)
-router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', async (req, res) => {
-  const { tmdbId, seasonNumber, episodeNumber } = req.params;
-  const parsedId = parseInt(tmdbId);
-  const parsedSeason = parseInt(seasonNumber);
-  const parsedEpisode = parseInt(episodeNumber);
-
-  try {
-    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
-      return res.status(400).json({ error: 'TMDB API Key is not configured' });
-    }
-
-    const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}/episode/${parsedEpisode}`, systemSettings.tmdbApiKey, {
-      append_to_response: 'credits,images'
-    });
-
-    const media = await prisma.media.findFirst({
-      where: { tmdbId: parsedId, type: 'tv' },
-      include: {
-        episodeCollections: { where: { userId: req.user.id, season: parsedSeason, episode: parsedEpisode } },
-        episodeWatchHistory: { where: { userId: req.user.id, season: parsedSeason, episode: parsedEpisode } },
-        localFiles: { where: { season: parsedSeason, episode: parsedEpisode } }
-      }
-    });
-
-    const isCollected = media ? media.episodeCollections.length > 0 : false;
-    const isWatched = media ? media.episodeWatchHistory.length > 0 : false;
-    
-    // Check if any file exists on disk
-    let localFile = null;
-    if (media && media.localFiles.length > 0) {
-      const fs = require('fs');
-      const validFiles = media.localFiles.filter(f => fs.existsSync(f.path));
-      if (validFiles.length > 0) {
-        localFile = validFiles[0];
-      }
-    }
-
-    // Fetch origin_country from TV Show cache to calculate accurate local airtimes
-    const tvCacheKey = `/3/tv/${parsedId}`;
-    const tvCache = await prisma.tMDBCache.findUnique({
-      where: { key: tvCacheKey }
-    });
-    const originCountries = tvCache?.data?.origin_country || [];
-    const airDateTime = getAiringDateTime(tmdbData.air_date, originCountries, parsedId);
-
-    res.json({
-      ...tmdbData,
-      airDateTime,
-      isCollected,
-      isWatched,
-      localFile
-    });
-  } catch (error) {
-    console.error('Failed to fetch episode details:', error.message);
-    res.status(500).json({ error: 'Failed to fetch episode details' });
-  }
-});
 
 // Toggle episode watch status
 router.post('/episode/watch', async (req, res) => {
@@ -3313,51 +3363,6 @@ router.put('/:type/:tmdbId/images', async (req, res) => {
 });
 
 // GET /api/media/person/:personId
-router.get('/person/:personId', async (req, res) => {
-  const { personId } = req.params;
-  const parsedPersonId = parseInt(personId, 10);
-
-  try {
-    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
-      return res.status(400).json({ error: 'TMDB API Key is not configured' });
-    }
-
-    const apiKey = systemSettings.tmdbApiKey;
-    const [personData, creditsData] = await Promise.all([
-      fetchTMDB(`/3/person/${parsedPersonId}`, apiKey),
-      fetchTMDB(`/3/person/${parsedPersonId}/combined_credits`, apiKey)
-    ]);
-
-    // Find other media in local collection that this person stars in
-    let collectedMedia = [];
-    if (creditsData.cast && Array.isArray(creditsData.cast)) {
-      const tmdbIds = creditsData.cast.map(c => c.id);
-      
-      // Deduplicate TMDB IDs to keep database query efficient
-      const uniqueTmdbIds = Array.from(new Set(tmdbIds));
-
-      collectedMedia = await prisma.media.findMany({
-        where: {
-          tmdbId: { in: uniqueTmdbIds },
-          OR: [
-            { collections: { some: { userId: req.user.id } } },
-            { episodeCollections: { some: { userId: req.user.id } } }
-          ]
-        }
-      });
-    }
-
-    res.json({
-      person: personData,
-      credits: creditsData,
-      collectedMedia
-    });
-  } catch (error) {
-    console.error('Failed to fetch person details:', error.message);
-    res.status(500).json({ error: 'Failed to fetch person details' });
-  }
-});
 
 // --- Missing Episodes Management ---
 router.post('/missing-episodes/ignore', async (req, res) => {

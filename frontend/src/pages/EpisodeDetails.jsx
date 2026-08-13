@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../api';
 import { ArrowLeft, Tv, Star, Calendar, Clock, Check, EyeOff, Play } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
+import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 import RequestButton from '../components/RequestButton';
 
@@ -11,6 +12,7 @@ const EpisodeDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { showAlert } = useModal();
+  const { user } = useContext(AuthContext);
 
   const [episodeDetails, setEpisodeDetails] = useState(null);
   const [showDetails, setShowDetails] = useState(null);

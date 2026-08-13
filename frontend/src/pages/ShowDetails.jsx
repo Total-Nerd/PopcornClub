@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../api';
 import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
+import { AuthContext } from '../context/AuthContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
 import RequestButton from '../components/RequestButton';
@@ -64,12 +65,27 @@ const ShowDetails = () => {
 
   const fetchLists = async () => {
     try {
-      const res = await api.get('/lists');
-      setLists(res.data);
+      const [res, sharedRes] = await Promise.all([
+        api.get('/lists'),
+        api.get('/lists/shared').catch(() => ({ data: [] }))
+      ]);
+      
+      const ownLists = res.data;
+      const collaborativeSharedLists = (sharedRes.data || []).filter(l => l.allowOthersToAdd);
+      
+      // Combine them
+      const combinedLists = [...ownLists, ...collaborativeSharedLists];
+      
+      // Remove duplicates just in case
+      const uniqueListsMap = new Map();
+      combinedLists.forEach(l => uniqueListsMap.set(l.id, l));
+      const uniqueLists = Array.from(uniqueListsMap.values());
+
+      setLists(uniqueLists);
 
       const memberships = {};
-      for (const list of res.data) {
-        const itemInList = list.items.find(item => item.media.tmdbId === parseInt(tmdbId, 10));
+      for (const list of uniqueLists) {
+        const itemInList = (list.items || []).find(item => item.media && item.media.tmdbId === parseInt(tmdbId, 10));
         if (itemInList) {
           memberships[list.id] = { listItemId: itemInList.id, mediaId: itemInList.media.id };
         }

@@ -242,7 +242,7 @@ router.get('/shared-with-me', async (req, res) => {
       try { sharedArr = JSON.parse(list.sharedWith || '[]'); } catch(e) {}
       // Either object with status accepted, or old primitive ID format (which means they have access)
       return sharedArr.some(share => 
-        (typeof share === 'object' && share.id === req.user.id && (share.status === 'accepted' || share.status === 'pending')) ||
+        (typeof share === 'object' && share.id === req.user.id && share.status === 'accepted') ||
         (typeof share === 'number' && share === req.user.id)
       );
     });
@@ -292,19 +292,14 @@ router.post('/shared/:shareId/respond', async (req, res) => {
     let sharedArr = [];
     try { sharedArr = JSON.parse(list.sharedWith || '[]'); } catch(e) {}
     
-    let shareIndex = sharedArr.findIndex(s => typeof s === 'object' && s.id === req.user.id);
+    const shareIndex = sharedArr.findIndex(s => typeof s === 'object' && s.id === req.user.id);
     if (shareIndex === -1) {
-      shareIndex = sharedArr.findIndex(s => typeof s === 'number' && s === req.user.id);
-    }
-    
-    if (shareIndex === -1) {
+      // Could be primitive ID format (which means already accepted effectively)
       return res.json({ success: true, list });
     }
     
     if (accept) {
-      if (typeof sharedArr[shareIndex] === 'object') {
-        sharedArr[shareIndex].status = 'accepted';
-      }
+      sharedArr[shareIndex].status = 'accepted';
     } else {
       sharedArr.splice(shareIndex, 1);
     }
@@ -317,45 +312,6 @@ router.post('/shared/:shareId/respond', async (req, res) => {
     res.json({ success: true, list: updatedList });
   } catch (err) {
     res.status(500).json({ error: 'Failed to respond to invite' });
-  }
-});
-
-// Copy a shared list
-router.post('/shared/:shareId/copy', async (req, res) => {
-  const { shareId } = req.params;
-  try {
-    const listToCopy = await prisma.customList.findUnique({
-      where: { shareId },
-      include: { items: true }
-    });
-    
-    if (!listToCopy) return res.status(404).json({ error: 'List not found' });
-    
-    // Create new list
-    const newList = await prisma.customList.create({
-      data: {
-        name: `Copy of ${listToCopy.name}`,
-        visibility: 'INVITE',
-        defaultOrder: listToCopy.defaultOrder,
-        sharedWith: '[]',
-        userId: req.user.id
-      }
-    });
-    
-    // Copy items
-    if (listToCopy.items && listToCopy.items.length > 0) {
-      await prisma.listItem.createMany({
-        data: listToCopy.items.map(item => ({
-          listId: newList.id,
-          mediaId: item.mediaId
-        }))
-      });
-    }
-    
-    res.json(newList);
-  } catch (err) {
-    console.error('Copy list error:', err);
-    res.status(500).json({ error: 'Failed to copy list' });
   }
 });
 
