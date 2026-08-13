@@ -1140,7 +1140,8 @@ router.get('/movies', async (req, res) => {
         OR: [
           { collections: { some: { userId: req.user.id } } },
           { listItems: { some: { list: { userId: req.user.id } } } }
-        ]
+        ],
+        hiddenItems: { none: { userId: req.user.id, hideInLibrary: true } }
       },
       include: {
         collections: { where: { userId: req.user.id } },
@@ -1197,7 +1198,8 @@ router.get('/shows', async (req, res) => {
         OR: [
           { collections: { some: { userId: req.user.id } } },
           { listItems: { some: { list: { userId: req.user.id } } } }
-        ]
+        ],
+        hiddenItems: { none: { userId: req.user.id, hideInLibrary: true } }
       },
       include: {
         collections: { where: { userId: req.user.id } },
@@ -1578,6 +1580,56 @@ router.post('/collect', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to collect media' });
+  }
+});
+
+// Hide Media
+router.post('/hide', async (req, res) => {
+  const { tmdbId, type, title, overview, releaseDate, posterPath, hideInCalendar, hideInLibrary, unhide } = req.body;
+  if (!tmdbId || !type || !title) return res.status(400).json({ error: 'Missing required media fields' });
+
+  try {
+    const media = await getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath });
+
+    if (unhide) {
+      await prisma.hiddenItem.deleteMany({ where: { userId: req.user.id, mediaId: media.id } });
+      res.json({ unhidden: true });
+    } else {
+      const hiddenItem = await prisma.hiddenItem.upsert({
+        where: { userId_mediaId: { userId: req.user.id, mediaId: media.id } },
+        update: { 
+          hideInCalendar: hideInCalendar !== undefined ? hideInCalendar : true,
+          hideInLibrary: hideInLibrary !== undefined ? hideInLibrary : true
+        },
+        create: { 
+          userId: req.user.id, 
+          mediaId: media.id,
+          hideInCalendar: hideInCalendar !== undefined ? hideInCalendar : true,
+          hideInLibrary: hideInLibrary !== undefined ? hideInLibrary : true
+        }
+      });
+      res.json(hiddenItem);
+    }
+  } catch (error) {
+    console.error('Failed to toggle hide status:', error);
+    res.status(500).json({ error: 'Failed to hide/unhide media' });
+  }
+});
+
+// Get Hidden Items
+router.get('/hidden-items', async (req, res) => {
+  try {
+    const hiddenItems = await prisma.hiddenItem.findMany({
+      where: { userId: req.user.id },
+      include: {
+        media: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(hiddenItems);
+  } catch (error) {
+    console.error('Failed to fetch hidden items:', error);
+    res.status(500).json({ error: 'Failed to fetch hidden items' });
   }
 });
 
@@ -3226,7 +3278,8 @@ router.get('/:tmdbId', async (req, res) => {
       watchHistory: {
         where: { userId: req.user.id },
         orderBy: { watchedAt: 'desc' }
-      }
+      },
+      hiddenItems: { where: { userId: req.user.id } }
     }
   });
   

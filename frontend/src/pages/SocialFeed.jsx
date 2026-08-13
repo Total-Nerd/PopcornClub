@@ -193,7 +193,7 @@ const SocialFeed = () => {
                   </div>
                   
                   {item.type === 'comment' && item.content && (
-                    <Link to={item.media.type === 'movie' ? `/movies/${item.media.tmdbId || item.media.id}?comment=${item.id}` : `/shows/${item.media.tmdbId || item.media.id}${item.season ? `/season/${item.season}/episode/${item.episode}` : ''}?comment=${item.id}`} style={{ textDecoration: 'none' }}>
+                    <Link to={item.media.type === 'movie' ? `/movies/${item.media.tmdbId || item.media.id}?comment=${item.id.replace('comment_', '')}` : `/shows/${item.media.tmdbId || item.media.id}${item.season ? `/season/${item.season}/episode/${item.episode}` : ''}?comment=${item.id.replace('comment_', '')}`} style={{ textDecoration: 'none' }}>
                       <div style={{ background: 'var(--overlay-strong)', padding: '8px 12px', borderRadius: '8px', marginTop: '8px', fontSize: '0.9rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>
                         "{renderCommentContent(item.content, item.mentionedUsers)}"
                       </div>

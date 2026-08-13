@@ -68,7 +68,8 @@ router.get('/', async (req, res) => {
         OR: [
           { collections: { some: { userId: req.user.id } } },
           { listItems: { some: { list: { userId: req.user.id } } } }
-        ]
+        ],
+        hiddenItems: { none: { userId: req.user.id, hideInCalendar: true } }
       },
       include: {
         collections: { where: { userId: req.user.id } },

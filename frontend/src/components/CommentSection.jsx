@@ -3,9 +3,11 @@ import { AuthContext } from '../context/AuthContext';
 import { Link, useLocation } from 'react-router-dom';
 import { Send, AlertTriangle, Trash2, Edit2, MessageSquare } from 'lucide-react';
 import api from '../api';
+import { useModal } from '../context/ModalContext';
 
 const CommentSection = ({ mediaId, mediaType, listId, season, episode, isGlobalMediaView = false }) => {
   const { user } = useContext(AuthContext);
+  const { showAlert, showConfirm } = useModal();
   const location = useLocation();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -77,18 +79,23 @@ const CommentSection = ({ mediaId, mediaType, listId, season, episode, isGlobalM
       setComments([res.data, ...comments]);
       setNewComment('');
       setHasSpoilers(false);
+      showAlert('Comment added successfully', 'success');
     } catch (err) {
       console.error('Failed to post comment', err);
+      showAlert('Failed to post comment', 'error');
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+    const confirmed = await showConfirm('Are you sure you want to delete this comment?');
+    if (!confirmed) return;
     try {
       await api.delete(`/comments/${id}`);
       setComments(comments.filter(c => c.id !== id));
+      showAlert('Comment deleted', 'success');
     } catch (err) {
       console.error('Failed to delete comment', err);
+      showAlert('Failed to delete comment', 'error');
     }
   };
 

@@ -32,6 +32,7 @@ model User {
   ignoredMissingEps   IgnoredMissingEpisode[]
   requests            Request[]
   addedListItems      ListItem[] @relation("AddedListItems")
+  hiddenItems         HiddenItem[]
   showSpoilers        Boolean    @default(false)
   comments            Comment[]
   reactions           Reaction[]
@@ -83,6 +84,7 @@ model Media {
   watchHistoryLogs    WatchHistoryLog[]
   ignoredMissingEps   IgnoredMissingEpisode[]
   requests            Request[]
+  hiddenItems         HiddenItem[]
   comments            Comment[]
   reactions           Reaction[]
 
@@ -297,4 +299,17 @@ model Follows {
   createdAt   DateTime @default(now())
 
   @@id([followerId, followingId])
+}
+
+model HiddenItem {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaId         Int
+  media           Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  hideInCalendar  Boolean  @default(true)
+  hideInLibrary   Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, mediaId])
 }

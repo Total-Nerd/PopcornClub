@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit } from 'lucide-react';
+import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit, EyeOff } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
@@ -16,6 +16,11 @@ const ShowDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { showAlert, showConfirm } = useModal();
+  const { user } = React.useContext(AuthContext);
+
+  const [showHideModal, setShowHideModal] = useState(false);
+  const [hideInCalendar, setHideInCalendar] = useState(true);
+  const [hideInLibrary, setHideInLibrary] = useState(true);
 
   const [showDetails, setShowDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -63,6 +68,27 @@ const ShowDetails = () => {
         return { ...prev, backdrop_path: newPath };
       }
     });
+  };
+
+  const handleHideShow = async () => {
+    try {
+      await api.post('/media/hide', {
+        tmdbId: parseInt(tmdbId),
+        type: 'tv',
+        title: showDetails.name,
+        overview: showDetails.overview,
+        releaseDate: showDetails.first_air_date,
+        posterPath: showDetails.poster_path,
+        hideInCalendar,
+        hideInLibrary
+      });
+      setShowHideModal(false);
+      showAlert('Show hidden successfully', 'success');
+      navigate('/');
+    } catch (err) {
+      console.error(err);
+      showAlert('Failed to hide show', 'error');
+    }
   };
 
   const fetchLists = async () => {
@@ -1619,7 +1645,7 @@ const ShowDetails = () => {
 
           {/* Danger Zone / Remove Button at the bottom */}
           {
-            showDetails.isCollected && (
+            showDetails.isCollected && user?.role === 'admin' && (
               <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '24px', display: 'flex', justifyContent: 'center' }}>
                 <button
                   className="btn"
@@ -1639,6 +1665,22 @@ const ShowDetails = () => {
               </div>
             )
           }
+
+          {/* Hide Button for all users */}
+          <div style={{ marginTop: showDetails.isCollected && user?.role === 'admin' ? '12px' : '48px', borderTop: showDetails.isCollected && user?.role === 'admin' ? 'none' : '1px solid var(--border-color)', paddingTop: showDetails.isCollected && user?.role === 'admin' ? '0' : '24px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '12px 24px',
+                fontSize: '0.95rem',
+                fontWeight: '600'
+              }}
+              onClick={() => setShowHideModal(true)}
+            >
+              <EyeOff size={18} />
+              <span>Hide this Show</span>
+            </button>
+          </div>
         </>
       )}
 
@@ -2068,6 +2110,61 @@ const ShowDetails = () => {
           background: rgba(124, 58, 237, 0.08) !important;
         }
       `}</style>
+
+      {/* Hide Modal */}
+      {showHideModal && (
+        <div className="custom-modal-backdrop" onClick={() => setShowHideModal(false)}>
+          <div className="custom-modal-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="custom-modal-header">
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><EyeOff size={20} /> Hide Show</h3>
+              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => setShowHideModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="custom-modal-body" style={{ padding: '24px' }}>
+              <p style={{ marginTop: 0, marginBottom: '24px', color: 'var(--text-muted)' }}>
+                Where would you like to hide <strong>{showDetails?.name}</strong>? You can unhide it later from your User Settings.
+              </p>
+              
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--overlay)', borderRadius: '8px', cursor: 'pointer', marginBottom: '12px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={hideInLibrary} 
+                  onChange={(e) => setHideInLibrary(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: '500' }}>Hide in Media Library</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Remove from shows view</span>
+                </div>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--overlay)', borderRadius: '8px', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={hideInCalendar} 
+                  onChange={(e) => setHideInCalendar(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: '500' }}>Hide in Calendar</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Remove from calendar view</span>
+                </div>
+              </label>
+            </div>
+            <div className="custom-modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowHideModal(false)}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleHideShow}
+                disabled={!hideInLibrary && !hideInCalendar}
+              >
+                Hide Show
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {
         showDetails && (
