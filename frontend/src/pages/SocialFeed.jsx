@@ -78,6 +78,51 @@ const SocialFeed = () => {
     }
   };
 
+  const renderCommentContent = (content, mentionedUsers = []) => {
+    if (!content) return null;
+    
+    const mentionRegex = /(@[a-zA-Z0-9_-]+)/g;
+    const parts = content.split(mentionRegex);
+    
+    return parts.map((part, index) => {
+      if (part.match(mentionRegex)) {
+        const username = part.substring(1);
+        const mentionedUser = mentionedUsers?.find(u => u.username.toLowerCase() === username.toLowerCase());
+        
+        return (
+          <span key={index} style={{ 
+            color: 'var(--text-main)', 
+            fontWeight: '600', 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            background: 'var(--overlay-medium)',
+            padding: mentionedUser ? '2px 8px 2px 4px' : '2px 8px',
+            borderRadius: '16px',
+            verticalAlign: 'middle',
+            border: '1px solid var(--accent)',
+            fontSize: '0.9em',
+            margin: '0 2px'
+          }}>
+            {mentionedUser && (
+              <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'var(--overlay-strong)', overflow: 'hidden', display: 'inline-block', verticalAlign: 'middle' }}>
+                {mentionedUser.avatarPath ? (
+                  <img src={mentionedUser.avatarPath} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff' }}>
+                    {username.substring(0, 1).toUpperCase()}
+                  </span>
+                )}
+              </span>
+            )}
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   if (!user) return null;
 
   return (
@@ -148,9 +193,9 @@ const SocialFeed = () => {
                   </div>
                   
                   {item.type === 'comment' && item.content && (
-                    <Link to={item.media.type === 'movie' ? `/movies/${item.media.tmdbId || item.media.id}` : `/shows/${item.media.tmdbId || item.media.id}${item.season ? `/season/${item.season}/episode/${item.episode}` : ''}`} style={{ textDecoration: 'none' }}>
+                    <Link to={item.media.type === 'movie' ? `/movies/${item.media.tmdbId || item.media.id}?comment=${item.id}` : `/shows/${item.media.tmdbId || item.media.id}${item.season ? `/season/${item.season}/episode/${item.episode}` : ''}?comment=${item.id}`} style={{ textDecoration: 'none' }}>
                       <div style={{ background: 'var(--overlay-strong)', padding: '8px 12px', borderRadius: '8px', marginTop: '8px', fontSize: '0.9rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>
-                        "{item.content}"
+                        "{renderCommentContent(item.content, item.mentionedUsers)}"
                       </div>
                     </Link>
                   )}

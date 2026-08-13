@@ -103,7 +103,7 @@ router.get('/feed', async (req, res) => {
       take: 20
     });
 
-    const comments = await prisma.comment.findMany({
+    let comments = await prisma.comment.findMany({
       where: { userId: { in: targetUserIds }, mediaId: { not: null }, hasSpoilers: false }, // Only include non-spoiler comments with media in feed
       include: {
         user: { select: { id: true, username: true, avatarPath: true } },
@@ -112,6 +112,25 @@ router.get('/feed', async (req, res) => {
       orderBy: { createdAt: 'desc' },
       take: 20
     });
+
+    const allUsernames = new Set();
+    const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
+    for (const c of comments) {
+      if (c.content) {
+        const matches = [...c.content.matchAll(mentionRegex)];
+        matches.forEach(m => allUsernames.add(m[1]));
+      }
+    }
+    if (allUsernames.size > 0) {
+      const users = await prisma.user.findMany({
+        where: { OR: Array.from(allUsernames).map(u => ({ username: { equals: u, mode: 'insensitive' } })) },
+        select: { id: true, username: true, avatarPath: true }
+      });
+      comments = comments.map(c => ({
+        ...c,
+        mentionedUsers: users.filter(u => c.content && new RegExp(`@${u.username}\\b`, 'i').test(c.content))
+      }));
+    }
 
     // Format items as feed items
     let feed = watchHistory.map(log => ({
@@ -143,6 +162,7 @@ router.get('/feed', async (req, res) => {
       season: c.season,
       episode: c.episode,
       content: c.content,
+      mentionedUsers: c.mentionedUsers,
       createdAt: c.createdAt
     })));
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { fetchTMDB } = require('../utils/tmdb');
+const { sendMentionEmail } = require('../utils/mailer');
 
 async function getOrCreateMedia(tmdbId, type) {
   if (!tmdbId || !type) return null;
@@ -41,6 +42,44 @@ async function getOrCreateMedia(tmdbId, type) {
   return media.id;
 }
 
+async function appendMentionedUsers(comments) {
+  const allUsernames = new Set();
+  const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
+
+  for (const c of comments) {
+    if (c.content) {
+      const matches = [...c.content.matchAll(mentionRegex)];
+      matches.forEach(m => allUsernames.add(m[1]));
+    }
+  }
+
+  if (allUsernames.size === 0) return comments;
+
+  const users = await prisma.user.findMany({
+    where: {
+      OR: Array.from(allUsernames).map(u => ({ username: { equals: u, mode: 'insensitive' } }))
+    },
+    select: { username: true, avatarPath: true }
+  });
+
+  const userMap = {};
+  users.forEach(u => { userMap[u.username.toLowerCase()] = u; });
+
+  return comments.map(c => {
+    const mentions = [];
+    if (c.content) {
+      const matches = [...c.content.matchAll(mentionRegex)];
+      matches.forEach(m => {
+        const u = userMap[m[1].toLowerCase()];
+        if (u && !mentions.find(x => x.username.toLowerCase() === u.username.toLowerCase())) {
+          mentions.push(u);
+        }
+      });
+    }
+    return { ...c, mentionedUsers: mentions };
+  });
+}
+
 // Create a new comment
 router.post('/', async (req, res) => {
   try {
@@ -68,9 +107,62 @@ router.post('/', async (req, res) => {
       include: {
         user: {
           select: { id: true, username: true, avatarPath: true }
-        }
+        },
+        media: true // Include media to construct links for emails
       }
     });
+
+    // Handle @mentions
+    if (content) {
+      const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
+      const matches = [...content.matchAll(mentionRegex)];
+      const mentionedUsernames = [...new Set(matches.map(m => m[1]))]; // Unique usernames
+
+      if (mentionedUsernames.length > 0) {
+        // Run asynchronously so it doesn't block the API response
+        (async () => {
+          try {
+            const mentionedUsers = await prisma.user.findMany({
+              where: {
+                OR: mentionedUsernames.map(u => ({ username: { equals: u, mode: 'insensitive' } })),
+                id: { not: userId } // Don't notify self
+              },
+              select: { email: true, username: true }
+            });
+
+            if (mentionedUsers.length > 0) {
+              const appDomain = process.env.APP_DOMAIN || 'https://track.dooleysmith.uk';
+              
+              let mediaTitle = 'a List';
+              let mediaLink = `${appDomain}/lists/${listId}`;
+              let mediaPoster = null;
+              
+              if (comment.media) {
+                mediaTitle = comment.media.title;
+                mediaPoster = comment.media.posterPath;
+                if (comment.season != null && comment.episode != null) mediaTitle += ` (S${comment.season}E${comment.episode})`;
+                else if (comment.season != null) mediaTitle += ` (Season ${comment.season})`;
+
+                mediaLink = `${appDomain}/${comment.media.type === 'movie' ? 'movies' : 'shows'}/${comment.media.tmdbId}`;
+                if (comment.season != null && comment.episode != null) {
+                  mediaLink += `/season/${comment.season}/episode/${comment.episode}`;
+                }
+                mediaLink += `?comment=${comment.id}`;
+              }
+
+              for (const u of mentionedUsers) {
+                if (u.email) {
+                  await sendMentionEmail(u.email, u.username, comment.user.username, content, mediaTitle, mediaLink, mediaPoster);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error processing mentions:', err);
+          }
+        })();
+      }
+    }
+
     res.json(comment);
   } catch (error) {
     console.error('Error creating comment:', error);
@@ -98,7 +190,8 @@ router.get('/media/:mediaId', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(comments);
+    const finalComments = await appendMentionedUsers(comments);
+    res.json(finalComments);
   } catch (error) {
     console.error('Error fetching comments:', error);
     res.status(500).json({ error: 'Failed to fetch comments' });
@@ -116,7 +209,8 @@ router.get('/list/:listId', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(comments);
+    const finalComments = await appendMentionedUsers(comments);
+    res.json(finalComments);
   } catch (error) {
     console.error('Error fetching comments:', error);
     res.status(500).json({ error: 'Failed to fetch comments' });
