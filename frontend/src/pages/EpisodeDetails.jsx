@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../api';
 import { ArrowLeft, Tv, Star, Calendar, Clock, Check, EyeOff, Play } from 'lucide-react';
@@ -17,7 +17,6 @@ const EpisodeDetails = () => {
   const [episodeDetails, setEpisodeDetails] = useState(null);
   const [showDetails, setShowDetails] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showWatchOptions, setShowWatchOptions] = useState(false);
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -198,23 +197,7 @@ const EpisodeDetails = () => {
 
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '32px' }}>
-                {localFile ? (
-                  <button
-                    className="btn btn-primary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600' }}
-                    onClick={() => setShowWatchOptions(true)}
-                  >
-                    <Play size={18} fill="currentColor" /> Play Episode
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-secondary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7, cursor: 'not-allowed', fontWeight: '600' }}
-                    title="No local file available"
-                  >
-                    <Tv size={18} /> Missing File
-                  </button>
-                )}
+
 
                 <button
                   className="btn"
@@ -319,19 +302,6 @@ const EpisodeDetails = () => {
           </div>
         </div>
       </div>
-
-      {/* Watch Options Modal */}
-      {showWatchOptions && localFile && (
-        <WatchOptionsModal
-          media={{
-            title: `${showDetails?.name} - S${seasonNumber}E${episodeNumber} ${name}`,
-            localId: localFile.mediaId,
-            type: 'tv'
-          }}
-          localFiles={[localFile]}
-          onClose={() => setShowWatchOptions(false)}
-        />
-      )}
     </div>
   );
 };

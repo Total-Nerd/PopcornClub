@@ -479,6 +479,11 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
               }
             }
           } else if (eventType === 'library.new') {
+            await prisma.collection.upsert({
+              where: { userId_mediaId: { userId: user.id, mediaId: media.id } },
+              update: {},
+              create: { userId: user.id, mediaId: media.id }
+            });
             await prisma.episodeCollection.upsert({
               where: { userId_mediaId_season_episode: { userId: user.id, mediaId: media.id, season, episode } },
               update: { collectedAt: new Date() },

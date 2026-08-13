@@ -53,10 +53,29 @@ function parseFilename(filePath) {
     const parts = normalizedPath.split('/');
     const tvIndex = parts.indexOf('tv');
     let title = '';
-    if (tvIndex !== -1 && parts.length > tvIndex + 1) {
-      title = parts[tvIndex + 1];
+    let seasonIndex = -1;
+
+    // Try to find the Season folder from the end backwards
+    for (let i = parts.length - 2; i >= 0; i--) {
+      if (/season\s*\d+/i.test(parts[i])) {
+        seasonIndex = i;
+        break;
+      }
+    }
+
+    if (seasonIndex > 0) {
+      // The folder right above the season folder is likely the show title
+      title = parts[seasonIndex - 1];
     } else {
-      title = nameWithoutExt;
+      // Fallback to the folder right above the file, if it's not the root 'tv' folder
+      if (tvIndex !== -1 && parts.length > tvIndex + 2) {
+         // It's nested: /tv/Action/ShowName/Episode.mkv -> pick ShowName
+         title = parts[parts.length - 2];
+      } else if (tvIndex !== -1 && parts.length > tvIndex + 1) {
+         title = parts[tvIndex + 1];
+      } else {
+         title = nameWithoutExt;
+      }
     }
 
     let year = null;
