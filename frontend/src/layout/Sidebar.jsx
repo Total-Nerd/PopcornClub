@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users, ListPlus } from 'lucide-react';
+import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users, ListPlus, Activity } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { AuthContext } from '../context/AuthContext';
 
@@ -43,6 +43,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="History">
           <History size={20} />
           <span>History</span>
+        </NavLink>
+        <NavLink to="/social" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Social">
+          <Activity size={20} />
+          <span>Social</span>
         </NavLink>
         <NavLink to="/watch-together" onClick={handleLinkClick} className={({ isActive }) => `nav-link desktop-only ${isActive ? 'active' : ''}`} data-tooltip="Watch Together">
           <Users size={20} />
@@ -99,6 +103,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <NavLink to="/history" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <History size={18} />
             <span>History</span>
+          </NavLink>
+          <NavLink to="/social" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
+            <Users size={18} />
+            <span>Social</span>
           </NavLink>
           <NavLink to="/watch-together" onClick={handleLinkClick} className={({ isActive }) => `mobile-sheet-option ${isActive ? 'active' : ''}`}>
             <Users size={18} />

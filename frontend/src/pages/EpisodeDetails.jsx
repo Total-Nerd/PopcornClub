@@ -6,6 +6,8 @@ import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 import RequestButton from '../components/RequestButton';
+import CommentSection from '../components/CommentSection';
+import ReactionPicker from '../components/ReactionPicker';
 
 const EpisodeDetails = () => {
   const { tmdbId, seasonNumber, episodeNumber } = useParams();
@@ -224,6 +226,10 @@ const EpisodeDetails = () => {
                 )}
               </div>
 
+              <div style={{ marginBottom: '24px' }}>
+                <ReactionPicker mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
+              </div>
+
               {/* Overview */}
               {overview && (
                 <div style={{ marginBottom: '32px' }}>
@@ -298,6 +304,9 @@ const EpisodeDetails = () => {
                   </div>
                 </div>
               )}
+
+              <CommentSection mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
+
             </div>
           </div>
         </div>

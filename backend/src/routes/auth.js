@@ -172,7 +172,8 @@ router.post('/login', async (req, res) => {
       role: user.role,
       avatarPath: user.avatarPath,
       name: user.name,
-      email: user.email
+      email: user.email,
+      showSpoilers: user.showSpoilers
     }
   });
 });
@@ -208,7 +209,8 @@ router.get('/me', authenticateToken, async (req, res) => {
     plexLastWebhookAt: user.plexLastWebhookAt,
     tmdbApiKey: systemSettings?.tmdbApiKey || null,
     traktUsername: user.traktUsername,
-    traktClientId: user.traktClientId
+    traktClientId: user.traktClientId,
+    showSpoilers: user.showSpoilers
   };
 
   if (user.role === 'admin') {

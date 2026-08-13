@@ -8,6 +8,8 @@ import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
 import RequestButton from '../components/RequestButton';
 import WatchOptionsModal from '../components/WatchOptionsModal';
+import CommentSection from '../components/CommentSection';
+import ReactionPicker from '../components/ReactionPicker';
 
 const ShowDetails = () => {
   const { tmdbId } = useParams();
@@ -67,7 +69,7 @@ const ShowDetails = () => {
     try {
       const [res, sharedRes] = await Promise.all([
         api.get('/lists'),
-        api.get('/lists/shared').catch(() => ({ data: [] }))
+        api.get('/lists/shared-with-me').catch(() => ({ data: [] }))
       ]);
       
       const ownLists = res.data;
@@ -865,6 +867,10 @@ const ShowDetails = () => {
                     ))}
                   </div>
 
+                  <div style={{ marginBottom: '24px' }}>
+                    <ReactionPicker mediaId={showDetails.id} mediaType="tv" />
+                  </div>
+
                   {/* Action buttons */}
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     {!showDetails.isCollected && (
@@ -1604,6 +1610,8 @@ const ShowDetails = () => {
                     </div>
                   )}
                 </div>
+
+                <CommentSection mediaId={showDetails.id} mediaType="tv" isGlobalMediaView={true} />
 
               </div>
             </div>

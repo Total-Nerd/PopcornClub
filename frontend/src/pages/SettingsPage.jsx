@@ -25,6 +25,7 @@ const SettingsPage = () => {
   const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(user?.avatarPath || '');
+  const [showSpoilers, setShowSpoilers] = useState(user?.showSpoilers || false);
 
   // Plex states
   const [plexUser, setPlexUser] = useState(user?.plexUser || '');
@@ -113,6 +114,7 @@ const SettingsPage = () => {
       setTraktClientId(user.traktClientId || '');
       setAvatarPreview(user.avatarPath || '');
       setTmdbApiKey(user.tmdbApiKey || '');
+      setShowSpoilers(user.showSpoilers || false);
     }
   }, [user]);
 
@@ -236,6 +238,7 @@ const SettingsPage = () => {
       const formData = new FormData();
       formData.append('name', profileName);
       formData.append('email', profileEmail);
+      formData.append('showSpoilers', showSpoilers);
       if (profilePassword) {
         formData.append('password', profilePassword);
       }
@@ -730,6 +733,20 @@ const SettingsPage = () => {
                     onChange={e => setProfileEmail(e.target.value)}
                     placeholder="e.g. you@example.com"
                   />
+                </div>
+
+                <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    type="checkbox"
+                    id="showSpoilersToggle"
+                    checked={showSpoilers}
+                    onChange={e => setShowSpoilers(e.target.checked)}
+                    style={{ width: '20px', height: '20px', accentColor: 'var(--accent)' }}
+                  />
+                  <div>
+                    <label htmlFor="showSpoilersToggle" style={{ margin: 0, cursor: 'pointer', fontSize: '1rem' }}>Always Show Spoilers</label>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Do not blur comments that are flagged as containing spoilers.</div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>

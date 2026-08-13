@@ -8,6 +8,8 @@ import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 import RequestButton from '../components/RequestButton';
+import CommentSection from '../components/CommentSection';
+import ReactionPicker from '../components/ReactionPicker';
 
 const MovieDetails = () => {
   const { tmdbId } = useParams();
@@ -62,7 +64,7 @@ const MovieDetails = () => {
     try {
       const [res, sharedRes] = await Promise.all([
         api.get('/lists'),
-        api.get('/lists/shared').catch(() => ({ data: [] }))
+        api.get('/lists/shared-with-me').catch(() => ({ data: [] }))
       ]);
       
       const ownLists = res.data;
@@ -537,6 +539,10 @@ const MovieDetails = () => {
                       </div>
                     )}
                   </div>
+                  
+                  <div style={{ marginBottom: '24px' }}>
+                    <ReactionPicker mediaId={movieDetails.id} mediaType="movie" />
+                  </div>
 
                   {/* Genres */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
@@ -867,6 +873,8 @@ const MovieDetails = () => {
                     </div>
                   </div>
                 )}
+
+                <CommentSection mediaId={movieDetails.id} mediaType="movie" />
 
               </div>
             </div>
