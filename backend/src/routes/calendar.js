@@ -119,7 +119,7 @@ router.get('/', async (req, res) => {
             
             const airYear = new Date(s.air_date).getFullYear();
             const startYear = new Date(start).getFullYear();
-            return airYear >= startYear - 1; // Season airing in last year or later
+            return airYear >= startYear - 3; // Season airing in last 3 years or later
           });
 
           // Fetch episode lists for seasons sequentially to prevent socket starvation
