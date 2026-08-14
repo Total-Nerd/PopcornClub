@@ -113,7 +113,7 @@ const MainLayout = () => {
             <ChevronRight size={14} style={{ opacity: 0.8, marginLeft: '4px', flexShrink: 0 }} />
           </div>
         )}
-        <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <Outlet />
         </div>
       </main>

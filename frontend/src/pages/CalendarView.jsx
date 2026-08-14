@@ -1229,7 +1229,7 @@ const CalendarView = () => {
   const selectedDayEvents = filteredEvents.filter(e => e.localDateStr === selectedDateStr);
 
   return (
-    <div style={{ width: '100%' }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
       {/* Calendar Header Panel */}
       <div ref={containerRef} className="sticky-header-container">
@@ -1328,14 +1328,14 @@ const CalendarView = () => {
           </div>
         ) : (
           /* Desktop Month View */
-          <div className="glass-panel" style={{ padding: '16px', borderRadius: '16px' }}>
+          <div className="glass-panel" style={{ padding: '16px', borderRadius: '16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: '600px' }}>
             {/* Weekday headers */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '8px', textAlign: 'center', fontWeight: '600', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               {weekDaysHeader.map(day => <div key={day}>{day}</div>)}
             </div>
 
             {/* Days grid */}
-            <div className="calendar-month-grid">
+            <div className="calendar-month-grid" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               {getMonthDays().map((day, idx) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
