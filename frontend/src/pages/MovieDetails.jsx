@@ -584,6 +584,20 @@ const MovieDetails = () => {
                     <button
                       className="btn"
                       style={{
+                        background: movieDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--accent)',
+                        color: movieDetails.isCollected ? '#60a5fa' : '#fff',
+                        border: movieDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : 'none',
+                        fontWeight: '600'
+                      }}
+                      onClick={handleToggleCollection}
+                    >
+                      <Plus size={18} style={{ transform: movieDetails.isCollected ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
+                      <span>{movieDetails.isCollected ? 'Collected' : 'Collect'}</span>
+                    </button>
+
+                    <button
+                      className="btn"
+                      style={{
                         background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
                         color: movieDetails.isWatched ? 'var(--success)' : '#fff',
                         border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
@@ -591,22 +605,8 @@ const MovieDetails = () => {
                       }}
                       onClick={handleToggleWatch}
                     >
-                      {movieDetails.isWatched ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {movieDetails.isWatched ? <Check size={18} /> : <Eye size={18} />}
                       <span>{movieDetails.isWatched ? 'Watched' : 'Watch'}</span>
-                    </button>
-
-                    <button
-                      className="btn"
-                      style={{
-                        background: movieDetails.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
-                        color: movieDetails.isCollected ? 'var(--success)' : '#fff',
-                        border: movieDetails.isCollected ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
-                        fontWeight: '600'
-                      }}
-                      onClick={handleToggleCollection}
-                    >
-                      {movieDetails.isCollected ? <Plus size={18} style={{ transform: 'rotate(45deg)', transition: 'transform 0.2s' }} /> : <Plus size={18} />}
-                      <span>{movieDetails.isCollected ? 'Collected' : 'Collect'}</span>
                     </button>
 
                     <div className="info-dropdown-container show-dropdown-container">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Tv, Star, Calendar, Clock, Check, EyeOff, Play } from 'lucide-react';
+import { ArrowLeft, Tv, Star, Calendar, Clock, Check, Eye, EyeOff, Play, Plus } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
@@ -19,6 +19,9 @@ const EpisodeDetails = () => {
   const [episodeDetails, setEpisodeDetails] = useState(null);
   const [showDetails, setShowDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
+  const [watchOptionsMedia, setWatchOptionsMedia] = useState(null);
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -40,25 +43,85 @@ const EpisodeDetails = () => {
     fetchAllData();
   }, [tmdbId, seasonNumber, episodeNumber, showAlert]);
 
-  const handleToggleWatched = async () => {
+  const handleToggleWatched = () => {
+    if (!episodeDetails || !showDetails) return;
+    setWatchOptionsMedia({
+      tmdbId: showDetails.id,
+      type: 'episode',
+      title: `Ep ${episodeNumber}. ${episodeDetails.name}`,
+      overview: episodeDetails.overview,
+      releaseDate: episodeDetails.air_date,
+      posterPath: episodeDetails.still_path,
+      season: parseInt(seasonNumber),
+      episode: parseInt(episodeNumber),
+      grandparentTitle: showDetails.name,
+      parentTitle: `Season ${seasonNumber}`,
+      isWatched: episodeDetails.isWatched
+    });
+    setIsWatchOptionsOpen(true);
+  };
+
+  const handleWatchOptionsSelect = async (choice, watchedAt = null, addSequentially = false) => {
+    setIsWatchOptionsOpen(false);
+    if (!episodeDetails || !showDetails) return;
+
+    try {
+      if (choice === 'watching-now') {
+        await api.post('/media/active-session', {
+          tmdbId: showDetails.id,
+          type: 'episode',
+          title: episodeDetails.name,
+          overview: episodeDetails.overview,
+          releaseDate: episodeDetails.air_date,
+          posterPath: episodeDetails.still_path,
+          season: parseInt(seasonNumber),
+          episode: parseInt(episodeNumber),
+          grandparentTitle: showDetails.name,
+          parentTitle: `Season ${seasonNumber}`
+        });
+        showAlert('Started watching now', 'info');
+      } else if (choice === 'removed-last') {
+        setEpisodeDetails(prev => ({ ...prev, isWatched: false }));
+        showAlert('Removed watch entry', 'info');
+      } else {
+        await api.post('/media/episode/watch', {
+          tmdbId: showDetails.id,
+          season: parseInt(seasonNumber),
+          episode: parseInt(episodeNumber),
+          watched: true,
+          title: showDetails.name,
+          posterPath: showDetails.poster_path,
+          watchedAt,
+          choice
+        });
+        setEpisodeDetails(prev => ({ ...prev, isWatched: true }));
+        showAlert('Marked as watched', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to update watch status:', err);
+      showAlert('Failed to update watch status', 'error');
+    }
+  };
+
+  const handleToggleCollected = async () => {
     if (!episodeDetails) return;
     try {
-      const newWatchedStatus = !episodeDetails.isWatched;
-      await api.post('/media/episode/watch', {
+      const newCollectedStatus = !episodeDetails.isCollected;
+      await api.post('/media/episode/collect', {
         tmdbId: parseInt(tmdbId),
         season: parseInt(seasonNumber),
         episode: parseInt(episodeNumber),
-        watched: newWatchedStatus,
+        collected: newCollectedStatus,
         title: showDetails?.name || 'Unknown Show',
         posterPath: showDetails?.poster_path || null
       });
       setEpisodeDetails(prev => ({
         ...prev,
-        isWatched: newWatchedStatus
+        isCollected: newCollectedStatus
       }));
     } catch (error) {
-      console.error('Failed to toggle watched status', error);
-      showAlert('Failed to toggle watched status.');
+      console.error('Failed to toggle collected status', error);
+      showAlert('Failed to update collected status.');
     }
   };
 
@@ -101,6 +164,7 @@ const EpisodeDetails = () => {
     guest_stars,
     crew,
     isWatched,
+    isCollected,
     localFile
   } = episodeDetails;
 
@@ -200,6 +264,19 @@ const EpisodeDetails = () => {
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '32px' }}>
 
+                <button
+                  className="btn"
+                  style={{
+                    background: isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
+                    color: isCollected ? '#60a5fa' : 'var(--text-main)',
+                    border: isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--border-color)',
+                    fontWeight: '600'
+                  }}
+                  onClick={handleToggleCollected}
+                >
+                  <Plus size={18} style={{ transform: isCollected ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
+                  <span>{isCollected ? 'Collected' : 'Collect'}</span>
+                </button>
 
                 <button
                   className="btn"
@@ -211,8 +288,8 @@ const EpisodeDetails = () => {
                   }}
                   onClick={handleToggleWatched}
                 >
-                  {isWatched ? <Check size={18} /> : <EyeOff size={18} />}
-                  <span>{isWatched ? 'Watched' : 'Mark Watched'}</span>
+                  {isWatched ? <Check size={18} /> : <Eye size={18} />}
+                  <span>{isWatched ? 'Watched' : 'Watch'}</span>
                 </button>
 
                 {!localFile && (
@@ -311,6 +388,18 @@ const EpisodeDetails = () => {
           </div>
         </div>
       </div>
+
+      {isWatchOptionsOpen && (
+        <WatchOptionsModal
+          isOpen={isWatchOptionsOpen}
+          onClose={() => setIsWatchOptionsOpen(false)}
+          media={watchOptionsMedia}
+          onSelect={handleWatchOptionsSelect}
+          onWatchStatusChange={(newIsWatched) => {
+            setEpisodeDetails(prev => ({ ...prev, isWatched: newIsWatched }));
+          }}
+        />
+      )}
     </div>
   );
 };

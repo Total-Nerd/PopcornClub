@@ -453,6 +453,41 @@ const CalendarView = () => {
   const lastScrollY = useRef(0);
   const currentTranslation = useRef(0);
 
+  const [activePopover, setActivePopover] = useState(null);
+  const hoverTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    const handleClosePopover = () => setActivePopover(null);
+    window.addEventListener('click', handleClosePopover);
+    return () => {
+      window.removeEventListener('click', handleClosePopover);
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
+  const handleEventMouseEnter = (e, ev) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setActivePopover({ ev, rect });
+    }, 2000);
+  };
+
+  const handleEventMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setActivePopover(null);
+    }, 3000);
+  };
+
+  const handleEventContainerClick = (e, ev) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActivePopover({ ev, rect });
+  };
+
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
@@ -1126,9 +1161,12 @@ const CalendarView = () => {
                   to={`/shows/${ev.tmdbId}?season=${ev.seasonNumber}&episode=${ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber}`}
                   className="actionable-text"
                   onClick={(e) => e.stopPropagation()}
-                  style={{ cursor: 'pointer', color: 'inherit', textDecoration: 'none' }}
+                  style={{ cursor: 'pointer', color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
+                  <span>{ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}</span>
+                  {(ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber) === 1 && (
+                    <span style={{ fontSize: '0.65rem', padding: '2px 4px', background: 'var(--accent)', color: '#fff', borderRadius: '4px', fontWeight: 'bold' }}>PREMIERE</span>
+                  )}
                 </Link>
                 {ev.localTimeStr && (
                   <>
@@ -1167,8 +1205,8 @@ const CalendarView = () => {
                     style={{
                       padding: '4px 6px',
                       fontSize: '0.8rem',
-                      background: subEv.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                      color: subEv.isCollected ? 'var(--success)' : 'var(--text-muted)'
+                      background: subEv.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isCollected ? '#60a5fa' : 'var(--text-muted)'
                     }}
                   >
                     {subEv.isCollected ? 'Collected' : 'Collect'}
@@ -1179,8 +1217,8 @@ const CalendarView = () => {
                     style={{
                       padding: '4px 6px',
                       fontSize: '0.8rem',
-                      background: subEv.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
-                      color: subEv.isWatched ? 'var(--accent)' : 'var(--text-muted)'
+                      background: subEv.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isWatched ? 'var(--success)' : 'var(--text-muted)'
                     }}
                   >
                     {subEv.isWatched ? 'Watched' : 'Watch'}
@@ -1198,8 +1236,8 @@ const CalendarView = () => {
             style={{
               padding: '6px 8px',
               fontSize: '0.9rem',
-              background: ev.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-              color: ev.isCollected ? 'var(--success)' : 'var(--text-muted)',
+              background: ev.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+              color: ev.isCollected ? '#60a5fa' : 'var(--text-muted)',
               flex: 1,
               justifyContent: 'center'
             }}
@@ -1212,8 +1250,8 @@ const CalendarView = () => {
             style={{
               padding: '6px 8px',
               fontSize: '0.9rem',
-              background: ev.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
-              color: ev.isWatched ? 'var(--accent)' : 'var(--text-muted)',
+              background: ev.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+              color: ev.isWatched ? 'var(--success)' : 'var(--text-muted)',
               flex: 1,
               justifyContent: 'center'
             }}
@@ -1364,20 +1402,22 @@ const CalendarView = () => {
                         return (
                           <div
                             key={ev.id}
-                            onClick={() => handleOpenDetails(ev)}
+                            onClick={(e) => handleEventContainerClick(e, ev)}
+                            onMouseEnter={(e) => handleEventMouseEnter(e, ev)}
+                            onMouseLeave={handleEventMouseLeave}
                             className="calendar-month-event"
                             style={{
                               padding: '4px 6px',
                               background: ev.type === 'tv'
-                                ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.15)')
+                                ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : (ev.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)'))
                                 : 'rgba(167, 139, 250, 0.15)',
                               border: ev.type === 'tv'
-                                ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(59,130,246,0.2)')
+                                ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : (ev.isCollected ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(255, 255, 255, 0.1)'))
                                 : '1px solid rgba(167,139,250,0.2)',
                               borderRadius: '4px',
                               fontSize: '0.75rem',
                               fontWeight: '500',
-                              color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : '#60a5fa') : '#c084fc',
+                              color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : (ev.isCollected ? '#60a5fa' : 'var(--text-main)')) : '#c084fc',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -1390,12 +1430,22 @@ const CalendarView = () => {
                               ? `${ev.localTimeStr ? `[${ev.localTimeStr}] ` : ''}${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`
                               : ev.title}
                           >
-                            {ev.type === 'tv' ? <Tv size={10} /> : <Film size={10} />}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {ev.type === 'tv' ? <Tv size={10} style={{ flexShrink: 0 }} /> : <Film size={10} style={{ flexShrink: 0 }} />}
+                            <span 
+                              style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                setActivePopover(null);
+                                handleOpenDetails(ev);
+                              }}
+                              className="actionable-text"
+                            >
                               {ev.type === 'tv' ? (
                                 <>
                                   {ev.localTimeStr && <span style={{ color: 'var(--text-muted)', marginRight: '4px', fontSize: '0.7rem' }}>[{ev.localTimeStr}]</span>}
                                   {ev.showTitle} ({ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`})
+                                  {(ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber) === 1 && ' ⭐'}
                                 </>
                               ) : ev.title}
                             </span>
@@ -1511,6 +1561,36 @@ const CalendarView = () => {
             setEvents(prev => prev.map(e => subIds.includes(e.id) ? { ...e, isWatched: newIsWatched } : e));
           }}
         />
+      )}
+
+      {/* Popover for Month View */}
+      {viewMode === 'month' && activePopover && typeof window !== 'undefined' && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={() => {
+            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+          }}
+          onMouseLeave={() => {
+            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+            hoverTimeoutRef.current = setTimeout(() => {
+              setActivePopover(null);
+            }, 3000);
+          }}
+          style={{
+            position: 'fixed',
+            top: (activePopover.rect.bottom + 200 > window.innerHeight) 
+              ? Math.max(10, activePopover.rect.top - 220) 
+              : activePopover.rect.bottom + 8,
+            left: Math.max(10, Math.min(activePopover.rect.left, window.innerWidth - 310)),
+            width: '300px',
+            zIndex: 9999,
+            boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+            borderRadius: '8px',
+            background: 'var(--bg-main)'
+          }}
+        >
+          {renderEventCard(activePopover.ev)}
+        </div>
       )}
       <style>{`
         .actionable-text {

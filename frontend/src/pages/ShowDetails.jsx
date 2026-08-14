@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit, EyeOff } from 'lucide-react';
+import { ArrowLeft, Tv, Star, Plus, Eye, Trash2, Calendar, ExternalLink, RefreshCw, X, History, Search, Edit, EyeOff, Check } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import MobileBottomSheet from '../components/MobileBottomSheet';
@@ -1486,9 +1486,9 @@ const ShowDetails = () => {
                               onClick={() => handleEpisodeToggle('collect', ep)}
                               className="btn btn-secondary"
                               style={{
-                                background: ep.isCollected ? 'rgba(16, 185, 129, 0.2)' : 'var(--overlay-subtle)',
-                                color: ep.isCollected ? 'var(--success)' : 'var(--text-muted)',
-                                border: ep.isCollected ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent'
+                                background: ep.isCollected ? 'rgba(59, 130, 246, 0.2)' : 'var(--overlay-subtle)',
+                                color: ep.isCollected ? '#60a5fa' : 'var(--text-muted)',
+                                border: ep.isCollected ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent'
                               }}
                               title={ep.isCollected ? "Remove collected" : "Add to collection"}
                             >
@@ -1500,13 +1500,13 @@ const ShowDetails = () => {
                               onClick={() => handleEpisodeToggle('watch', ep)}
                               className="btn btn-secondary"
                               style={{
-                                background: ep.isWatched ? 'rgba(59, 130, 246, 0.2)' : 'var(--overlay-subtle)',
-                                color: ep.isWatched ? 'var(--accent)' : 'var(--text-muted)',
-                                border: ep.isWatched ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent'
+                                background: ep.isWatched ? 'rgba(16, 185, 129, 0.2)' : 'var(--overlay-subtle)',
+                                color: ep.isWatched ? 'var(--success)' : 'var(--text-muted)',
+                                border: ep.isWatched ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent'
                               }}
                               title={ep.isWatched ? "Watched" : "Watch"}
                             >
-                              <Eye size={16} />
+                              {ep.isWatched ? <Check size={16} /> : <Eye size={16} />}
                               <span>{ep.isWatched ? 'Watched' : 'Watch'}</span>
                             </button>
 
