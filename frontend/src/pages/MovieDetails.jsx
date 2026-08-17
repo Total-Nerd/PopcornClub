@@ -299,26 +299,17 @@ const MovieDetails = () => {
             <MovieActionButtons 
               onWatchOptions={() => setIsWatchOptionsOpen(true)}
             />
-          </MovieHeader>
 
-          <div className="details-content-wrapper" style={{ marginTop: '-40px' }}>
-            <div className="details-layout">
-              <div className="details-left-col">
-                {/* Spacer to align with right col since poster is handled in header layout */}
-              </div>
-              <div className="details-right-col">
-                {/* Overview */}
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Overview</h3>
-                  <p style={{ color: 'var(--text-muted)', lineHeight: '1.7', fontSize: '1.05rem' }}>{movieDetails.overview || 'No overview available.'}</p>
-                </div>
-
-                <MediaCast cast={movieDetails.cast} />
-                <MovieTrailers />
-                <CommentSection mediaId={movieDetails.id} mediaType="movie" />
-              </div>
+            {/* Overview */}
+            <div style={{ marginTop: '24px' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Overview</h3>
+              <p style={{ color: 'var(--text-muted)', lineHeight: '1.7', fontSize: '1.05rem' }}>{movieDetails.overview || 'No overview available.'}</p>
             </div>
-          </div>
+
+            <MediaCast cast={movieDetails.cast} />
+            <MovieTrailers />
+            <CommentSection mediaId={movieDetails.id} mediaType="movie" />
+          </MovieHeader>
 
           {/* Danger Zone / Remove Button at the bottom */}
           {movieDetails.isCollected && user?.role === 'admin' && (
