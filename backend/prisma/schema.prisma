@@ -108,6 +108,7 @@ model WatchHistoryLog {
   userId      Int?
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchedWith String?  // JSON string array of co-viewer user IDs, e.g. "[12]"
+  sessions    Json?    @default("[]") // Array of {startOffset, endOffset, timestamp}
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Film, Tv, Check, Play, Users, Trash2 } from 'lucide-react';
 import LazyImage from '../../../components/LazyImage';
@@ -12,8 +12,19 @@ const HistoryLogItem = ({ log }) => {
 
   const isMovie = log.type === 'movie';
   const detailUrl = isMovie ? `/movies/${log.media.tmdbId}` : `/shows/${log.media.tmdbId}`;
-  const pct = log.duration > 0 ? Math.round((log.viewOffset / log.duration) * 100) : 0;
+  
+  // Progress calculations
+  const pct = log.duration > 0 ? Math.min(Math.round((log.viewOffset / log.duration) * 100), 100) : 0;
   const isSelected = selectedLogIds.includes(log.id);
+  const [showSessions, setShowSessions] = useState(false);
+  
+  // Use log.sessions if available, otherwise fallback to single segment
+  const sessions = (Array.isArray(log.sessions) && log.sessions.length > 0) 
+    ? log.sessions 
+    : [{ startOffset: 0, endOffset: log.viewOffset || 0, timestamp: log.watchedAt }];
+    
+  // Calculate total true watch time across all non-overlapping segments, or just simple sum if simple
+  const totalWatchTime = sessions.reduce((acc, s) => acc + Math.max(0, s.endOffset - s.startOffset), 0);
 
   const handleDelete = async () => {
     const confirmed = await showConfirm('Are you sure you want to delete this watch history entry?');
@@ -88,18 +99,58 @@ const HistoryLogItem = ({ log }) => {
         {formatDateTime(log.watchedAt)}
       </td>
       <td>
-        {log.isCompleted ? (
+        {log.isCompleted && sessions.length <= 1 ? (
           <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
             {formatDurationWithSeconds(log.duration)}
           </span>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '150px' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-              {formatDurationWithSeconds(log.viewOffset)} / {formatDurationWithSeconds(log.duration)} ({pct}%)
-            </span>
-            <div style={{ width: '100%', height: '6px', background: 'var(--overlay-medium)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '180px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                {formatDurationWithSeconds(totalWatchTime)} / {formatDurationWithSeconds(log.duration)} 
+                {log.duration > 0 && ` (${Math.round((totalWatchTime / log.duration) * 100)}%)`}
+              </span>
+              {sessions.length > 1 && (
+                <button 
+                  onClick={() => setShowSessions(!showSessions)}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}
+                >
+                  {showSessions ? 'Hide Sessions' : `${sessions.length} Sessions`}
+                </button>
+              )}
             </div>
+            <div style={{ width: '100%', height: '8px', background: 'var(--overlay-medium)', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
+              {sessions.map((s, idx) => {
+                const startPct = log.duration > 0 ? Math.max(0, Math.min(100, (s.startOffset / log.duration) * 100)) : 0;
+                const endPct = log.duration > 0 ? Math.max(0, Math.min(100, (s.endOffset / log.duration) * 100)) : 0;
+                const widthPct = Math.max(0, endPct - startPct);
+                return (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      position: 'absolute',
+                      left: `${startPct}%`,
+                      width: `${widthPct}%`, 
+                      height: '100%', 
+                      background: 'var(--accent)', 
+                      borderRadius: '4px',
+                      opacity: idx === sessions.length - 1 ? 1 : 0.7
+                    }} 
+                  />
+                );
+              })}
+            </div>
+            
+            {showSessions && sessions.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px', padding: '6px', background: 'var(--overlay-medium)', borderRadius: '6px' }}>
+                {sessions.map((s, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    <span>{new Date(s.timestamp).toLocaleDateString()}</span>
+                    <span>{formatDurationWithSeconds(s.endOffset - s.startOffset)} ({Math.round(((s.endOffset - s.startOffset) / log.duration) * 100)}%)</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </td>

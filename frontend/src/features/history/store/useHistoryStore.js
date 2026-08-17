@@ -66,7 +66,11 @@ export const useHistoryStore = create((set, get) => ({
 
   setFilter: (key, value) => {
     set({ [key]: value });
-    if (key !== 'isFilterOpen' && key !== 'showPosters') {
+    
+    // Update pageInput if page is changed
+    if (key === 'page') {
+      set({ pageInput: String(value) });
+    } else if (key !== 'isFilterOpen' && key !== 'showPosters') {
       set({ page: 1, pageInput: '1' });
     }
     
