@@ -1,45 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Film, Star, Plus, Eye, Trash2, Calendar, Clock, ExternalLink, RefreshCw, Check, EyeOff, X, History, Search, Edit } from 'lucide-react';
+import { ArrowLeft, Film, RefreshCw, Trash2, EyeOff } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
-import MobileBottomSheet from '../components/MobileBottomSheet';
 import ImageSelectorModal from '../components/ImageSelectorModal';
 import WatchOptionsModal from '../components/WatchOptionsModal';
-import RequestButton from '../components/RequestButton';
 import CommentSection from '../components/CommentSection';
-import ReactionPicker from '../components/ReactionPicker';
 import MediaCast from '../components/MediaCast';
 import { useMovieStore } from '../features/movie/store/useMovieStore';
 import MovieRawModal from '../features/movie/components/MovieRawModal';
+import MovieHeader from '../features/movie/components/MovieHeader';
+import MovieActionButtons from '../features/movie/components/MovieActionButtons';
+import MovieTrailers from '../features/movie/components/MovieTrailers';
+import MovieHideModal from '../features/movie/components/MovieHideModal';
 
 const MovieDetails = () => {
   const { tmdbId } = useParams();
   const navigate = useNavigate();
   const { showAlert, showConfirm } = useModal();
-  const { user } = React.useContext(AuthContext);
+  const { user } = useContext(AuthContext);
 
   const [showHideModal, setShowHideModal] = useState(false);
-  const [hideInCalendar, setHideInCalendar] = useState(true);
-  const [hideInLibrary, setHideInLibrary] = useState(true);
+  const [scrollY, setScrollY] = useState(0);
+  const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
+  const [imageSelectorType, setImageSelectorType] = useState('poster'); // 'poster' or 'backdrop'
+  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
 
   const {
     movieDetails,
     setMovieDetails,
     loadingDetails,
-    fetchMovieDetails
+    fetchMovieDetails,
+    fetchLists,
+    setShowRawModal,
+    correctingFile,
+    correctId,
+    correctTitle,
+    correctYear,
+    setCorrecting,
+    setModalError,
+    setCorrectMode,
+    setCorrectingFile,
+    fetchRawData
   } = useMovieStore();
-
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [lists, setLists] = useState([]);
-  const [listMemberships, setListMemberships] = useState({});
-  const [isListDropdownOpen, setIsListDropdownOpen] = useState(false);
-
-  const [scrollY, setScrollY] = useState(0);
-  const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
-  const [imageSelectorType, setImageSelectorType] = useState('poster'); // 'poster' or 'backdrop'
-  const [activeTrailerKey, setActiveTrailerKey] = useState(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -48,6 +52,16 @@ const MovieDetails = () => {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    fetchMovieDetails(tmdbId);
+  }, [tmdbId, fetchMovieDetails]);
+
+  useEffect(() => {
+    if (movieDetails) {
+      fetchLists(tmdbId);
+    }
+  }, [movieDetails, tmdbId, fetchLists]);
 
   const handleImageSelected = (newPath) => {
     setMovieDetails(prev => {
@@ -60,107 +74,23 @@ const MovieDetails = () => {
     });
   };
 
-  const handleHideMovie = async () => {
+  const handleForceRemove = async () => {
+    const confirmed = await showConfirm(`Are you sure you want to remove this movie and all its logs from your database?`);
+    if (!confirmed) {
+      return;
+    }
     try {
-      await api.post('/media/hide', {
-        tmdbId: parseInt(tmdbId),
-        type: 'movie',
-        title: movieDetails.title,
-        overview: movieDetails.overview,
-        releaseDate: movieDetails.release_date,
-        posterPath: movieDetails.poster_path,
-        hideInCalendar,
-        hideInLibrary
+      await api.post('/media/force-remove', {
+        tmdbId: parseInt(tmdbId, 10),
+        type: 'movie'
       });
-      setShowHideModal(false);
-      showAlert('Movie hidden successfully', 'success');
-      navigate('/');
+      showAlert('Movie removed successfully.', 'success');
+      navigate('/movies');
     } catch (err) {
-      console.error(err);
-      showAlert('Failed to hide movie', 'error');
+      console.error('Failed to remove movie:', err);
+      showAlert('Failed to remove movie: ' + (err.response?.data?.error || err.message), 'error');
     }
   };
-
-  const fetchLists = async () => {
-    try {
-      const [res, sharedRes] = await Promise.all([
-        api.get('/lists'),
-        api.get('/lists/shared-with-me').catch(() => ({ data: [] }))
-      ]);
-      
-      const ownLists = res.data;
-      const collaborativeSharedLists = (sharedRes.data || []).filter(l => l.allowOthersToAdd);
-      
-      // Combine them
-      const combinedLists = [...ownLists, ...collaborativeSharedLists];
-      
-      // Remove duplicates just in case
-      const uniqueListsMap = new Map();
-      combinedLists.forEach(l => uniqueListsMap.set(l.id, l));
-      const uniqueLists = Array.from(uniqueListsMap.values());
-
-      setLists(uniqueLists);
-
-      const memberships = {};
-      for (const list of uniqueLists) {
-        const itemInList = (list.items || []).find(item => item.media && item.media.tmdbId === parseInt(tmdbId, 10));
-        if (itemInList) {
-          memberships[list.id] = { listItemId: itemInList.id, mediaId: itemInList.media.id };
-        }
-      }
-      setListMemberships(memberships);
-    } catch (err) {
-      console.error('Failed to fetch lists:', err);
-    }
-  };
-
-  const isMovieInAnyList = () => {
-    return Object.keys(listMemberships).length > 0;
-  };
-
-  const handleToggleList = async (listId) => {
-    try {
-      const current = listMemberships[listId];
-      if (current) {
-        const mediaId = current.mediaId || movieDetails.localId || movieDetails.id;
-        await api.delete(`/lists/${listId}/items/${mediaId}`);
-        setListMemberships(prev => {
-          const updated = { ...prev };
-          delete updated[listId];
-          return updated;
-        });
-      } else {
-        const payload = {
-          tmdbId: parseInt(tmdbId, 10),
-          type: 'movie',
-          title: movieDetails.title,
-          overview: movieDetails.overview,
-          releaseDate: movieDetails.release_date,
-          posterPath: movieDetails.poster_path
-        };
-        const res = await api.post(`/lists/${listId}/items`, payload);
-
-        setListMemberships(prev => ({
-          ...prev,
-          [listId]: { listItemId: res.data.id, mediaId: res.data.mediaId }
-        }));
-      }
-    } catch (err) {
-      showAlert(`Failed to toggle list: ${err.response?.data?.error || err.message}`, 'error');
-    }
-  };
-
-  useEffect(() => {
-    const handleClose = () => setIsListDropdownOpen(false);
-    window.addEventListener('click', handleClose);
-    return () => window.removeEventListener('click', handleClose);
-  }, []);
-
-  useEffect(() => {
-    if (movieDetails) {
-      fetchLists();
-    }
-  }, [movieDetails, tmdbId]);
 
   const parseFilenameFromPath = (filePath) => {
     const filename = filePath.split(/[/\\]/).pop();
@@ -181,19 +111,6 @@ const MovieDetails = () => {
 
     return { title: cleanTitleStr, year };
   };
-
-  const {
-    setShowRawModal,
-    correctingFile,
-    correctId,
-    correctTitle,
-    correctYear,
-    setCorrecting,
-    setModalError,
-    setCorrectMode,
-    setCorrectingFile,
-    fetchRawData
-  } = useMovieStore();
 
   const submitCorrection = async (targetNewTmdbId = null, targetImdbId = null) => {
     setCorrecting(true);
@@ -243,27 +160,6 @@ const MovieDetails = () => {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isDropdownOpen) {
-        const container = event.target.closest('.info-dropdown-container');
-        if (!container) {
-          setIsDropdownOpen(false);
-        }
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [isDropdownOpen]);
-
-  useEffect(() => {
-    fetchMovieDetails(tmdbId);
-  }, [tmdbId]);
-
-  const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
-
   const handleWatchOptionsSelect = async ({ choice, watchedAt }) => {
     if (!movieDetails) return;
     try {
@@ -305,11 +201,6 @@ const MovieDetails = () => {
     }
   };
 
-  const handleToggleWatch = async () => {
-    if (!movieDetails) return;
-    setIsWatchOptionsOpen(true);
-  };
-
   const handleToggleCollection = async () => {
     if (!movieDetails) return;
     const isCurrentlyCollected = movieDetails.isCollected;
@@ -336,55 +227,18 @@ const MovieDetails = () => {
     }
   };
 
-  const handleForceRemove = async () => {
-    const confirmed = await showConfirm(`Are you sure you want to remove this movie and all its logs from your database?`);
-    if (!confirmed) {
-      return;
-    }
-    try {
-      let title = 'Unknown Movie';
-      try {
-        const rawRes = await api.get(`/media/raw/movie/${tmdbId}`);
-        if (rawRes.data?.media?.title) {
-          title = rawRes.data.media.title;
-        }
-      } catch (err) {
-        console.warn('Failed to fetch raw movie details for deletion title fallback:', err);
-      }
-
-      await api.post('/media/force-remove', {
-        tmdbId: parseInt(tmdbId, 10),
-        type: 'movie'
-      });
-      showAlert('Movie removed successfully.', 'success');
-      navigate('/movies');
-    } catch (err) {
-      console.error('Failed to remove movie:', err);
-      showAlert('Failed to remove movie: ' + (err.response?.data?.error || err.message), 'error');
-    }
-  };
-
-  const handleScanMedia = async () => {
-    try {
-      showAlert('Scanning folders for this movie...', 'info');
-      const res = await api.post(`/media/scan/movie/${tmdbId}`);
-      if (res.data.success) {
-        showAlert(res.data.message || 'Scan completed successfully.', 'success');
-        // Refresh movie details to display any new file path
-        const detailsRes = await api.get(`/media/movie/${tmdbId}`);
-        setMovieDetails(detailsRes.data);
-      }
-    } catch (err) {
-      console.error('Scan failed:', err);
-      showAlert(`Scan failed: ${err.response?.data?.error || err.message}`, 'error');
-    }
-  };
-
   if (loadingDetails) {
     return (
       <div style={{ display: 'flex', height: '60vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
         <RefreshCw className="spin" size={32} style={{ color: 'var(--accent)' }} />
         <span style={{ color: 'var(--text-muted)' }}>Loading Movie specifications...</span>
+        <style>{`
+          .spin { animation: spin 1s linear infinite; }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -431,405 +285,37 @@ const MovieDetails = () => {
         </div>
       ) : (
         <>
-          {/* Backdrop Area */}
-          <div className="details-backdrop-bg">
-            <div
-              className="details-backdrop-image"
-              style={{
-                backgroundImage: movieDetails.backdrop_path ? `url(https://image.tmdb.org/t/p/w1280${movieDetails.backdrop_path})` : 'none',
-                filter: `blur(${Math.min(10, scrollY / 30)}px)`,
-                transform: `scale(${1 + Math.min(10, scrollY / 30) / 100})`
-              }}
+          <MovieHeader
+            scrollY={scrollY}
+            onEditPoster={() => {
+              setImageSelectorType('poster');
+              setImageSelectorOpen(true);
+            }}
+            onEditBackdrop={() => {
+              setImageSelectorType('backdrop');
+              setImageSelectorOpen(true);
+            }}
+          >
+            <MovieActionButtons 
+              onWatchOptions={() => setIsWatchOptionsOpen(true)}
             />
-            <div
-              className="details-backdrop-overlay"
-              style={{
-                opacity: Math.min(0.8, scrollY / 250)
-              }}
-            />
-            <div className="details-backdrop-gradient" />
-          </div>
+          </MovieHeader>
 
-          <div className="details-banner-spacer">
-            <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-color)', backdropFilter: 'blur(8px)', background: 'var(--bg-card)' }}>
-              <ArrowLeft size={18} />
-              <span>Back</span>
-            </button>
-
-            <button
-              className="edit-backdrop-btn"
-              onClick={() => {
-                setImageSelectorType('backdrop');
-                setImageSelectorOpen(true);
-              }}
-            >
-              <Edit size={16} />
-              <span>Change Backdrop</span>
-            </button>
-          </div>
-
-          {/* Content Layout */}
-          <div className="details-content-wrapper">
+          <div className="details-content-wrapper" style={{ marginTop: '-40px' }}>
             <div className="details-layout">
-
-              {/* Left Column: Poster & Links */}
               <div className="details-left-col">
-                <div
-                  className="details-poster-container"
-                  onClick={() => {
-                    setImageSelectorType('poster');
-                    setImageSelectorOpen(true);
-                  }}
-                >
-                  <div className="details-poster-card">
-                    {movieDetails.poster_path ? (
-                      <img src={`https://image.tmdb.org/t/p/w500${movieDetails.poster_path}`} alt={movieDetails.title} style={{ width: '100%', height: 'auto', display: 'block' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '330px', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                        No Cover
-                      </div>
-                    )}
-                  </div>
-
-
-                  <div className="details-poster-edit-overlay">
-                    <Edit size={24} />
-                    <span>Change Poster</span>
-                  </div>
-                </div>
+                {/* Spacer to align with right col since poster is handled in header layout */}
               </div>
-
-              {/* Right Column: Metadata, Summary, Cast */}
               <div className="details-right-col">
-                <div>
-                  <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '8px', lineHeight: '1.2' }}>{movieDetails.title}</h1>
-                  {movieDetails.tagline && (
-                    <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '20px' }}>"{movieDetails.tagline}"</p>
-                  )}
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
-                      <Star size={18} fill="#fbbf24" />
-                      <span style={{ fontWeight: '600', fontSize: '1rem' }}>{movieDetails.vote_average?.toFixed(1) || '0.0'}</span>
-                    </div>
-
-                    {movieDetails.runtime && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                        <Clock size={16} />
-                        <span>{movieDetails.runtime} min</span>
-                      </div>
-                    )}
-
-                    {movieDetails.release_date && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                        <Calendar size={16} />
-                        <span>{new Date(movieDetails.release_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div style={{ marginBottom: '24px' }}>
-                    <ReactionPicker mediaId={movieDetails.id} mediaType="movie" />
-                  </div>
-
-                  {/* Genres */}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
-                    {movieDetails.genres?.map(g => (
-                      <span key={g.id} style={{ padding: '6px 14px', background: 'var(--overlay-subtle)', borderRadius: '16px', fontSize: '0.8rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontWeight: '500' }}>
-                        {g.name}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <button
-                      className="btn"
-                      style={{
-                        background: movieDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--accent)',
-                        color: movieDetails.isCollected ? '#60a5fa' : '#fff',
-                        border: movieDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : 'none',
-                        fontWeight: '600'
-                      }}
-                      onClick={handleToggleCollection}
-                    >
-                      <Plus size={18} style={{ transform: movieDetails.isCollected ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
-                      <span>{movieDetails.isCollected ? 'Collected' : 'Collect'}</span>
-                    </button>
-
-                    <button
-                      className="btn"
-                      style={{
-                        background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
-                        color: movieDetails.isWatched ? 'var(--success)' : '#fff',
-                        border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
-                        fontWeight: '600'
-                      }}
-                      onClick={handleToggleWatch}
-                    >
-                      {movieDetails.isWatched ? <Check size={18} /> : <Eye size={18} />}
-                      <span>{movieDetails.isWatched ? 'Watched' : 'Watch'}</span>
-                    </button>
-
-                    <div className="info-dropdown-container show-dropdown-container">
-                      <button
-                        className="btn btn-secondary"
-                        style={{
-                          fontWeight: '600',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          background: isMovieInAnyList() ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
-                          color: isMovieInAnyList() ? 'rgb(96, 165, 250)' : 'var(--text-main)',
-                          border: isMovieInAnyList() ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent'
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsListDropdownOpen(prev => !prev);
-                        }}
-                      >
-                        <Plus size={18} />
-                        <span>{isMovieInAnyList() ? 'Added to List' : 'Add to List'}</span>
-                      </button>
-                      {isListDropdownOpen && (
-                        <>
-                          <div className="info-dropdown-menu" onClick={e => e.stopPropagation()}>
-                            {lists.map(list => {
-                              const inList = listMemberships[list.id];
-                              return (
-                                <label key={list.id} className="info-dropdown-item" style={{ cursor: 'pointer' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={!!inList}
-                                    onChange={() => handleToggleList(list.id)}
-                                  />
-                                  {list.name}
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <MobileBottomSheet title="Add to List" onClose={() => setIsListDropdownOpen(false)}>
-                            {lists.map(list => {
-                              const inList = listMemberships[list.id];
-                              return (
-                                <label key={list.id} className="mobile-sheet-option" style={{ cursor: 'pointer' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={!!inList}
-                                    onChange={() => handleToggleList(list.id)}
-                                    style={{ transform: 'scale(1.2)' }}
-                                  />
-                                  {list.name}
-                                </label>
-                              );
-                            })}
-                          </MobileBottomSheet>
-                        </>
-                      )}
-                    </div>
-
-                    {movieDetails.imdb_id && (
-                      <a
-                        href={`https://www.imdb.com/title/${movieDetails.imdb_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn"
-                        style={{
-                          background: '#f5c518',
-                          color: '#000000',
-                          fontWeight: 'bold',
-                          display: 'inline-flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
-                      </a>
-                    )}
-                    <a
-                      href={`https://www.themoviedb.org/movie/${movieDetails.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn"
-                      style={{
-                        background: '#01b4e4',
-                        color: '#ffffff',
-                        fontWeight: 'bold',
-                        display: 'inline-flex',
-                        alignItems: 'center'
-                      }}
-                    >
-                      TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
-                    </a>
-
-                    {!movieDetails.isCollected && (
-                       <RequestButton 
-                         tmdbId={movieDetails.id} 
-                         type="movie" 
-                         title={movieDetails.title} 
-                       />
-                    )}
-
-                    <div className="info-dropdown-container">
-                      <button
-                        className="btn btn-secondary"
-                        style={{ display: 'inline-flex', alignItems: 'center', height: '100%' }}
-                        onClick={() => setIsDropdownOpen(prev => !prev)}
-                        title="More actions"
-                      >
-                        ...
-                      </button>
-                      {isDropdownOpen && (
-                        <>
-                          {/* Desktop Dropdown Menu */}
-                          <div className="info-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="info-dropdown-item"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                handleScanMedia();
-                              }}
-                            >
-                              <Search size={14} /> Scan for Media
-                            </button>
-                            <button
-                              className="info-dropdown-item"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                setShowRawModal(true);
-                                fetchRawData();
-                              }}
-                            >
-                              <RefreshCw size={14} /> View Local Data
-                            </button>
-                            <button
-                              className="info-dropdown-item"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                navigate(`/history?type=movie&tmdbId=${movieDetails.id}&title=${encodeURIComponent(movieDetails.title)}`);
-                              }}
-                            >
-                              <History size={14} /> View Watch History
-                            </button>
-                          </div>
-
-                          {/* Mobile Bottom Sheet Menu */}
-                          <MobileBottomSheet title="Movie Options" onClose={() => setIsDropdownOpen(false)}>
-                            <button
-                              className="mobile-sheet-option"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                handleScanMedia();
-                              }}
-                            >
-                              <Search size={16} /> Scan for Media
-                            </button>
-                            <button
-                              className="mobile-sheet-option"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                setShowRawModal(true);
-                                fetchRawData();
-                              }}
-                            >
-                              <RefreshCw size={16} /> View Local Data
-                            </button>
-                            <button
-                              className="mobile-sheet-option"
-                              onClick={() => {
-                                setIsDropdownOpen(false);
-                                navigate(`/history?type=movie&tmdbId=${movieDetails.id}&title=${encodeURIComponent(movieDetails.title)}`);
-                              }}
-                            >
-                              <History size={16} /> View Watch History
-                            </button>
-                          </MobileBottomSheet>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 {/* Overview */}
                 <div>
                   <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Overview</h3>
                   <p style={{ color: 'var(--text-muted)', lineHeight: '1.7', fontSize: '1.05rem' }}>{movieDetails.overview || 'No overview available.'}</p>
                 </div>
 
-                {/* Cast Section */}
                 <MediaCast cast={movieDetails.cast} />
-
-                {/* Trailers Section */}
-                {movieDetails.videos && movieDetails.videos.filter(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')).length > 0 && (
-                  <div style={{ marginTop: '24px' }}>
-                    <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Trailers & Clips</h3>
-                    <div className="details-cast-grid">
-                      {movieDetails.videos
-                        .filter(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))
-                        .map(video => (
-                          <div
-                            key={video.id}
-                            onClick={() => setActiveTrailerKey(video.key)}
-                            style={{
-                              background: 'var(--overlay-subtle)',
-                              borderRadius: '12px',
-                              overflow: 'hidden',
-                              border: '1px solid var(--border-color)',
-                              cursor: 'pointer',
-                              position: 'relative',
-                              flex: '0 0 200px',
-                              minWidth: '200px'
-                            }}
-                          >
-                            <img
-                              src={`https://img.youtube.com/vi/${video.key}/hqdefault.jpg`}
-                              alt={video.name}
-                              style={{ width: '100%', height: '110px', objectFit: 'cover', display: 'block' }}
-                            />
-                            {/* Play button overlay */}
-                            <div style={{
-                              position: 'absolute',
-                              top: '0',
-                              left: '0',
-                              right: '0',
-                              height: '110px',
-                              background: 'rgba(0,0,0,0.3)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justify: 'center',
-                              transition: 'background 0.2s'
-                            }} className="play-overlay">
-                              <div style={{
-                                width: '36px',
-                                height: '36px',
-                                borderRadius: '50%',
-                                background: 'var(--accent)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                              }}>
-                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                                  <path d="M8 5v14l11-7z" />
-                                </svg>
-                              </div>
-                            </div>
-                            <div style={{ padding: '8px' }}>
-                              <div style={{ fontSize: '0.75rem', fontWeight: '600', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3' }} title={video.name}>
-                                {video.name}
-                              </div>
-                              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                {video.type}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
+                <MovieTrailers />
                 <CommentSection mediaId={movieDetails.id} mediaType="movie" />
-
               </div>
             </div>
           </div>
@@ -873,81 +359,17 @@ const MovieDetails = () => {
         </>
       )}
 
-      {/* Local Data Modal */}
+      {/* Modals */}
       <MovieRawModal 
         tmdbId={tmdbId} 
         parseFilenameFromPath={parseFilenameFromPath} 
         submitCorrection={submitCorrection} 
       />
 
-      <style>{`
-        .hover-bg:hover {
-          background: var(--overlay-medium) !important;
-          border-color: var(--accent) !important;
-        }
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      {/* Hide Modal */}
-      {showHideModal && (
-        <div className="custom-modal-backdrop" onClick={() => setShowHideModal(false)}>
-          <div className="custom-modal-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div className="custom-modal-header">
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><EyeOff size={20} /> Hide Movie</h3>
-              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => setShowHideModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="custom-modal-body" style={{ padding: '24px' }}>
-              <p style={{ marginTop: 0, marginBottom: '24px', color: 'var(--text-muted)' }}>
-                Where would you like to hide <strong>{movieDetails?.title}</strong>? You can unhide it later from your User Settings.
-              </p>
-              
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--overlay)', borderRadius: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={hideInLibrary} 
-                  onChange={(e) => setHideInLibrary(e.target.checked)} 
-                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
-                />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: '500' }}>Hide in Media Library</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Remove from movies view</span>
-                </div>
-              </label>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--overlay)', borderRadius: '8px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={hideInCalendar} 
-                  onChange={(e) => setHideInCalendar(e.target.checked)} 
-                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
-                />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: '500' }}>Hide in Calendar</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Remove from calendar view</span>
-                </div>
-              </label>
-            </div>
-            <div className="custom-modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowHideModal(false)}>Cancel</button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleHideMovie}
-                disabled={!hideInLibrary && !hideInCalendar}
-              >
-                Hide Movie
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MovieHideModal 
+        isOpen={showHideModal}
+        onClose={() => setShowHideModal(false)}
+      />
 
       {movieDetails && (
         <ImageSelectorModal
@@ -959,23 +381,6 @@ const MovieDetails = () => {
           currentPath={imageSelectorType === 'poster' ? movieDetails.poster_path : movieDetails.backdrop_path}
           onSelect={handleImageSelected}
         />
-      )}
-
-      {activeTrailerKey && (
-        <div className="custom-modal-backdrop" onClick={() => setActiveTrailerKey(null)}>
-          <div className="custom-modal-content" style={{ maxWidth: '800px', width: '95vw', padding: '0', background: '#000', aspectRatio: '16/9', overflow: 'hidden', border: '1px solid var(--border-color)', borderRadius: '12px' }} onClick={e => e.stopPropagation()}>
-            <iframe
-              width="100%"
-              height="100%"
-              src={`https://www.youtube.com/embed/${activeTrailerKey}?autoplay=1`}
-              title="YouTube video player"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
-            ></iframe>
-          </div>
-        </div>
       )}
 
       {movieDetails && (

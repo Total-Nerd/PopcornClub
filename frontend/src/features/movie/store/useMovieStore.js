@@ -83,5 +83,77 @@ export const useMovieStore = create((set, get) => ({
     } finally {
       set({ searching: false });
     }
+  },
+
+  // Additional UI State
+  activeTrailerKey: null,
+  setActiveTrailerKey: (key) => set({ activeTrailerKey: key }),
+
+  lists: [],
+  listMemberships: {},
+  setLists: (lists) => set({ lists }),
+  setListMemberships: (memberships) => set({ listMemberships: memberships }),
+
+  fetchLists: async (tmdbId) => {
+    try {
+      const [res, sharedRes] = await Promise.all([
+        api.get('/lists'),
+        api.get('/lists/shared-with-me').catch(() => ({ data: [] }))
+      ]);
+      
+      const ownLists = res.data;
+      const collaborativeSharedLists = (sharedRes.data || []).filter(l => l.allowOthersToAdd);
+      
+      const combinedLists = [...ownLists, ...collaborativeSharedLists];
+      const uniqueListsMap = new Map();
+      combinedLists.forEach(l => uniqueListsMap.set(l.id, l));
+      const uniqueLists = Array.from(uniqueListsMap.values());
+
+      const memberships = {};
+      for (const list of uniqueLists) {
+        const itemInList = (list.items || []).find(item => item.media && item.media.tmdbId === parseInt(tmdbId, 10));
+        if (itemInList) {
+          memberships[list.id] = { listItemId: itemInList.id, mediaId: itemInList.media.id };
+        }
+      }
+      set({ lists: uniqueLists, listMemberships: memberships });
+    } catch (err) {
+      console.error('Failed to fetch lists:', err);
+    }
+  },
+
+  handleToggleList: async (listId, tmdbId, showAlert) => {
+    const state = get();
+    const current = state.listMemberships[listId];
+    try {
+      if (current) {
+        const mediaId = current.mediaId || state.movieDetails?.localId || state.movieDetails?.id;
+        await api.delete(`/lists/${listId}/items/${mediaId}`);
+        set(prev => {
+          const updated = { ...prev.listMemberships };
+          delete updated[listId];
+          return { listMemberships: updated };
+        });
+      } else {
+        const payload = {
+          tmdbId: parseInt(tmdbId, 10),
+          type: 'movie',
+          title: state.movieDetails?.title,
+          overview: state.movieDetails?.overview,
+          releaseDate: state.movieDetails?.release_date,
+          posterPath: state.movieDetails?.poster_path
+        };
+        const res = await api.post(`/lists/${listId}/items`, payload);
+
+        set(prev => ({
+          listMemberships: {
+            ...prev.listMemberships,
+            [listId]: { listItemId: res.data.id, mediaId: res.data.mediaId }
+          }
+        }));
+      }
+    } catch (err) {
+      if (showAlert) showAlert(`Failed to toggle list: ${err.response?.data?.error || err.message}`, 'error');
+    }
   }
 }));
