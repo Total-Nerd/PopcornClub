@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
 import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, addDays, subDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers, Sliders, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Tv, Film, Eye, EyeOff, Plus, X, Star, WifiOff, Layers, Sliders, Check, Copy } from 'lucide-react';
 import { getEventsFromIndexedDB, upsertEventsToIndexedDB } from '../utils/pwaHelper';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { useModal } from '../context/ModalContext';
+import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 
 const pad = (num) => String(num).padStart(2, '0');
@@ -79,7 +80,7 @@ const sortEvents = (eventList) => {
   });
 };
 
-const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails, onToggleStackExpand, expandedStacks }) => {
+const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails, onToggleStackExpand, expandedStacks, isAdmin, showCopyButton, onCopyText, copiedId }) => {
   const navigate = useNavigate();
   const [translateX, setTranslateX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
@@ -353,6 +354,30 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
               >
                 {title}
               </Link>
+              {ev.type === 'movie' && isAdmin && showCopyButton && (
+                <button
+                  type="button"
+                  onClick={(e) => onCopyText(e, ev.title, `swipe-movie-${ev.id}`)}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                  className="calendar-copy-btn"
+                  title={`Copy "${ev.title}"`}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: copiedId === `swipe-movie-${ev.id}` ? 'var(--success)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    flexShrink: 0
+                  }}
+                >
+                  {copiedId === `swipe-movie-${ev.id}` ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
+                </button>
+              )}
               {ev.isCollected && (
                 <span className="collected-badge-pill">
                   Collected
@@ -369,6 +394,33 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
                 >
                   {ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}
                 </Link>
+                {isAdmin && showCopyButton && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const text = `${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`;
+                      onCopyText(e, text, `swipe-tv-${ev.id}`);
+                    }}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => e.stopPropagation()}
+                    className="calendar-copy-btn"
+                    title={`Copy "${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}"`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: copiedId === `swipe-tv-${ev.id}` ? 'var(--success)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      flexShrink: 0
+                    }}
+                  >
+                    {copiedId === `swipe-tv-${ev.id}` ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
+                  </button>
+                )}
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -391,14 +443,43 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <Link 
-                  to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
-                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
-                  onClick={(e) => e.stopPropagation()}
-                  className="actionable-text"
-                >
-                  S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Link 
+                    to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
+                    style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
+                    onClick={(e) => e.stopPropagation()}
+                    className="actionable-text"
+                  >
+                    S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
+                  </Link>
+                  {isAdmin && showCopyButton && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const text = `${subEv.showTitle || ev.showTitle} S${pad(subEv.seasonNumber)}E${pad(subEv.episodeNumber)}`;
+                        onCopyText(e, text, `swipe-sub-${subEv.id}`);
+                      }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      className="calendar-copy-btn"
+                      title={`Copy "${subEv.showTitle || ev.showTitle} S${pad(subEv.seasonNumber)}E${pad(subEv.episodeNumber)}"`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: copiedId === `swipe-sub-${subEv.id}` ? 'var(--success)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        flexShrink: 0
+                      }}
+                    >
+                      {copiedId === `swipe-sub-${subEv.id}` ? <Check size={12} strokeWidth={2.5} /> : <Copy size={12} />}
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={() => onToggleCollect('collect', subEv)}
@@ -435,7 +516,11 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
 };
 
 const CalendarView = () => {
+  const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === 'admin';
   const { showAlert } = useModal();
+  const [copiedId, setCopiedId] = useState(null);
+  const [showCopyButton, setShowCopyButton] = useState(() => localStorage.getItem('calendar_show_copy_button') !== 'false');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('calendar_view_mode') || 'week'); // 'month' or 'week'
   const [events, setEvents] = useState([]);
@@ -455,6 +540,48 @@ const CalendarView = () => {
 
   const [activePopover, setActivePopover] = useState(null);
   const hoverTimeoutRef = useRef(null);
+
+  const copyToClipboard = async (text) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Navigator clipboard failed, attempting fallback:', err);
+    }
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      textArea.remove();
+      return successful;
+    } catch (fallbackErr) {
+      console.error('Fallback clipboard copy failed:', fallbackErr);
+      return false;
+    }
+  };
+
+  const handleCopyText = (e, text, id) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    copyToClipboard(text);
+    showAlert(`Copied "${text}" to clipboard`, 'success');
+    if (id) {
+      setCopiedId(id);
+      setTimeout(() => {
+        setCopiedId(prev => (prev === id ? null : prev));
+      }, 2000);
+    }
+  };
 
   useEffect(() => {
     const handleClosePopover = () => setActivePopover(null);
@@ -620,6 +747,26 @@ const CalendarView = () => {
           </div>
         </div>
 
+        {isAdmin && (
+          <div>
+            <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Admin Options</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label className="custom-checkbox-container" onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="custom-checkbox-input"
+                  checked={showCopyButton}
+                  onChange={() => setShowCopyButton(prev => !prev)}
+                />
+                <span className="custom-checkbox-box">
+                  <Check className="custom-checkbox-icon" size={12} strokeWidth={3} />
+                </span>
+                <span className="custom-checkbox-label">Show Copy Button</span>
+              </label>
+            </div>
+          </div>
+        )}
+
         {isMobile && (
           <div>
             <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Mobile Actions</div>
@@ -724,6 +871,10 @@ const CalendarView = () => {
   useEffect(() => {
     localStorage.setItem('calendar_mobile_swipe_mode', mobileSwipeMode);
   }, [mobileSwipeMode]);
+
+  useEffect(() => {
+    localStorage.setItem('calendar_show_copy_button', showCopyButton);
+  }, [showCopyButton]);
 
   // Auto-scroll to today's date in mobile view
   useEffect(() => {
@@ -1054,6 +1205,10 @@ const CalendarView = () => {
           onOpenDetails={handleOpenDetails}
           onToggleStackExpand={toggleStackExpand}
           expandedStacks={expandedStacks}
+          isAdmin={isAdmin}
+          showCopyButton={showCopyButton}
+          onCopyText={handleCopyText}
+          copiedId={copiedId}
         />
       );
     }
@@ -1147,14 +1302,38 @@ const CalendarView = () => {
             </Link>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingRight: ev.isStacked ? '30px' : '0px' }}>
-            <Link 
-              to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
-              style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', color: 'inherit', textDecoration: 'none', display: 'block' }}
-              className="actionable-text"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {title}
-            </Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <Link 
+                to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
+                style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%', cursor: 'pointer', color: 'inherit', textDecoration: 'none' }}
+                className="actionable-text"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {title}
+              </Link>
+              {ev.type === 'movie' && isAdmin && showCopyButton && (
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyText(e, ev.title, `card-movie-${ev.id}`)}
+                  className="calendar-copy-btn"
+                  title={`Copy "${ev.title}"`}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: copiedId === `card-movie-${ev.id}` ? 'var(--success)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    flexShrink: 0
+                  }}
+                >
+                  {copiedId === `card-movie-${ev.id}` ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
+                </button>
+              )}
+            </div>
             {ev.type === 'tv' ? (
               <div style={{ color: 'var(--accent)', fontWeight: '500', fontSize: '0.95rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <Link
@@ -1168,6 +1347,31 @@ const CalendarView = () => {
                     <span style={{ fontSize: '0.65rem', padding: '2px 4px', background: 'var(--accent)', color: '#fff', borderRadius: '4px', fontWeight: 'bold' }}>PREMIERE</span>
                   )}
                 </Link>
+                {isAdmin && showCopyButton && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const text = `${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`;
+                      handleCopyText(e, text, `card-tv-${ev.id}`);
+                    }}
+                    className="calendar-copy-btn"
+                    title={`Copy "${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}"`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: copiedId === `card-tv-${ev.id}` ? 'var(--success)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      flexShrink: 0
+                    }}
+                  >
+                    {copiedId === `card-tv-${ev.id}` ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
+                  </button>
+                )}
                 {ev.localTimeStr && (
                   <>
                     <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -1190,14 +1394,41 @@ const CalendarView = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
-                <Link 
-                  to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
-                  style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
-                  onClick={(e) => e.stopPropagation()}
-                  className="actionable-text"
-                >
-                  S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Link 
+                    to={`/shows/${subEv.tmdbId}?season=${subEv.seasonNumber}&episode=${subEv.episodeNumber}`}
+                    style={{ fontSize: '0.75rem', fontWeight: '500', color: 'var(--text-main)', cursor: 'pointer', textDecoration: 'none' }} 
+                    onClick={(e) => e.stopPropagation()}
+                    className="actionable-text"
+                  >
+                    S{pad(subEv.seasonNumber)}E{pad(subEv.episodeNumber)}
+                  </Link>
+                  {isAdmin && showCopyButton && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const text = `${subEv.showTitle || ev.showTitle} S${pad(subEv.seasonNumber)}E${pad(subEv.episodeNumber)}`;
+                        handleCopyText(e, text, `card-sub-${subEv.id}`);
+                      }}
+                      className="calendar-copy-btn"
+                      title={`Copy "${subEv.showTitle || ev.showTitle} S${pad(subEv.seasonNumber)}E${pad(subEv.episodeNumber)}"`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: copiedId === `card-sub-${subEv.id}` ? 'var(--success)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2px',
+                        borderRadius: '4px',
+                        flexShrink: 0
+                      }}
+                    >
+                      {copiedId === `card-sub-${subEv.id}` ? <Check size={12} strokeWidth={2.5} /> : <Copy size={12} />}
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={() => handleToggleCollect('collect', subEv)}
@@ -1449,6 +1680,38 @@ const CalendarView = () => {
                                 </>
                               ) : ev.title}
                             </span>
+                            {isAdmin && showCopyButton && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                  const text = ev.type === 'tv'
+                                    ? `${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}`
+                                    : ev.title;
+                                  handleCopyText(e, text, `month-${ev.id}`);
+                                }}
+                                className="calendar-copy-btn month-copy-btn"
+                                title={ev.type === 'tv'
+                                  ? `Copy "${ev.showTitle} ${ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`}"`
+                                  : `Copy "${ev.title}"`}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: copiedId === `month-${ev.id}` ? 'var(--success)' : 'inherit',
+                                  opacity: 0.7,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '0 2px',
+                                  marginLeft: 'auto',
+                                  flexShrink: 0
+                                }}
+                              >
+                                {copiedId === `month-${ev.id}` ? <Check size={10} strokeWidth={2.5} /> : <Copy size={10} />}
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -1607,6 +1870,8 @@ const CalendarView = () => {
         }
         .actionable-poster:hover {
           filter: brightness(1.1) !important;
+        }
+        .actionable-poster:hover img {
           transform: scale(1.02);
         }
         .calendar-month-event {
@@ -1616,6 +1881,22 @@ const CalendarView = () => {
         .calendar-month-event:hover {
           text-decoration: underline !important;
           filter: brightness(1.2) !important;
+        }
+        .calendar-copy-btn {
+          opacity: 0.75;
+          transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+        }
+        .calendar-copy-btn:hover {
+          opacity: 1 !important;
+          color: var(--text-main) !important;
+          background: rgba(255, 255, 255, 0.08) !important;
+          transform: scale(1.1);
+        }
+        .calendar-copy-btn:active {
+          transform: scale(0.95);
+        }
+        .month-copy-btn:hover {
+          background: rgba(255, 255, 255, 0.15) !important;
         }
       `}</style>
     </div>
