@@ -10,6 +10,9 @@ import WatchOptionsModal from '../components/WatchOptionsModal';
 import RequestButton from '../components/RequestButton';
 import CommentSection from '../components/CommentSection';
 import ReactionPicker from '../components/ReactionPicker';
+import MediaCast from '../components/MediaCast';
+import { useMovieStore } from '../features/movie/store/useMovieStore';
+import MovieRawModal from '../features/movie/components/MovieRawModal';
 
 const MovieDetails = () => {
   const { tmdbId } = useParams();
@@ -21,22 +24,13 @@ const MovieDetails = () => {
   const [hideInCalendar, setHideInCalendar] = useState(true);
   const [hideInLibrary, setHideInLibrary] = useState(true);
 
-  const [movieDetails, setMovieDetails] = useState(null);
-  const [loadingDetails, setLoadingDetails] = useState(true);
+  const {
+    movieDetails,
+    setMovieDetails,
+    loadingDetails,
+    fetchMovieDetails
+  } = useMovieStore();
 
-  const [showRawModal, setShowRawModal] = useState(false);
-  const [activeTrailerKey, setActiveTrailerKey] = useState(null);
-  const [rawData, setRawData] = useState(null);
-  const [loadingRaw, setLoadingRaw] = useState(false);
-  const [correctMode, setCorrectMode] = useState(false);
-  const [correctingFile, setCorrectingFile] = useState(null);
-  const [correctTitle, setCorrectTitle] = useState('');
-  const [correctYear, setCorrectYear] = useState('');
-  const [correctId, setCorrectId] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
-  const [modalError, setModalError] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lists, setLists] = useState([]);
   const [listMemberships, setListMemberships] = useState({});
@@ -45,6 +39,7 @@ const MovieDetails = () => {
   const [scrollY, setScrollY] = useState(0);
   const [imageSelectorOpen, setImageSelectorOpen] = useState(false);
   const [imageSelectorType, setImageSelectorType] = useState('poster'); // 'poster' or 'backdrop'
+  const [activeTrailerKey, setActiveTrailerKey] = useState(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -187,39 +182,18 @@ const MovieDetails = () => {
     return { title: cleanTitleStr, year };
   };
 
-  const fetchRawData = async () => {
-    setLoadingRaw(true);
-    setModalError('');
-    try {
-      const res = await api.get(`/media/raw/movie/${movieDetails.id}`);
-      setRawData(res.data);
-    } catch (err) {
-      setModalError(err.response?.data?.error || 'Failed to fetch raw media data.');
-    } finally {
-      setLoadingRaw(false);
-    }
-  };
-
-  const handleSearchCorrection = async () => {
-    if (!correctTitle) return;
-    setSearching(true);
-    setModalError('');
-    try {
-      const res = await api.get(`/media/search?query=${encodeURIComponent(correctTitle)}`);
-      let results = res.data.filter(item => item.media_type === 'movie');
-      if (correctYear) {
-        results = results.filter(item => {
-          const itemYear = (item.release_date || '').substring(0, 4);
-          return itemYear === correctYear.trim();
-        });
-      }
-      setSearchResults(results);
-    } catch (err) {
-      setModalError(err.response?.data?.error || 'Search failed.');
-    } finally {
-      setSearching(false);
-    }
-  };
+  const {
+    setShowRawModal,
+    correctingFile,
+    correctId,
+    correctTitle,
+    correctYear,
+    setCorrecting,
+    setModalError,
+    setCorrectMode,
+    setCorrectingFile,
+    fetchRawData
+  } = useMovieStore();
 
   const submitCorrection = async (targetNewTmdbId = null, targetImdbId = null) => {
     setCorrecting(true);
@@ -285,19 +259,7 @@ const MovieDetails = () => {
   }, [isDropdownOpen]);
 
   useEffect(() => {
-    const fetchMovieDetails = async () => {
-      setLoadingDetails(true);
-      try {
-        const res = await api.get(`/media/movie/${tmdbId}`);
-        setMovieDetails(res.data);
-      } catch (err) {
-        console.error('Failed to fetch movie details:', err);
-      } finally {
-        setLoadingDetails(false);
-      }
-    };
-
-    fetchMovieDetails();
+    fetchMovieDetails(tmdbId);
   }, [tmdbId]);
 
   const [isWatchOptionsOpen, setIsWatchOptionsOpen] = useState(false);
@@ -794,41 +756,7 @@ const MovieDetails = () => {
                 </div>
 
                 {/* Cast Section */}
-                {movieDetails.cast && movieDetails.cast.length > 0 && (
-                  <div>
-                    <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', fontWeight: '600' }}>Key Cast</h3>
-                    <div className="details-cast-grid">
-                      {movieDetails.cast.map(actor => (
-                        <Link
-                          key={actor.id}
-                          to={`/person/${actor.id}`}
-                          style={{
-                            background: 'var(--overlay-subtle)',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            border: '1px solid var(--border-color)',
-                            textAlign: 'center',
-                            display: 'block',
-                            textDecoration: 'none',
-                            color: 'inherit',
-                            transition: 'transform 0.2s'
-                          }}
-                          className="hover-scale"
-                        >
-                          {actor.profile_path ? (
-                            <img src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} alt={actor.name} style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ width: '100%', height: '120px', background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>No Profile</div>
-                          )}
-                          <div style={{ padding: '8px' }}>
-                            <div style={{ fontSize: '0.8rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.name}>{actor.name}</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={actor.character}>{actor.character}</div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <MediaCast cast={movieDetails.cast} />
 
                 {/* Trailers Section */}
                 {movieDetails.videos && movieDetails.videos.filter(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')).length > 0 && (
@@ -946,226 +874,11 @@ const MovieDetails = () => {
       )}
 
       {/* Local Data Modal */}
-      {showRawModal && (
-        <div className="custom-modal-backdrop" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-          <div className="custom-modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="custom-modal-header">
-              <h3 style={{ margin: 0, fontWeight: '700' }}>
-                {correctMode ? 'Correct Match' : 'Movie Local Data & Correction'}
-              </h3>
-              <button className="btn" style={{ padding: '4px', background: 'transparent' }} onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="custom-modal-body">
-              {loadingRaw ? (
-                <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
-                  <RefreshCw className="spin" size={24} style={{ color: 'var(--accent)' }} />
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fetching database records...</span>
-                </div>
-              ) : modalError && !correctMode && !searching ? (
-                <div style={{ color: 'var(--danger)', padding: '12px', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
-                  {modalError}
-                </div>
-              ) : (
-                <>
-                  {!correctMode ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Local Database Media Record</h4>
-                        {rawData?.media ? (
-                          <pre className="raw-json-box">
-                            {JSON.stringify(rawData.media, null, 2)}
-                          </pre>
-                        ) : (
-                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No local media record found.</div>
-                        )}
-                      </div>
-
-                      <div>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>Associated Local File Paths</h4>
-                        {rawData?.files && rawData.files.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {rawData.files.map(f => (
-                              <div key={f.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--overlay-subtle)' }}>
-                                <code style={{ color: 'var(--text-main)', wordBreak: 'break-all', flex: 1, fontSize: '0.85rem' }}>{f.path}</code>
-                                <button
-                                  onClick={() => {
-                                    setCorrectingFile(f);
-                                    const parsed = parseFilenameFromPath(f.path);
-                                    setCorrectTitle(parsed.title);
-                                    const movieYear = movieDetails?.release_date ? movieDetails.release_date.substring(0, 4) : '';
-                                    setCorrectYear(parsed.year && movieYear && parsed.year !== movieYear ? '' : parsed.year);
-                                    setCorrectId('');
-                                    setSearchResults([]);
-                                    setModalError('');
-                                    setCorrectMode(true);
-                                  }}
-                                  className="btn btn-secondary"
-                                  style={{ padding: '4px 8px', fontSize: '1rem', flexShrink: 0 }}
-                                >
-                                  Re-match Path
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'var(--overlay-subtle)', borderRadius: '6px' }}>
-                            No local files detected for this movie in the database.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {correctingFile && (
-                        <div style={{
-                          background: 'var(--overlay-subtle)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '6px',
-                          padding: '10px 14px',
-                          fontSize: '0.85rem'
-                        }}>
-                          <div style={{ fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Correcting File Path:</div>
-                          <code style={{ color: 'var(--text-main)', wordBreak: 'break-all' }}>{correctingFile.path}</code>
-                        </div>
-                      )}
-
-                      {!correctingFile && (
-                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          Search TMDB for the correct movie, or enter a target TMDB ID or IMDb ID (ttXXXXXXX) directly below.
-                        </p>
-                      )}
-
-                      {modalError && (
-                        <div style={{ color: 'var(--danger)', padding: '10px 14px', background: 'rgba(239, 68, 68, 0.12)', borderRadius: '8px', fontSize: '0.88rem' }}>
-                          {modalError}
-                        </div>
-                      )}
-
-                      {/* Search fields */}
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <input
-                          type="text"
-                          placeholder="Enter TMDB Search Title..."
-                          value={correctTitle}
-                          onChange={e => setCorrectTitle(e.target.value)}
-                          className="input-field"
-                          style={{ flex: 2, minWidth: '200px', padding: '8px 12px', fontSize: '0.9rem' }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Year (optional)"
-                          value={correctYear}
-                          onChange={e => setCorrectYear(e.target.value)}
-                          className="input-field"
-                          style={{ flex: 1, minWidth: '100px', padding: '8px 12px', fontSize: '0.9rem' }}
-                        />
-                        <button
-                          onClick={handleSearchCorrection}
-                          disabled={searching || correcting}
-                          className="btn btn-primary"
-                          style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
-                        >
-                          {searching ? <RefreshCw className="spin" size={16} /> : <Search size={16} />}
-                          <span>Search</span>
-                        </button>
-                      </div>
-
-                      {/* Search Results */}
-                      {searchResults.length > 0 && (
-                        <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px' }}>
-                          {searchResults.map((result) => (
-                            <div
-                              key={result.id}
-                              onClick={() => submitCorrection(result.id)}
-                              style={{ display: 'flex', gap: '12px', padding: '8px', borderRadius: '6px', background: 'var(--overlay-subtle)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
-                              className="hover-bg"
-                            >
-                              <div style={{ width: '40px', height: '60px', borderRadius: '4px', overflow: 'hidden', background: 'var(--bg-input)', flexShrink: 0 }}>
-                                {result.poster_path && (
-                                  <img
-                                    src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                                    alt={result.title || result.name}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                )}
-                              </div>
-                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                  {result.title || result.name}
-                                </div>
-                                <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                  {(result.release_date || result.first_air_date || '').substring(0, 4)}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Manual ID Input */}
-                      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>Or enter manual TMDB ID or IMDb ID (tt...)</h4>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <input
-                            type="text"
-                            placeholder="e.g. 27205 or tt1375666"
-                            value={correctId}
-                            onChange={e => setCorrectId(e.target.value)}
-                            className="input-field"
-                            style={{ flex: 1, padding: '8px 12px', fontSize: '0.9rem' }}
-                          />
-                          <button
-                            onClick={() => submitCorrection()}
-                            disabled={correcting || (!correctId.trim() && !correctTitle.trim())}
-                            className="btn btn-secondary"
-                            style={{ padding: '8px 16px' }}
-                          >
-                            {correcting ? <RefreshCw className="spin" size={16} /> : 'Apply'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="custom-modal-footer">
-              {!correctMode ? (
-                <>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      setCorrectingFile(null);
-                      setCorrectTitle(movieDetails?.title || '');
-                      const movieYear = movieDetails?.release_date ? movieDetails.release_date.substring(0, 4) : '';
-                      setCorrectYear(movieYear);
-                      setCorrectId('');
-                      setSearchResults([]);
-                      setModalError('');
-                      setCorrectMode(true);
-                    }}
-                  >
-                    Correct Match
-                  </button>
-                  <button className="btn btn-primary" onClick={() => { setShowRawModal(false); setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                    Close
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="btn btn-secondary" onClick={() => { setCorrectMode(false); setCorrectingFile(null); setModalError(''); setSearchResults([]); }}>
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <MovieRawModal 
+        tmdbId={tmdbId} 
+        parseFilenameFromPath={parseFilenameFromPath} 
+        submitCorrection={submitCorrection} 
+      />
 
       <style>{`
         .hover-bg:hover {

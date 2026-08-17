@@ -37,8 +37,15 @@ const PlexSessionWidget = () => {
     let socket = null;
     let reconnectTimeout = null;
     let isMounted = true;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
 
     const connect = () => {
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn(`[WebSocket] Stopped reconnecting after ${MAX_RECONNECT_ATTEMPTS} attempts.`);
+        return;
+      }
+
       const token = localStorage.getItem('token');
       if (!token) return;
 
@@ -52,6 +59,7 @@ const PlexSessionWidget = () => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'plex-session') {
+            reconnectAttempts = 0; // Reset attempts on successful message
             const active = data.session;
             if (active) {
               // If a brand new item started playing, reset the dismissed flag!
@@ -85,9 +93,13 @@ const PlexSessionWidget = () => {
       };
 
       socket.onclose = (e) => {
-        console.log('[WebSocket] Disconnected. Reconnecting in 5s...', e.reason);
-        if (isMounted) {
+        if (!isMounted) return;
+        reconnectAttempts++;
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          console.log(`[WebSocket] Disconnected. Reconnecting in 5s... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
           reconnectTimeout = setTimeout(connect, 5000);
+        } else {
+          console.warn(`[WebSocket] Disconnected permanently after ${MAX_RECONNECT_ATTEMPTS} attempts.`);
         }
       };
 

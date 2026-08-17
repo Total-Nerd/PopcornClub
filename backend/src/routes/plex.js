@@ -473,8 +473,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                 console.log(`[Plex Webhook] Logged watch history for Episode S${season}E${episode} of ${showTitle} (User: ${user.username})`);
                 
                 if (tmdbApiKey) {
-                  const mediaRouter = require('./media');
-                  await mediaRouter.syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey, user.id);
+                  const mediaService = require('../services/mediaService');
+                  await mediaService.syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey, user.id);
                 }
               }
             }

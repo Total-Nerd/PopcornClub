@@ -3,7 +3,7 @@ const axios = require('axios');
 const prisma = require('../prismaClient');
 const { authenticateToken } = require('../middleware/auth');
 const { fetchTMDB } = require('../utils/tmdb');
-const { healMediaRecordIfMissingDetails } = require('./media');
+const { healMediaRecordIfMissingDetails } = require('../services/mediaService');
 
 const { getAiringDateTime } = require('../utils/airtime');
 

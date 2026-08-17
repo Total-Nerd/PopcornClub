@@ -4,7 +4,7 @@ const chokidar = require('chokidar');
 const prisma = require('../prismaClient');
 const { fetchTMDB } = require('./tmdb');
 const { archiveRequestsOnCollect } = require('./requestManager');
-
+const { getOrCreateMediaRecord } = require('../services/mediaService');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // State variables for status reporting
@@ -199,50 +199,7 @@ async function getFilesInDirectory(dirPath) {
   return results;
 }
 
-// Thread-safe media record upsert (matching implementation in media.js)
-async function getOrCreateMediaRecord({ tmdbId, type, title, overview, releaseDate, posterPath }) {
-  const parsedId = parseInt(tmdbId, 10);
-  let media = await prisma.media.findFirst({ where: { tmdbId: parsedId, type } });
-  if (media) {
-    const needsUpdate = (!media.posterPath && posterPath) ||
-                        (!media.overview && overview) ||
-                        (!media.releaseDate && releaseDate);
-    if (needsUpdate) {
-      try {
-        media = await prisma.media.update({
-          where: { id: media.id },
-          data: {
-            posterPath: media.posterPath || posterPath || null,
-            overview: media.overview || overview || '',
-            releaseDate: media.releaseDate || (releaseDate ? new Date(releaseDate) : null)
-          }
-        });
-      } catch (err) {
-        console.error('[Folder Scanner] Failed to enrich media:', err.message);
-      }
-    }
-    return media;
-  }
 
-  try {
-    media = await prisma.media.create({
-      data: {
-        tmdbId: parsedId,
-        type,
-        title,
-        overview: overview || '',
-        releaseDate: releaseDate ? new Date(releaseDate) : null,
-        posterPath: posterPath || null
-      }
-    });
-    return media;
-  } catch (err) {
-    // Graceful fallback for concurrent insert collisions
-    media = await prisma.media.findFirst({ where: { tmdbId: parsedId, type } });
-    if (media) return media;
-    throw err;
-  }
-}
 
 // Process a single file (resolve via TMDB, add collections & local file records)
 async function processSingleFile(filePath, folderType, apiKey) {

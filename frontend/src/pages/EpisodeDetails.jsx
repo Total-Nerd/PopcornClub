@@ -6,6 +6,7 @@ import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
 import RequestButton from '../components/RequestButton';
+import MediaCast from '../components/MediaCast';
 import CommentSection from '../components/CommentSection';
 import ReactionPicker from '../components/ReactionPicker';
 
@@ -348,37 +349,8 @@ const EpisodeDetails = () => {
               {/* Guest Cast */}
               {guest_stars && guest_stars.length > 0 && (
                 <div style={{ marginBottom: '32px' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Guest Stars</h3>
-                  <div className="details-cast-grid">
-                    {guest_stars.map(person => (
-                      <Link
-                        key={person.id}
-                        to={`/person/${person.id}`}
-                        style={{
-                          background: 'var(--overlay-subtle)',
-                          borderRadius: '12px',
-                          overflow: 'hidden',
-                          border: '1px solid var(--border-color)',
-                          textAlign: 'center',
-                          display: 'block',
-                          textDecoration: 'none',
-                          color: 'inherit',
-                          transition: 'transform 0.2s'
-                        }}
-                        className="hover-scale"
-                      >
-                        {person.profile_path ? (
-                          <img src={`https://image.tmdb.org/t/p/w185${person.profile_path}`} alt={person.name} style={{ width: '100%', height: '120px', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: '100%', height: '120px', background: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>No Profile</div>
-                        )}
-                        <div style={{ padding: '8px' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={person.name}>{person.name}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={person.character}>{person.character}</div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  {/* Cast Section */}
+                  <MediaCast cast={episodeDetails.guest_stars} title="Guest Stars" />
                 </div>
               )}
 
