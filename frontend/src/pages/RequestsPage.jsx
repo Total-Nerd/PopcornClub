@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { getRequests, cancelRequest, updateRequestStatus, createRequest } from '../api/requests';
 import { useModal } from '../context/ModalContext';
-import { Check, X, Trash2, Archive, Loader, AlertTriangle, Film, Tv, Clock, RotateCcw, Plus, Copy } from 'lucide-react';
+import { Check, X, Trash2, Archive, Loader, AlertTriangle, Film, Tv, Clock, RotateCcw, Plus, Copy, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import LazyImage from '../components/LazyImage';
 
@@ -18,6 +18,8 @@ const RequestsPage = () => {
   const [rejectingRequestIds, setRejectingRequestIds] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [autoReject, setAutoReject] = useState(false);
+  const [sortBy, setSortBy] = useState('requestDate');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const STATUS_ORDER = {
     pending: 1,
@@ -150,10 +152,25 @@ const RequestsPage = () => {
   const filteredRequests = groupedRequests
     .filter(r => activeFilters.includes(r.status))
     .sort((a, b) => {
-       const aOrder = STATUS_ORDER[a.status] || 99;
-       const bOrder = STATUS_ORDER[b.status] || 99;
-       if (aOrder !== bOrder) return aOrder - bOrder;
-       return new Date(b.createdAt) - new Date(a.createdAt);
+      const modifier = sortOrder === 'asc' ? 1 : -1;
+      
+      if (sortBy === 'title') {
+        return getRequestTitle(a).localeCompare(getRequestTitle(b)) * modifier;
+      } else if (sortBy === 'releaseDate') {
+        const dateA = a.media.releaseDate ? new Date(a.media.releaseDate).getTime() : 0;
+        const dateB = b.media.releaseDate ? new Date(b.media.releaseDate).getTime() : 0;
+        return (dateA - dateB) * modifier;
+      } else if (sortBy === 'requestDate') {
+        return (new Date(a.createdAt) - new Date(b.createdAt)) * modifier;
+      } else if (sortBy === 'type') {
+        return a.media.type.localeCompare(b.media.type) * modifier;
+      } else {
+        // default: status
+        const aOrder = STATUS_ORDER[a.status] || 99;
+        const bOrder = STATUS_ORDER[b.status] || 99;
+        if (aOrder !== bOrder) return (aOrder - bOrder) * modifier;
+        return (new Date(a.createdAt) - new Date(b.createdAt)) * modifier;
+      }
     });
 
   const getRequestTitle = (req) => {
@@ -172,7 +189,7 @@ const RequestsPage = () => {
 
   return (
     <div style={{ padding: '32px 24px', width: '100%', margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '8px' }}>Media Requests</h1>
         </div>
@@ -241,9 +258,37 @@ const RequestsPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase' }}>
-                <th style={{ padding: '16px', fontWeight: '600' }}>Media</th>
-                <th style={{ padding: '16px', fontWeight: '600' }}>Type</th>
-                <th style={{ padding: '16px', fontWeight: '600' }}>Status / Reason</th>
+                {/* Reusable Header Renderer */}
+                {[
+                  { key: 'title', label: 'Media' },
+                  { key: 'type', label: 'Type' },
+                  { key: 'releaseDate', label: 'Release Date' },
+                  { key: 'status', label: 'Status / Reason' },
+                  { key: 'requestDate', label: 'Request Date' }
+                ].map(col => (
+                  <th 
+                    key={col.key} 
+                    style={{ padding: '16px', fontWeight: '600', cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => {
+                      if (sortBy === col.key) {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortBy(col.key);
+                        setSortOrder('desc');
+                      }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {col.label}
+                      {sortBy === col.key ? (
+                        sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                      ) : (
+                        <ArrowDown size={14} style={{ opacity: 0.2 }} />
+                      )}
+                    </div>
+                  </th>
+                ))}
+                
                 <th style={{ padding: '16px', fontWeight: '600' }}>Requested By</th>
                 {user?.role === 'admin' && (
                   <th style={{ padding: '16px', fontWeight: '600' }}>IMDb</th>
@@ -305,6 +350,9 @@ const RequestsPage = () => {
                         {req.media.type === 'movie' ? 'Movie' : 'TV Show'}
                       </span>
                     </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                      {req.media.releaseDate ? new Date(req.media.releaseDate).toLocaleDateString() : '-'}
+                    </td>
                     <td style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                         <span className={`badge ${
@@ -330,6 +378,9 @@ const RequestsPage = () => {
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                      {new Date(req.createdAt).toLocaleDateString()}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -392,7 +443,7 @@ const RequestsPage = () => {
                     )}
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                        {(isUserRequest || user?.role === 'admin') && req.status === 'pending' && (
+                        {(isUserRequest || user?.role === 'admin') && (req.status === 'pending' || req.status === 'collected') && (
                           <button 
                             onClick={() => {
                               if (user?.role === 'admin') {
@@ -403,10 +454,10 @@ const RequestsPage = () => {
                             }}
                             className="btn btn-secondary"
                             style={{ padding: '6px 10px', color: '#f87171', background: 'rgba(255,255,255,0.05)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            title={user?.role === 'admin' ? "Cancel Request for ALL users (Remove permanently)" : "Cancel your request"}
+                            title={user?.role === 'admin' ? "Delete Request for ALL users (Remove permanently)" : "Delete your request"}
                           >
                             <Trash2 size={14} />
-                            <span style={{ fontSize: '0.8rem' }}>Cancel</span>
+                            <span style={{ fontSize: '0.8rem' }}>Delete</span>
                           </button>
                         )}
 
@@ -449,7 +500,7 @@ const RequestsPage = () => {
                               <button 
                                 onClick={() => handleUpdateStatus(req.allIds, 'collected')}
                                 className="btn btn-secondary"
-                                style={{ padding: '6px 10px', color: '#34d399', background: 'rgba(255,255,255,0.05)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                style={{ padding: '6px 10px', color: 'var(--text-main)', background: 'rgba(255,255,255,0.05)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 title="Mark ALL as Collected"
                               >
                                 <Archive size={14} />

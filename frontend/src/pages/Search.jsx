@@ -910,7 +910,7 @@ const Search = () => {
 
         {/* Overlapping status pills on card image - moved to top left */}
         <div className="media-status-pills-left">
-          {item.isRequested && (
+          {item.isRequested && !item.isCollected && (
             <span style={{
               padding: '4px 10px',
               borderRadius: '12px',

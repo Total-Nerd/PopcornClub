@@ -563,7 +563,7 @@ const ListDetails = () => {
                 )}
                 
                 <div style={{ position: 'absolute', top: '8px', left: '8px', display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 10 }}>
-                  {media.isRequested && (
+                  {media.isRequested && !media.isCollected && (
                     <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.725rem', fontWeight: '600', background: 'rgba(245, 158, 11, 0.9)', color: '#fff', backdropFilter: 'blur(4px)', boxShadow: '0 4px 6px rgba(0,0,0,0.15)' }}>
                       Requested
                     </span>
@@ -666,7 +666,7 @@ const ListDetails = () => {
                       {media.isWatched && (
                         <span className="badge badge-success">Watched</span>
                       )}
-                      {media.isRequested && (
+                      {media.isRequested && !media.isCollected && (
                         <span className="badge badge-warning">Requested</span>
                       )}
                     </div>
