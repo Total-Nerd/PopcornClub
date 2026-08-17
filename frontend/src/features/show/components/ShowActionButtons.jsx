@@ -116,20 +116,31 @@ const ShowActionButtons = ({ onWatchOptions, activeSeason }) => {
         <span>{showDetails.isCollected ? 'Collected' : 'Collect'}</span>
       </button>
 
-      <button
-        className="btn btn-secondary"
-        style={{
-          fontWeight: '600',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          border: '1px solid var(--border-color)'
-        }}
-        onClick={onWatchOptions}
-      >
-        <Eye size={18} />
-        <span>Watch</span>
-      </button>
+      {(() => {
+        const watchedCount = showDetails.watchedEpisodes?.length || 0;
+        const totalCount = showDetails.number_of_episodes || 0;
+        const isAnyWatched = watchedCount > 0;
+        const watchedPercent = totalCount > 0 ? Math.round((watchedCount / totalCount) * 100) : 0;
+        
+        return (
+          <button
+            className="btn btn-secondary"
+            style={{
+              fontWeight: '600',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              border: isAnyWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+              background: isAnyWatched ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+              color: isAnyWatched ? '#34d399' : 'var(--text-main)',
+            }}
+            onClick={onWatchOptions}
+          >
+            <Eye size={18} />
+            <span>{isAnyWatched ? `Watched (${watchedPercent}%)` : 'Watch'}</span>
+          </button>
+        );
+      })()}
 
       <div className="info-dropdown-container show-dropdown-container">
         <button
