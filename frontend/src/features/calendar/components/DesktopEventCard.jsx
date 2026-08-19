@@ -55,7 +55,7 @@ const DesktopEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails, o
         flexDirection: 'column',
         gap: '8px',
         cursor: 'pointer',
-        background: isWatched ? 'var(--bg-card-watched)' : 'var(--bg-card)',
+        background: 'var(--bg-card)',
         border: '1px solid var(--border-color)',
         borderRadius: '8px',
         marginBottom: ev.isStacked ? '8px' : '0px',

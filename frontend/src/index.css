@@ -4,6 +4,7 @@
   --bg-dark: #0f172a;
   --bg-card: rgba(30, 41, 59, 0.7);
   --bg-card-watched: rgba(16, 185, 129, 0.25);
+  --border-watched: rgba(16, 185, 129, 0.5);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --accent: #3b82f6;
@@ -88,6 +89,7 @@
   --bg-dark: #f1f5f9;
   --bg-card: rgba(255, 255, 255, 0.3);
   --bg-card-watched: rgba(16, 185, 129, 0.25);
+  --border-watched: rgba(16, 185, 129, 0.5);
   --text-main: #0f172a;
   --text-muted: #475569;
   --border-color: rgba(0, 0, 0, 0.08);
@@ -166,6 +168,7 @@
   --bg-dark: #000000;
   --bg-card: rgba(10, 10, 10, 0.85);
   --bg-card-watched: rgba(16, 185, 129, 0.25);
+  --border-watched: rgba(16, 185, 129, 0.5);
   --text-main: #f8fafc;
   --text-muted: #8a99ad;
   --border-color: rgba(255, 255, 255, 0.08);
@@ -245,6 +248,7 @@
   --bg-dark: #0f0c29;
   --bg-card: rgba(255, 255, 255, 0.05);
   --bg-card-watched: rgba(16, 185, 129, 0.25);
+  --border-watched: rgba(0, 255, 170, 0.5);
   --text-main: #ffffff;
   --text-muted: #a6b1e1;
   --border-color: rgba(255, 0, 204, 0.4);
@@ -323,6 +327,7 @@
   --bg-dark: #050505;
   --bg-card: rgba(0, 25, 0, 0.8);
   --bg-card-watched: rgba(16, 185, 129, 0.1);
+  --border-watched: rgba(51, 255, 0, 0.5);
   --text-main: #33ff00;
   --text-muted: #22aa00;
   --border-color: #115500;
@@ -3742,7 +3747,8 @@ select option {
 }
 
 .swipe-front-card.is-watched {
-  background: var(--success-bg-solid) !important;
+  background: var(--bg-card-solid) !important;
+  box-shadow: inset 0 0 0 2px var(--border-watched) !important;
 }
 
 /* Collected Badge Pill in Swipe Mode */
