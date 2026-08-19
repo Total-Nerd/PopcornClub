@@ -181,7 +181,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
         isPlaying,
         updatedAt: Date.now(),
         posterPath,
-        tmdbId
+        tmdbId,
+        grandparentTitle: metadata.grandparentTitle
       };
 
       plexStore.setActiveSession(user.id, session);
