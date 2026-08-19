@@ -420,8 +420,8 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
                     style={{
                       padding: '4px 6px',
                       fontSize: '0.8rem',
-                      background: subEv.isCollected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                      color: subEv.isCollected ? 'var(--success)' : 'var(--text-muted)'
+                      background: subEv.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isCollected ? 'var(--accent)' : 'var(--text-muted)'
                     }}
                   >
                     {subEv.isCollected ? 'Collected' : 'Collect'}
@@ -432,8 +432,8 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
                     style={{
                       padding: '4px 6px',
                       fontSize: '0.8rem',
-                      background: subEv.isWatched ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.04)',
-                      color: subEv.isWatched ? 'var(--accent)' : 'var(--text-muted)'
+                      background: subEv.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+                      color: subEv.isWatched ? 'var(--success)' : 'var(--text-muted)'
                     }}
                   >
                     {subEv.isWatched ? 'Watched' : 'Watch'}
