@@ -97,13 +97,16 @@ const CalendarView = () => {
     }
   }, [isMobile]);
 
-  // Auto-scroll to today in mobile month view
+  // Auto-scroll to today in mobile views
   useEffect(() => {
-    if (!loading && isMobile && viewMode === 'month' && typeof window !== 'undefined') {
+    if (!loading && isMobile && typeof window !== 'undefined') {
       const scrollTimer = setTimeout(() => {
         const todayEl = document.querySelector('.is-today');
         if (todayEl) {
-          todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const headerEl = document.querySelector('.sticky-header-container');
+          const offset = headerEl ? headerEl.offsetHeight : 100;
+          const targetY = todayEl.getBoundingClientRect().top + window.scrollY - offset - 16;
+          window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
         }
       }, 300);
       return () => clearTimeout(scrollTimer);
