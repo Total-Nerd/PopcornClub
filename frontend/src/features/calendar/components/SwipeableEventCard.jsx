@@ -277,6 +277,21 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
               >
                 {title}
               </Link>
+              {ev.isCollected && (
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '0.7rem',
+                  fontWeight: '600',
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  color: '#fff',
+                  backdropFilter: 'blur(4px)',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
+                  flexShrink: 0
+                }}>
+                  Collected
+                </span>
+              )}
               {ev.type === 'movie' && isAdmin && showCopyButton && (
                 <button
                   type="button"
