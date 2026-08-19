@@ -181,7 +181,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
         isPlaying,
         updatedAt: Date.now(),
         posterPath,
-        tmdbId
+        tmdbId,
+        grandparentTitle: metadata.grandparentTitle
       };
 
       plexStore.setActiveSession(user.id, session);
@@ -281,24 +282,37 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
               mediaId: media.id,
               type: 'movie',
               isCompleted: false,
-              userId: user.id,
-              watchedAt: { gte: new Date(Date.now() - 48 * 60 * 60000) }
+              userId: user.id
             },
             orderBy: { watchedAt: 'desc' }
           });
 
           if (recentIncomplete) {
+            const currentSessions = Array.isArray(recentIncomplete.sessions) ? recentIncomplete.sessions : [];
+            const newSession = {
+              startOffset: recentIncomplete.viewOffset,
+              endOffset: finalViewOffsetSec,
+              timestamp: new Date().toISOString()
+            };
+
             await prisma.watchHistoryLog.update({
               where: { id: recentIncomplete.id },
               data: {
                 viewOffset: finalViewOffsetSec,
                 duration: finalDurationSec,
                 isCompleted: isCompleted,
-                watchedAt: new Date()
+                watchedAt: new Date(),
+                sessions: [...currentSessions, newSession]
               }
             });
             console.log(`[Plex Webhook] Updated existing watch log for Movie ${metadata.title} (User: ${user.username}, completed: ${isCompleted})`);
           } else if (isCompleted || isPartial) {
+            const initialSession = {
+              startOffset: 0,
+              endOffset: finalViewOffsetSec,
+              timestamp: new Date().toISOString()
+            };
+
             await prisma.watchHistoryLog.create({
               data: {
                 mediaId: media.id,
@@ -307,7 +321,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                 viewOffset: finalViewOffsetSec,
                 isCompleted: isCompleted,
                 userId: user.id,
-                watchedAt: new Date()
+                watchedAt: new Date(),
+                sessions: [initialSession]
               }
             });
             console.log(`[Plex Webhook] Logged new watch log for Movie ${metadata.title} (User: ${user.username}, completed: ${isCompleted})`);
@@ -430,24 +445,37 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                   season,
                   episode,
                   isCompleted: false,
-                  userId: user.id,
-                  watchedAt: { gte: new Date(Date.now() - 48 * 60 * 60000) }
+                  userId: user.id
                 },
                 orderBy: { watchedAt: 'desc' }
               });
 
               if (recentIncomplete) {
+                const currentSessions = Array.isArray(recentIncomplete.sessions) ? recentIncomplete.sessions : [];
+                const newSession = {
+                  startOffset: recentIncomplete.viewOffset,
+                  endOffset: finalViewOffsetSec,
+                  timestamp: new Date().toISOString()
+                };
+
                 await prisma.watchHistoryLog.update({
                   where: { id: recentIncomplete.id },
                   data: {
                     viewOffset: finalViewOffsetSec,
                     duration: finalDurationSec,
                     isCompleted: isCompleted,
-                    watchedAt: new Date()
+                    watchedAt: new Date(),
+                    sessions: [...currentSessions, newSession]
                   }
                 });
                 console.log(`[Plex Webhook] Updated existing watch log for Episode S${season}E${episode} of ${showTitle} (User: ${user.username}, completed: ${isCompleted})`);
               } else if (isCompleted || isPartial) {
+                const initialSession = {
+                  startOffset: 0,
+                  endOffset: finalViewOffsetSec,
+                  timestamp: new Date().toISOString()
+                };
+
                 await prisma.watchHistoryLog.create({
                   data: {
                     mediaId: media.id,
@@ -458,7 +486,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                     viewOffset: finalViewOffsetSec,
                     isCompleted: isCompleted,
                     userId: user.id,
-                    watchedAt: new Date()
+                    watchedAt: new Date(),
+                    sessions: [initialSession]
                   }
                 });
                 console.log(`[Plex Webhook] Logged new watch log for Episode S${season}E${episode} of ${showTitle} (User: ${user.username}, completed: ${isCompleted})`);
@@ -473,8 +502,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                 console.log(`[Plex Webhook] Logged watch history for Episode S${season}E${episode} of ${showTitle} (User: ${user.username})`);
                 
                 if (tmdbApiKey) {
-                  const mediaRouter = require('./media');
-                  await mediaRouter.syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey, user.id);
+                  const mediaService = require('../services/mediaService');
+                  await mediaService.syncShowWatchHistory(media.id, media.tmdbId, tmdbApiKey, user.id);
                 }
               }
             }

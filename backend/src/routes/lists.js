@@ -1,7 +1,7 @@
 const express = require('express');
 const prisma = require('../prismaClient');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
-const { healMediaRecordIfMissingDetails } = require('./media');
+const { healMediaRecordIfMissingDetails } = require('../services/mediaService');
 
 const router = express.Router();
 
