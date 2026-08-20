@@ -38,6 +38,7 @@ model User {
   reactions           Reaction[]
   followers           Follows[]  @relation("UserFollowers")
   following           Follows[]  @relation("UserFollowing")
+  defaultWatchTogethers DefaultWatchTogether[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -87,6 +88,7 @@ model Media {
   hiddenItems         HiddenItem[]
   comments            Comment[]
   reactions           Reaction[]
+  defaultWatchTogethers DefaultWatchTogether[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -311,6 +313,19 @@ model HiddenItem {
   hideInCalendar  Boolean  @default(true)
   hideInLibrary   Boolean  @default(true)
   createdAt       DateTime @default(now())
+
+  @@unique([userId, mediaId])
+}
+
+model DefaultWatchTogether {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaId        Int
+  media          Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  participantIds String   @default("[]") // JSON array of participant user IDs
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([userId, mediaId])
 }

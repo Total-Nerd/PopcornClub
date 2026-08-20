@@ -4,6 +4,36 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const plexStore = require('../utils/plexStore');
 const { broadcastToUser } = require('../utils/wsManager');
+const { fetchTMDB } = require('../utils/tmdb');
+
+async function getOrCreateMedia(tmdbId, type) {
+  if (!tmdbId || !type) return null;
+  const parsedId = parseInt(tmdbId, 10);
+  let media = await prisma.media.findFirst({
+    where: { tmdbId: parsedId, type }
+  });
+  if (!media) {
+    const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
+    const tmdbApiKey = systemSettings?.tmdbApiKey;
+    let title = `${type} #${parsedId}`;
+    
+    if (tmdbApiKey) {
+      try {
+        const data = await fetchTMDB(`/3/${type}/${parsedId}`, tmdbApiKey);
+        title = data.title || data.name || title;
+      } catch (err) {}
+    }
+    
+    media = await prisma.media.create({
+      data: {
+        tmdbId: parsedId,
+        type,
+        title,
+      }
+    });
+  }
+  return media.id;
+}
 
 // Helper to get or create WatchTogetherSession for user
 async function getOrCreateSession(userId) {
@@ -146,6 +176,95 @@ router.post('/participants', async (req, res) => {
   } catch (err) {
     console.error('Error updating Watch Together participants:', err);
     res.status(500).json({ error: 'Failed to update Watch Together participants' });
+  }
+});
+
+// GET /api/watch-together/default/:mediaId - Fetch default participants for a media
+router.get('/default/:mediaId', async (req, res) => {
+  try {
+    const tmdbId = req.params.mediaId;
+    const { mediaType } = req.query;
+    
+    let internalMediaId = null;
+    if (mediaType) {
+      internalMediaId = await getOrCreateMedia(tmdbId, mediaType);
+    } else {
+      const parsedId = parseInt(tmdbId, 10);
+      const media = await prisma.media.findFirst({ where: { tmdbId: parsedId } });
+      internalMediaId = media?.id;
+    }
+
+    if (!internalMediaId) {
+      return res.json({ participantIds: [], participants: [] });
+    }
+
+    const defaultWt = await prisma.defaultWatchTogether.findUnique({
+      where: {
+        userId_mediaId: { userId: req.user.id, mediaId: internalMediaId }
+      }
+    });
+
+    const participantIds = defaultWt ? JSON.parse(defaultWt.participantIds || '[]') : [];
+
+    const participants = await prisma.user.findMany({
+      where: { id: { in: participantIds } },
+      select: { id: true, username: true, name: true, avatarPath: true }
+    });
+
+    res.json({ participantIds, participants });
+  } catch (err) {
+    console.error('Error fetching default Watch Together session:', err);
+    res.status(500).json({ error: 'Failed to fetch default Watch Together session' });
+  }
+});
+
+// POST /api/watch-together/default/:mediaId - Update default participants for a media
+router.post('/default/:mediaId', async (req, res) => {
+  try {
+    const tmdbId = req.params.mediaId;
+    const { participantIds, mediaType } = req.body;
+    
+    if (!Array.isArray(participantIds)) {
+      return res.status(400).json({ error: 'participantIds array is required' });
+    }
+    if (!mediaType) {
+      return res.status(400).json({ error: 'mediaType is required' });
+    }
+
+    const internalMediaId = await getOrCreateMedia(tmdbId, mediaType);
+    if (!internalMediaId) {
+      return res.status(400).json({ error: 'Failed to resolve media' });
+    }
+
+    const newParticipantIds = participantIds.filter(id => id !== req.user.id);
+
+    const updatedRecord = await prisma.defaultWatchTogether.upsert({
+      where: {
+        userId_mediaId: { userId: req.user.id, mediaId: internalMediaId }
+      },
+      update: {
+        participantIds: JSON.stringify(newParticipantIds)
+      },
+      create: {
+        userId: req.user.id,
+        mediaId: internalMediaId,
+        participantIds: JSON.stringify(newParticipantIds)
+      }
+    });
+
+    const participants = await prisma.user.findMany({
+      where: { id: { in: newParticipantIds } },
+      select: { id: true, username: true, name: true, avatarPath: true }
+    });
+
+    res.json({
+      success: true,
+      participantIds: newParticipantIds,
+      participants
+    });
+  } catch (err) {
+    console.error('Error updating default Watch Together participants:', err);
+    res.status(500).json({ error: 'Failed to update default Watch Together participants' });
   }
 });
 

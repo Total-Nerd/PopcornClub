@@ -229,170 +229,168 @@ const EpisodeDetails = () => {
 
           {/* Right Column: Metadata, Summary, Cast */}
           <div className="details-right-col">
-            <div>
-              <Link to={`/shows/${tmdbId}`} style={{ textDecoration: 'none', color: 'var(--accent)', fontWeight: '600', marginBottom: '8px', display: 'inline-block' }}>
-                {showDetails?.name}
-              </Link>
-              <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '8px', lineHeight: '1.2' }}>
-                {name}
-              </h1>
-              <h2 style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '20px', fontWeight: '400' }}>
-                Season {seasonNumber}, Episode {episodeNumber}
-              </h2>
+            <Link to={`/shows/${tmdbId}`} style={{ textDecoration: 'none', color: 'var(--accent)', fontWeight: '600', display: 'inline-block' }}>
+              {showDetails?.name}
+            </Link>
+            <h1 style={{ fontSize: '2.5rem', fontWeight: '800', lineHeight: '1.2' }}>
+              {name}
+            </h1>
+            <h2 style={{ fontSize: '1.2rem', color: 'var(--text-muted)', fontWeight: '400' }}>
+              Season {seasonNumber}, Episode {episodeNumber}
+            </h2>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
-                {vote_average > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
-                    <Star size={18} fill="#fbbf24" />
-                    <span style={{ fontWeight: '600', fontSize: '1rem' }}>{vote_average.toFixed(1)}</span>
-                  </div>
-                )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
+              {vote_average > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
+                  <Star size={18} fill="#fbbf24" />
+                  <span style={{ fontWeight: '600', fontSize: '1rem' }}>{vote_average.toFixed(1)}</span>
+                </div>
+              )}
 
-                {runtime > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    <Clock size={16} />
-                    <span>{runtime} min</span>
-                  </div>
-                )}
+              {runtime > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  <Clock size={16} />
+                  <span>{runtime} min</span>
+                </div>
+              )}
 
-                {air_date && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    <Calendar size={16} />
-                    <span>{new Date(air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                  </div>
-                )}
-              </div>
+              {air_date && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  <Calendar size={16} />
+                  <span>{new Date(air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
 
-              {/* Action buttons */}
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '32px' }}>
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '32px' }}>
 
-                <button
-                  className="btn"
-                  style={{
-                    background: isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
-                    color: isCollected ? '#60a5fa' : 'var(--text-main)',
-                    border: isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--border-color)',
-                    fontWeight: '600'
-                  }}
-                  onClick={handleToggleCollected}
-                >
-                  <Plus size={18} style={{ transform: isCollected ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
-                  <span>{isCollected ? 'Collected' : 'Collect'}</span>
-                </button>
+              <button
+                className="btn"
+                style={{
+                  background: isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--overlay-subtle)',
+                  color: isCollected ? '#60a5fa' : 'var(--text-main)',
+                  border: isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--border-color)',
+                  fontWeight: '600'
+                }}
+                onClick={handleToggleCollected}
+              >
+                <Plus size={18} style={{ transform: isCollected ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s' }} />
+                <span>{isCollected ? 'Collected' : 'Collect'}</span>
+              </button>
 
-                <button
-                  className="btn"
-                  style={{
-                    background: isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--overlay-subtle)',
-                    color: isWatched ? 'var(--success)' : 'var(--text-main)',
-                    border: isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
-                    fontWeight: '600'
-                  }}
-                  onClick={handleToggleWatched}
-                >
-                  {isWatched ? <Check size={18} /> : <Eye size={18} />}
-                  <span>{isWatched ? 'Watched' : 'Watch'}</span>
-                </button>
+              <button
+                className="btn"
+                style={{
+                  background: isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--overlay-subtle)',
+                  color: isWatched ? 'var(--success)' : 'var(--text-main)',
+                  border: isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                  fontWeight: '600'
+                }}
+                onClick={handleToggleWatched}
+              >
+                {isWatched ? <Check size={18} /> : <Eye size={18} />}
+                <span>{isWatched ? 'Watched' : 'Watch'}</span>
+              </button>
 
-                {episodeDetails.external_ids?.imdb_id && (
-                  <a
-                    href={`https://www.imdb.com/title/${episodeDetails.external_ids.imdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn"
-                    style={{
-                      background: '#f5c518',
-                      color: '#000000',
-                      fontWeight: 'bold',
-                      display: 'inline-flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
-                  </a>
-                )}
-                
+              {episodeDetails.external_ids?.imdb_id && (
                 <a
-                  href={`https://www.themoviedb.org/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
+                  href={`https://www.imdb.com/title/${episodeDetails.external_ids.imdb_id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn"
                   style={{
-                    background: '#01b4e4',
-                    color: '#ffffff',
+                    background: '#f5c518',
+                    color: '#000000',
                     fontWeight: 'bold',
                     display: 'inline-flex',
                     alignItems: 'center'
                   }}
                 >
-                  TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+                  IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
                 </a>
+              )}
+              
+              <a
+                href={`https://www.themoviedb.org/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn"
+                style={{
+                  background: '#01b4e4',
+                  color: '#ffffff',
+                  fontWeight: 'bold',
+                  display: 'inline-flex',
+                  alignItems: 'center'
+                }}
+              >
+                TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+              </a>
 
-                {!isCollected && !localFile && (
-                   <RequestButton 
-                     tmdbId={showDetails?.id} 
-                     type="tv" 
-                     title={showDetails?.name} 
-                     season={seasonNumber}
-                     episode={episodeNumber}
-                     initialRequested={isRequested}
-                   />
+              {!isCollected && !localFile && (
+                  <RequestButton 
+                    tmdbId={showDetails?.id} 
+                    type="tv" 
+                    title={showDetails?.name} 
+                    season={seasonNumber}
+                    episode={episodeNumber}
+                    initialRequested={isRequested}
+                  />
+              )}
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <ReactionPicker mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
+            </div>
+
+            {/* Overview */}
+            {overview && (
+              <div style={{ marginBottom: '32px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '12px' }}>Overview</h3>
+                <p style={{ lineHeight: '1.6', color: 'var(--text-muted)' }}>{overview}</p>
+              </div>
+            )}
+
+            {/* Crew */}
+            {(directors.length > 0 || writers.length > 0) && (
+              <div style={{ marginBottom: '32px', display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
+                {directors.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '8px' }}>Director{directors.length > 1 ? 's' : ''}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {directors.map(d => (
+                        <Link key={d.id} to={`/person/${d.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+                          {d.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {writers.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '8px' }}>Writer{writers.length > 1 ? 's' : ''}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {writers.map(w => (
+                        <Link key={w.id} to={`/person/${w.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+                          {w.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
 
-              <div style={{ marginBottom: '24px' }}>
-                <ReactionPicker mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
+            {/* Guest Cast */}
+            {guest_stars && guest_stars.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                {/* Cast Section */}
+                <MediaCast cast={episodeDetails.guest_stars} title="Guest Stars" />
               </div>
+            )}
 
-              {/* Overview */}
-              {overview && (
-                <div style={{ marginBottom: '32px' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '12px' }}>Overview</h3>
-                  <p style={{ lineHeight: '1.6', color: 'var(--text-muted)' }}>{overview}</p>
-                </div>
-              )}
+            <CommentSection mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
 
-              {/* Crew */}
-              {(directors.length > 0 || writers.length > 0) && (
-                <div style={{ marginBottom: '32px', display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
-                  {directors.length > 0 && (
-                    <div>
-                      <h4 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '8px' }}>Director{directors.length > 1 ? 's' : ''}</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {directors.map(d => (
-                          <Link key={d.id} to={`/person/${d.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-                            {d.name}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {writers.length > 0 && (
-                    <div>
-                      <h4 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '8px' }}>Writer{writers.length > 1 ? 's' : ''}</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {writers.map(w => (
-                          <Link key={w.id} to={`/person/${w.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-                            {w.name}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Guest Cast */}
-              {guest_stars && guest_stars.length > 0 && (
-                <div style={{ marginBottom: '32px' }}>
-                  {/* Cast Section */}
-                  <MediaCast cast={episodeDetails.guest_stars} title="Guest Stars" />
-                </div>
-              )}
-
-              <CommentSection mediaId={showDetails?.id} mediaType="tv" season={seasonNumber} episode={episodeNumber} />
-
-            </div>
           </div>
         </div>
       </div>

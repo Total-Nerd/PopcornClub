@@ -50,25 +50,46 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
     }
   }
 
-  // Watch Together Mode Fan-Out Replication
-  if (!isReplicated) {
+  // Watch Together Mode Fan-Out Replication (Global + Default Media)
+  if (!isReplicated && payload.Metadata) {
     try {
+      let participantIds = [];
+
+      // 1. Check Global Watch Together Session
       const wtSession = await prisma.watchTogetherSession.findUnique({
         where: { userId: user.id }
       });
       if (wtSession && wtSession.enabled) {
-        const participantIds = JSON.parse(wtSession.participantIds || '[]');
-        if (participantIds.length > 0) {
-          const participants = await prisma.user.findMany({
-            where: { id: { in: participantIds } }
+        const globalIds = JSON.parse(wtSession.participantIds || '[]');
+        participantIds = [...globalIds];
+      }
+
+      // 2. Check Default Watch Together for this specific Media
+      const mediaTitle = payload.Metadata.type === 'episode' ? (payload.Metadata.grandparentTitle || payload.Metadata.title) : payload.Metadata.title;
+      if (mediaTitle) {
+        const matchedMedia = await prisma.media.findFirst({
+          where: { title: { equals: mediaTitle, mode: 'insensitive' } },
+          include: { defaultWatchTogethers: { where: { userId: user.id } } }
+        });
+        if (matchedMedia && matchedMedia.defaultWatchTogethers && matchedMedia.defaultWatchTogethers.length > 0) {
+          const defaultIds = JSON.parse(matchedMedia.defaultWatchTogethers[0].participantIds || '[]');
+          participantIds = [...participantIds, ...defaultIds];
+        }
+      }
+
+      // Deduplicate participant IDs
+      participantIds = [...new Set(participantIds)];
+
+      if (participantIds.length > 0) {
+        const participants = await prisma.user.findMany({
+          where: { id: { in: participantIds } }
+        });
+        const mockRes = { sendStatus: () => {} };
+        for (const participant of participants) {
+          console.log(`[Watch Together] Replicating Plex webhook event "${payload.event}" from host ${user.username} to ${participant.username}`);
+          handlePlexWebhook(payload, participant, mockRes, true).catch(err => {
+            console.error(`[Watch Together] Error replicating webhook for user ${participant.username}:`, err);
           });
-          const mockRes = { sendStatus: () => {} };
-          for (const participant of participants) {
-            console.log(`[Watch Together] Replicating Plex webhook event "${payload.event}" from host ${user.username} to ${participant.username}`);
-            handlePlexWebhook(payload, participant, mockRes, true).catch(err => {
-              console.error(`[Watch Together] Error replicating webhook for user ${participant.username}:`, err);
-            });
-          }
         }
       }
     } catch (wtErr) {
