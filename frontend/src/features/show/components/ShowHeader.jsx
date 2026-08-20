@@ -96,10 +96,6 @@ const ShowHeader = ({ scrollY, onEditPoster, onEditBackdrop, children }) => {
                 </div>
               )}
             </div>
-            
-            <div style={{ marginBottom: '24px' }}>
-              <ReactionPicker mediaId={showDetails.id} mediaType="tv" />
-            </div>
 
             {/* Genres */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
@@ -108,6 +104,10 @@ const ShowHeader = ({ scrollY, onEditPoster, onEditBackdrop, children }) => {
                   {g.name}
                 </span>
               ))}
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <ReactionPicker mediaId={showDetails.id} mediaType="tv" />
             </div>
 
             {/* Action buttons provided by parent */}

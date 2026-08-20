@@ -74,12 +74,12 @@ const MovieHeader = ({ scrollY, onEditPoster, onEditBackdrop, children }) => {
 
           {/* Right Column: Metadata */}
           <div className="details-right-col">
-            <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '8px', lineHeight: '1.2' }}>{movieDetails.title}</h1>
+            <h1 style={{ fontSize: '2.5rem', fontWeight: '800', lineHeight: '1.2' }}>{movieDetails.title}</h1>
             {movieDetails.tagline && (
-              <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '20px' }}>"{movieDetails.tagline}"</p>
+              <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '1.1rem' }}>"{movieDetails.tagline}"</p>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
                 <Star size={18} fill="#fbbf24" />
                 <span style={{ fontWeight: '600', fontSize: '1rem' }}>{movieDetails.vote_average?.toFixed(1) || '0.0'}</span>
@@ -99,18 +99,18 @@ const MovieHeader = ({ scrollY, onEditPoster, onEditBackdrop, children }) => {
                 </div>
               )}
             </div>
-            
-            <div style={{ marginBottom: '24px' }}>
-              <ReactionPicker mediaId={movieDetails.id} mediaType="movie" />
-            </div>
 
             {/* Genres */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {movieDetails.genres?.map(g => (
                 <span key={g.id} style={{ padding: '6px 14px', background: 'var(--overlay-subtle)', borderRadius: '16px', fontSize: '0.8rem', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontWeight: '500' }}>
                   {g.name}
                 </span>
               ))}
+            </div>
+
+            <div>
+              <ReactionPicker mediaId={movieDetails.id} mediaType="movie" />
             </div>
 
             {/* Action buttons provided by parent */}

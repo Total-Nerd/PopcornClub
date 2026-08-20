@@ -1209,7 +1209,7 @@ button {
   /* Prevents overflow inside nested flex layouts */
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 22px;
 }
 
 .details-backdrop-bg {
