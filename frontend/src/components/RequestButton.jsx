@@ -43,9 +43,9 @@ const RequestButton = ({ tmdbId, type, title, season = null, episode = null, ini
           disabled 
           className={`btn btn-secondary ${className}`}
           style={{ 
-            background: 'var(--success-bg-subtle)', 
-            color: 'var(--success)', 
-            border: '1px solid var(--success-border-subtle)', 
+            background: 'var(--warning-bg)', 
+            color: 'var(--warning-color)', 
+            border: '1px solid var(--warning-border)', 
             display: 'flex', 
             alignItems: 'center', 
             gap: '8px', 

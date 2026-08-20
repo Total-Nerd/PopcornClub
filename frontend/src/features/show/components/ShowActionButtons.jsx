@@ -103,11 +103,11 @@ const ShowActionButtons = ({ onWatchOptions, activeSeason }) => {
   return (
     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
       <button
-        className="btn"
+        className={`btn ${!showDetails.isCollected ? 'btn-secondary' : ''}`}
         style={{
-          background: showDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--accent)',
-          color: showDetails.isCollected ? '#60a5fa' : '#fff',
-          border: showDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : 'none',
+          background: showDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : '',
+          color: showDetails.isCollected ? '#60a5fa' : '',
+          border: showDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : '',
           fontWeight: '600'
         }}
         onClick={handleToggleCollection}
@@ -141,6 +141,15 @@ const ShowActionButtons = ({ onWatchOptions, activeSeason }) => {
           </button>
         );
       })()}
+
+      {!showDetails.isCollected && (
+        <RequestButton 
+          tmdbId={showDetails.id} 
+          type="tv" 
+          title={showDetails.name} 
+          initialRequested={showDetails.isRequested}
+        />
+      )}
 
       <div className="info-dropdown-container show-dropdown-container">
         <button
@@ -199,9 +208,9 @@ const ShowActionButtons = ({ onWatchOptions, activeSeason }) => {
         )}
       </div>
 
-      {showDetails.imdb_id && (
+      {showDetails.external_ids?.imdb_id && (
         <a
-          href={`https://www.imdb.com/title/${showDetails.imdb_id}`}
+          href={`https://www.imdb.com/title/${showDetails.external_ids.imdb_id}`}
           target="_blank"
           rel="noopener noreferrer"
           className="btn"
@@ -231,14 +240,6 @@ const ShowActionButtons = ({ onWatchOptions, activeSeason }) => {
       >
         TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
       </a>
-
-      {!showDetails.isCollected && (
-          <RequestButton 
-            tmdbId={showDetails.id} 
-            type="tv" 
-            title={showDetails.name} 
-          />
-      )}
 
       <div className="info-dropdown-container">
         <button

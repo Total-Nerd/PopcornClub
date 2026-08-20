@@ -98,11 +98,11 @@ const MovieActionButtons = ({ onWatchOptions }) => {
   return (
     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
       <button
-        className="btn"
+        className={`btn ${!movieDetails.isCollected ? 'btn-secondary' : ''}`}
         style={{
-          background: movieDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'var(--accent)',
-          color: movieDetails.isCollected ? '#60a5fa' : '#fff',
-          border: movieDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : 'none',
+          background: movieDetails.isCollected ? 'rgba(59, 130, 246, 0.15)' : '',
+          color: movieDetails.isCollected ? '#60a5fa' : '',
+          border: movieDetails.isCollected ? '1px solid rgba(59, 130, 246, 0.3)' : '',
           fontWeight: '600'
         }}
         onClick={handleToggleCollection}
@@ -112,11 +112,11 @@ const MovieActionButtons = ({ onWatchOptions }) => {
       </button>
 
       <button
-        className="btn"
+        className={`btn ${!movieDetails.isWatched ? 'btn-secondary' : ''}`}
         style={{
-          background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent)',
-          color: movieDetails.isWatched ? 'var(--success)' : '#fff',
-          border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
+          background: movieDetails.isWatched ? 'rgba(16, 185, 129, 0.15)' : '',
+          color: movieDetails.isWatched ? 'var(--success)' : '',
+          border: movieDetails.isWatched ? '1px solid rgba(16, 185, 129, 0.3)' : '',
           fontWeight: '600'
         }}
         onClick={onWatchOptions}
@@ -124,6 +124,15 @@ const MovieActionButtons = ({ onWatchOptions }) => {
         {movieDetails.isWatched ? <Check size={18} /> : <Eye size={18} />}
         <span>{movieDetails.isWatched ? 'Watched' : 'Watch'}</span>
       </button>
+
+      {!movieDetails.isCollected && (
+        <RequestButton 
+          tmdbId={movieDetails.id} 
+          type="movie" 
+          title={movieDetails.title} 
+          initialRequested={movieDetails.isRequested}
+        />
+      )}
 
       <div className="info-dropdown-container show-dropdown-container">
         <button
@@ -214,14 +223,6 @@ const MovieActionButtons = ({ onWatchOptions }) => {
       >
         TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
       </a>
-
-      {!movieDetails.isCollected && (
-          <RequestButton 
-            tmdbId={movieDetails.id} 
-            type="movie" 
-            title={movieDetails.title} 
-          />
-      )}
 
       <div className="info-dropdown-container">
         <button

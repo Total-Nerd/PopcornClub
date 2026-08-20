@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Tv, Star, Calendar, Clock, Check, Eye, EyeOff, Play, Plus } from 'lucide-react';
+import { ArrowLeft, Tv, Star, Calendar, Clock, Check, Eye, EyeOff, Play, Plus, ExternalLink } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 import { AuthContext } from '../context/AuthContext';
 import WatchOptionsModal from '../components/WatchOptionsModal';
@@ -166,6 +166,7 @@ const EpisodeDetails = () => {
     crew,
     isWatched,
     isCollected,
+    isRequested,
     localFile
   } = episodeDetails;
 
@@ -293,13 +294,48 @@ const EpisodeDetails = () => {
                   <span>{isWatched ? 'Watched' : 'Watch'}</span>
                 </button>
 
-                {!localFile && (
+                {episodeDetails.external_ids?.imdb_id && (
+                  <a
+                    href={`https://www.imdb.com/title/${episodeDetails.external_ids.imdb_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn"
+                    style={{
+                      background: '#f5c518',
+                      color: '#000000',
+                      fontWeight: 'bold',
+                      display: 'inline-flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    IMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+                  </a>
+                )}
+                
+                <a
+                  href={`https://www.themoviedb.org/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn"
+                  style={{
+                    background: '#01b4e4',
+                    color: '#ffffff',
+                    fontWeight: 'bold',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  TMDb <ExternalLink size={16} style={{ marginLeft: '6px' }} />
+                </a>
+
+                {!isCollected && !localFile && (
                    <RequestButton 
                      tmdbId={showDetails?.id} 
                      type="tv" 
                      title={showDetails?.name} 
                      season={seasonNumber}
                      episode={episodeNumber}
+                     initialRequested={isRequested}
                    />
                 )}
               </div>

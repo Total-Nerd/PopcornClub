@@ -28,7 +28,7 @@ router.get('/tv/:tmdbId', optionalAuth, async (req, res) => {
 
     const [tmdbData, creditsData, externalIdsData, videosData] = await Promise.all([
       fetchTMDB(`/3/tv/${parsedId}`, systemSettings.tmdbApiKey),
-      fetchTMDB(`/3/tv/${parsedId}/credits`, systemSettings.tmdbApiKey),
+      fetchTMDB(`/3/tv/${parsedId}/aggregate_credits`, systemSettings.tmdbApiKey),
       fetchTMDB(`/3/tv/${parsedId}/external_ids`, systemSettings.tmdbApiKey),
       fetchTMDB(`/3/tv/${parsedId}/videos`, systemSettings.tmdbApiKey).catch(() => ({ results: [] }))
     ]);
@@ -38,11 +38,13 @@ router.get('/tv/:tmdbId', optionalAuth, async (req, res) => {
       include: {
         collections: { where: { userId: req.user ? req.user.id : -1 } },
         episodeCollections: { where: { userId: req.user ? req.user.id : -1 } },
-        episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1 } }
+        episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1 } },
+        requests: { where: { userId: req.user ? req.user.id : -1, season: null, episode: null } }
       }
     });
 
     const isCollected = media ? media.collections.length > 0 : false;
+    const isRequested = media ? media.requests.length > 0 : false;
     const collectedEpisodes = media ? media.episodeCollections.map(e => ({ season: e.season, episode: e.episode })) : [];
     const watchedEpisodes = media ? media.episodeWatchHistory.map(e => ({ season: e.season, episode: e.episode })) : [];
 
@@ -50,10 +52,14 @@ router.get('/tv/:tmdbId', optionalAuth, async (req, res) => {
       ...tmdbData,
       poster_path: media?.posterPath || tmdbData.poster_path,
       backdrop_path: media?.backdropPath || tmdbData.backdrop_path,
-      cast: creditsData.cast?.slice(0, 30) || [],
+      cast: (creditsData.cast || []).slice(0, 30).map(c => ({
+        ...c,
+        character: c.roles ? c.roles.map(r => r.character).join(', ') : c.character
+      })),
       videos: videosData.results || [],
       external_ids: externalIdsData || {},
       isCollected,
+      isRequested,
       collectedEpisodes,
       watchedEpisodes,
       localId: media?.id
@@ -84,12 +90,14 @@ router.get('/movie/:tmdbId', optionalAuth, async (req, res) => {
       where: { tmdbId: parsedId, type: 'movie' },
       include: {
         collections: { where: { userId: req.user ? req.user.id : -1 } },
-        watchHistory: { where: { userId: req.user ? req.user.id : -1 } }
+        watchHistory: { where: { userId: req.user ? req.user.id : -1 } },
+        requests: { where: { userId: req.user ? req.user.id : -1 } }
       }
     });
 
     const isCollected = media ? media.collections.length > 0 : false;
     const isWatched = media ? media.watchHistory.length > 0 : false;
+    const isRequested = media ? media.requests.length > 0 : false;
 
     res.json({
       ...tmdbData,
@@ -99,6 +107,7 @@ router.get('/movie/:tmdbId', optionalAuth, async (req, res) => {
       videos: videosData.results || [],
       isCollected,
       isWatched,
+      isRequested,
       localId: media?.id
     });
   } catch (error) {
@@ -171,7 +180,7 @@ router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', optionalAu
     }
 
     const tmdbData = await fetchTMDB(`/3/tv/${parsedId}/season/${parsedSeason}/episode/${parsedEpisode}`, systemSettings.tmdbApiKey, {
-      append_to_response: 'credits,images'
+      append_to_response: 'credits,images,external_ids'
     });
 
     const media = await prisma.media.findFirst({
@@ -179,12 +188,14 @@ router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', optionalAu
       include: {
         episodeCollections: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason, episode: parsedEpisode } },
         episodeWatchHistory: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason, episode: parsedEpisode } },
-        localFiles: { where: { season: parsedSeason, episode: parsedEpisode } }
+        localFiles: { where: { season: parsedSeason, episode: parsedEpisode } },
+        requests: { where: { userId: req.user ? req.user.id : -1, season: parsedSeason, episode: parsedEpisode } }
       }
     });
 
     const isCollected = media ? media.episodeCollections.length > 0 : false;
     const isWatched = media ? media.episodeWatchHistory.length > 0 : false;
+    const isRequested = media ? media.requests.length > 0 : false;
     
     // Check if any file exists on disk
     let localFile = null;
@@ -209,6 +220,7 @@ router.get('/tv/:tmdbId/season/:seasonNumber/episode/:episodeNumber', optionalAu
       airDateTime,
       isCollected,
       isWatched,
+      isRequested,
       localFile
     });
   } catch (error) {
