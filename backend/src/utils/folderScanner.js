@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
+const cron = require('node-cron');
 const prisma = require('../prismaClient');
 const { fetchTMDB } = require('./tmdb');
 const { archiveRequestsOnCollect } = require('./requestManager');
@@ -664,8 +665,8 @@ function startWatcher(folderRecord) {
     persistent: true,
     ignoreInitial: true,
     usePolling: true,
-    interval: 20000, // 20 seconds polling interval
-    binaryInterval: 25000
+    interval: 60000,
+    binaryInterval: 60000
   });
 
   watcher.on('add', async (filePath) => {
@@ -818,8 +819,8 @@ async function initFolderScanner() {
     console.error('[Folder Scanner] Failed to auto-configure default folders:', err.message);
   }
 
-  // 1. Start periodic scans every 4 hours
-  setInterval(scanAllFolders, 4 * 60 * 60 * 1000);
+  // 1. Schedule full scans once a day at 2:00 AM
+  cron.schedule('0 2 * * *', scanAllFolders);
 
   // 2. Start hourly cleanup checks for 12-hour expiration rule
   setInterval(runCleanupJob, 60 * 60 * 1000);
@@ -834,8 +835,8 @@ async function initFolderScanner() {
     console.error('[Folder Scanner] Failed to initialize watchers:', err.message);
   }
 
-  // 4. Run an initial scan of folders on startup asynchronously
-  setTimeout(scanAllFolders, 5000);
+  // 4. Initial scan on startup is disabled to reduce CPU load.
+  // setTimeout(scanAllFolders, 5000);
 }
 
 function matchDirectoryToMedia(dirName, media) {
