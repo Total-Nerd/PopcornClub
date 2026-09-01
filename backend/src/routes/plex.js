@@ -310,11 +310,24 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
 
           if (recentIncomplete) {
             const currentSessions = Array.isArray(recentIncomplete.sessions) ? recentIncomplete.sessions : [];
-            const newSession = {
-              startOffset: recentIncomplete.viewOffset,
-              endOffset: finalViewOffsetSec,
-              timestamp: new Date().toISOString()
-            };
+            let updatedSessions = [...currentSessions];
+            
+            const sessionDurationSec = finalViewOffsetSec - recentIncomplete.viewOffset;
+            const sessionPercentage = finalDurationSec > 0 ? (sessionDurationSec / finalDurationSec) : 0;
+            
+            if (sessionDurationSec <= 0) {
+              // Ignore 0% or negative view sessions
+            } else if (sessionPercentage < 0.1 && updatedSessions.length > 0) {
+              // Merge into previous session
+              updatedSessions[updatedSessions.length - 1].endOffset = finalViewOffsetSec;
+              updatedSessions[updatedSessions.length - 1].timestamp = new Date().toISOString();
+            } else {
+              updatedSessions.push({
+                startOffset: recentIncomplete.viewOffset,
+                endOffset: finalViewOffsetSec,
+                timestamp: new Date().toISOString()
+              });
+            }
 
             await prisma.watchHistoryLog.update({
               where: { id: recentIncomplete.id },
@@ -323,7 +336,7 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                 duration: finalDurationSec,
                 isCompleted: isCompleted,
                 watchedAt: new Date(),
-                sessions: [...currentSessions, newSession]
+                sessions: updatedSessions
               }
             });
             console.log(`[Plex Webhook] Updated existing watch log for Movie ${metadata.title} (User: ${user.username}, completed: ${isCompleted})`);
@@ -473,11 +486,24 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
 
               if (recentIncomplete) {
                 const currentSessions = Array.isArray(recentIncomplete.sessions) ? recentIncomplete.sessions : [];
-                const newSession = {
-                  startOffset: recentIncomplete.viewOffset,
-                  endOffset: finalViewOffsetSec,
-                  timestamp: new Date().toISOString()
-                };
+                let updatedSessions = [...currentSessions];
+                
+                const sessionDurationSec = finalViewOffsetSec - recentIncomplete.viewOffset;
+                const sessionPercentage = finalDurationSec > 0 ? (sessionDurationSec / finalDurationSec) : 0;
+                
+                if (sessionDurationSec <= 0) {
+                  // Ignore 0% or negative view sessions
+                } else if (sessionPercentage < 0.1 && updatedSessions.length > 0) {
+                  // Merge into previous session
+                  updatedSessions[updatedSessions.length - 1].endOffset = finalViewOffsetSec;
+                  updatedSessions[updatedSessions.length - 1].timestamp = new Date().toISOString();
+                } else {
+                  updatedSessions.push({
+                    startOffset: recentIncomplete.viewOffset,
+                    endOffset: finalViewOffsetSec,
+                    timestamp: new Date().toISOString()
+                  });
+                }
 
                 await prisma.watchHistoryLog.update({
                   where: { id: recentIncomplete.id },
@@ -486,7 +512,7 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
                     duration: finalDurationSec,
                     isCompleted: isCompleted,
                     watchedAt: new Date(),
-                    sessions: [...currentSessions, newSession]
+                    sessions: updatedSessions
                   }
                 });
                 console.log(`[Plex Webhook] Updated existing watch log for Episode S${season}E${episode} of ${showTitle} (User: ${user.username}, completed: ${isCompleted})`);
