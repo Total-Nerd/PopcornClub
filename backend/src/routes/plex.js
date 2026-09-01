@@ -25,6 +25,39 @@ function isDuplicateScrobble(key) {
   return false;
 }
 
+function extractYear(title, metadataYear) {
+  const match = title ? title.match(/\s*\((\d{4})\)\s*$/) : null;
+  return match ? parseInt(match[1], 10) : (metadataYear ? parseInt(metadataYear, 10) : undefined);
+}
+
+async function resolveLocalMedia(prisma, title, type, metadataYear, includeOptions = undefined) {
+  if (!title) return null;
+  
+  let media = await prisma.media.findFirst({
+    where: { title: { equals: title, mode: 'insensitive' }, ...(type ? { type } : {}) },
+    ...(includeOptions ? { include: includeOptions } : {})
+  });
+  if (media) return media;
+
+  const cleanTitle = title.replace(/\s*\(\d{4}\)\s*$/, '');
+  if (cleanTitle !== title) {
+    const matchedMedias = await prisma.media.findMany({
+      where: { title: { equals: cleanTitle, mode: 'insensitive' }, ...(type ? { type } : {}) },
+      ...(includeOptions ? { include: includeOptions } : {})
+    });
+    
+    if (matchedMedias.length > 0) {
+      const targetYear = extractYear(title, metadataYear);
+      if (targetYear) {
+        const yearMatchedMedia = matchedMedias.find(m => m.releaseDate && new Date(m.releaseDate).getFullYear() === targetYear);
+        if (yearMatchedMedia) return yearMatchedMedia;
+      }
+      return matchedMedias[0];
+    }
+  }
+  return null;
+}
+
 // Process Plex Webhook payload for a specific User
 async function handlePlexWebhook(payload, user, res, isReplicated = false) {
   if (!user) {
@@ -67,10 +100,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
       // 2. Check Default Watch Together for this specific Media
       const mediaTitle = payload.Metadata.type === 'episode' ? (payload.Metadata.grandparentTitle || payload.Metadata.title) : payload.Metadata.title;
       if (mediaTitle) {
-        const matchedMedia = await prisma.media.findFirst({
-          where: { title: { equals: mediaTitle, mode: 'insensitive' } },
-          include: { defaultWatchTogethers: { where: { userId: user.id } } }
-        });
+        const matchedMedia = await resolveLocalMedia(prisma, mediaTitle, undefined, payload.Metadata.year, { defaultWatchTogethers: { where: { userId: user.id } } });
+
         if (matchedMedia && matchedMedia.defaultWatchTogethers && matchedMedia.defaultWatchTogethers.length > 0) {
           const defaultIds = JSON.parse(matchedMedia.defaultWatchTogethers[0].participantIds || '[]');
           participantIds = [...participantIds, ...defaultIds];
@@ -160,16 +191,12 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
       let posterPath = null;
       let tmdbId = null;
       const mediaTitle = metadata.type === 'episode' ? (metadata.grandparentTitle || metadata.title) : metadata.title;
+      const cleanMediaTitle = mediaTitle.replace(/\s*\(\d{4}\)\s*$/, '');
+      const targetYear = extractYear(mediaTitle, metadata.year);
       
       try {
-        const matchedMedia = await prisma.media.findFirst({
-          where: {
-            title: {
-              equals: mediaTitle,
-              mode: 'insensitive'
-            }
-          }
-        });
+        const matchedMedia = await resolveLocalMedia(prisma, mediaTitle, undefined, metadata.year);
+
         if (matchedMedia) {
           posterPath = matchedMedia.posterPath;
           tmdbId = matchedMedia.tmdbId;
@@ -178,7 +205,8 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
           const isTV = metadata.type === 'episode';
           const searchEndpoint = isTV ? '/3/search/tv' : '/3/search/movie';
           const searchResults = await fetchTMDB(searchEndpoint, tmdbApiKey, {
-            query: mediaTitle
+            query: cleanMediaTitle,
+            ...(isTV ? (targetYear ? { first_air_date_year: targetYear } : {}) : (targetYear ? { year: targetYear } : {}))
           });
           if (searchResults && searchResults.results && searchResults.results.length > 0) {
             const bestMatch = searchResults.results[0];
@@ -216,38 +244,36 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
   if (metadata.type === 'movie') {
     const tmdbId = metadata.tmdbId;
     let media = null;
+    const cleanMovieTitle = metadata.title ? metadata.title.replace(/\s*\(\d{4}\)\s*$/, '') : '';
+    const targetYear = extractYear(metadata.title, metadata.year);
+
     if (tmdbId) {
       media = await prisma.media.findFirst({ where: { tmdbId, type: 'movie' } });
     } else {
-      media = await prisma.media.findFirst({
-        where: {
-          title: {
-            equals: metadata.title,
-            mode: 'insensitive'
-          },
-          type: 'movie'
-        }
-      });
+      media = await resolveLocalMedia(prisma, metadata.title, 'movie', metadata.year);
     }
 
     if (!media && tmdbApiKey && metadata.title) {
       try {
         const searchResults = await fetchTMDB('/3/search/movie', tmdbApiKey, {
-          query: metadata.title,
-          year: metadata.year
+          query: cleanMovieTitle || metadata.title,
+          ...(targetYear ? { year: targetYear } : {})
         });
         if (searchResults && searchResults.results && searchResults.results.length > 0) {
           const bestMatch = searchResults.results[0];
-          media = await prisma.media.create({
-            data: {
-              tmdbId: bestMatch.id,
-              type: 'movie',
-              title: bestMatch.title,
-              overview: bestMatch.overview || '',
-              releaseDate: bestMatch.release_date ? new Date(bestMatch.release_date) : null,
-              posterPath: bestMatch.poster_path
-            }
-          });
+          media = await prisma.media.findFirst({ where: { tmdbId: bestMatch.id, type: 'movie' } });
+          if (!media) {
+            media = await prisma.media.create({
+              data: {
+                tmdbId: bestMatch.id,
+                type: 'movie',
+                title: bestMatch.title,
+                overview: bestMatch.overview || '',
+                releaseDate: bestMatch.release_date ? new Date(bestMatch.release_date) : null,
+                posterPath: bestMatch.poster_path
+              }
+            });
+          }
         }
       } catch (err) {
         console.error('[Plex Webhook] Error fetching movie metadata from TMDB:', err.message);
@@ -388,33 +414,35 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
         return res.sendStatus(200);
       }
 
-      let media = null;
-      if (metadata.grandparentTitle) {
-        media = await prisma.media.findFirst({
-          where: { title: { equals: metadata.grandparentTitle, mode: 'insensitive' }, type: 'tv' }
-        });
-      }
+      const cleanShowTitle = showTitle.replace(/\s*\(\d{4}\)\s*$/, '');
+      const targetYear = extractYear(metadata.grandparentTitle, metadata.year) || extractYear(metadata.title, metadata.year);
+      let media = await resolveLocalMedia(prisma, metadata.grandparentTitle, 'tv', metadata.year);
+      
       if (!media && showTitle) {
-        media = await prisma.media.findFirst({
-          where: { title: { equals: showTitle, mode: 'insensitive' }, type: 'tv' }
-        });
+        media = await resolveLocalMedia(prisma, showTitle, 'tv', metadata.year);
       }
 
       if (!media && tmdbApiKey) {
         try {
-          const searchResults = await fetchTMDB('/3/search/tv', tmdbApiKey, { query: showTitle });
+          const searchResults = await fetchTMDB('/3/search/tv', tmdbApiKey, { 
+            query: cleanShowTitle,
+            ...(targetYear ? { first_air_date_year: targetYear } : {})
+          });
           if (searchResults?.results?.length > 0) {
             const bestMatch = searchResults.results[0];
-            media = await prisma.media.create({
-              data: {
-                tmdbId: bestMatch.id,
-                type: 'tv',
-                title: bestMatch.name,
-                overview: bestMatch.overview || '',
-                releaseDate: bestMatch.first_air_date ? new Date(bestMatch.first_air_date) : null,
-                posterPath: bestMatch.poster_path
-              }
-            });
+            media = await prisma.media.findFirst({ where: { tmdbId: bestMatch.id, type: 'tv' } });
+            if (!media) {
+              media = await prisma.media.create({
+                data: {
+                  tmdbId: bestMatch.id,
+                  type: 'tv',
+                  title: bestMatch.name,
+                  overview: bestMatch.overview || '',
+                  releaseDate: bestMatch.first_air_date ? new Date(bestMatch.first_air_date) : null,
+                  posterPath: bestMatch.poster_path
+                }
+              });
+            }
           }
         } catch (err) {
           console.error('[Plex Webhook] Error fetching show metadata from TMDB:', err.message);
