@@ -5,6 +5,7 @@ import { useModal } from '../context/ModalContext';
 import { Check, X, Trash2, Archive, Loader, AlertTriangle, Film, Tv, Clock, RotateCcw, Plus, Copy, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import LazyImage from '../components/LazyImage';
+import { copyToClipboard } from '../utils/clipboard';
 
 const RequestsPage = () => {
   const { user } = useContext(AuthContext);
@@ -20,6 +21,26 @@ const RequestsPage = () => {
   const [autoReject, setAutoReject] = useState(false);
   const [sortBy, setSortBy] = useState('requestDate');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [copiedId, setCopiedId] = useState(null);
+
+  const handleCopyText = async (e, text, id, message) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const success = await copyToClipboard(text);
+    if (success) {
+      showAlert(message, 'success');
+      if (id) {
+        setCopiedId(id);
+        setTimeout(() => {
+          setCopiedId(prev => (prev === id ? null : prev));
+        }, 2000);
+      }
+    } else {
+      showAlert('Failed to copy to clipboard', 'error');
+    }
+  };
 
   const STATUS_ORDER = {
     pending: 1,
@@ -324,15 +345,28 @@ const RequestsPage = () => {
                             </Link>
                             {user?.role === 'admin' && (
                               <button 
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  navigator.clipboard.writeText(getRequestTitle(req));
-                                  showAlert('Copied title to clipboard', 'success');
+                                type="button"
+                                onClick={(e) => handleCopyText(e, getRequestTitle(req), `title-${req.id}`, 'Copied title to clipboard')}
+                                className={`calendar-copy-btn ${copiedId === `title-${req.id}` ? 'copied' : ''}`}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: copiedId === `title-${req.id}` ? 'var(--success)' : 'var(--text-muted)',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '2px 4px',
+                                  borderRadius: '4px',
+                                  flexShrink: 0
                                 }}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, padding: '4px' }}
                                 title="Copy Title"
                               >
-                                <Copy size={14} />
+                                {copiedId === `title-${req.id}` ? (
+                                  <Check size={13} strokeWidth={2.5} />
+                                ) : (
+                                  <Copy size={13} />
+                                )}
                               </button>
                             )}
                           </div>
@@ -426,14 +460,28 @@ const RequestsPage = () => {
                               {req.imdbId}
                             </a>
                             <button 
-                              onClick={() => {
-                                navigator.clipboard.writeText(req.imdbId);
-                                showAlert('Copied IMDb code to clipboard', 'success');
+                              type="button"
+                              onClick={(e) => handleCopyText(e, req.imdbId, `imdb-${req.id}`, 'Copied IMDb code to clipboard')}
+                              className={`calendar-copy-btn ${copiedId === `imdb-${req.id}` ? 'copied' : ''}`}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: copiedId === `imdb-${req.id}` ? 'var(--success)' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '2px 4px',
+                                borderRadius: '4px',
+                                flexShrink: 0
                               }}
-                              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
                               title="Copy IMDb ID"
                             >
-                              <Copy size={14} />
+                              {copiedId === `imdb-${req.id}` ? (
+                                <Check size={13} strokeWidth={2.5} />
+                              ) : (
+                                <Copy size={13} />
+                              )}
                             </button>
                           </div>
                         ) : (

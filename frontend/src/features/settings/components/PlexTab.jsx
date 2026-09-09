@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, ShieldAlert, Check, Copy } from 'lucide-react';
 import api from '../../../api';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 const PlexTab = ({ user, setUser, setIsError, setMessage }) => {
   const [plexUser, setPlexUser] = useState(user?.plexUser || '');
@@ -13,18 +14,22 @@ const PlexTab = ({ user, setUser, setIsError, setMessage }) => {
     }
   }, [user]);
 
-  const handleCopyWebhookUrl = () => {
+  const handleCopyWebhookUrl = async () => {
     const url = `${window.location.protocol}//${window.location.host}/api/webhook/plex/${user.plexWebhookToken}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const success = await copyToClipboard(url);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
-  const handleCopyGlobalWebhookUrl = () => {
+  const handleCopyGlobalWebhookUrl = async () => {
     const url = `${window.location.protocol}//${window.location.host}/api/webhook/plex/global/${user.plexGlobalWebhookToken}`;
-    navigator.clipboard.writeText(url);
-    setGlobalCopied(true);
-    setTimeout(() => setGlobalCopied(false), 2000);
+    const success = await copyToClipboard(url);
+    if (success) {
+      setGlobalCopied(true);
+      setTimeout(() => setGlobalCopied(false), 2000);
+    }
   };
 
   const handlePlexSave = async (e) => {

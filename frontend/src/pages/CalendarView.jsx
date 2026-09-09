@@ -14,6 +14,7 @@ import CalendarControls from '../features/calendar/components/CalendarControls';
 import EventPopover from '../features/calendar/components/EventPopover';
 import SwipeableEventCard from '../features/calendar/components/SwipeableEventCard';
 import DesktopEventCard from '../features/calendar/components/DesktopEventCard';
+import { copyToClipboard } from '../utils/clipboard';
 
 const CalendarView = () => {
   const { user } = useContext(AuthContext);
@@ -113,46 +114,22 @@ const CalendarView = () => {
     }
   }, [loading, viewMode, isMobile]);
 
-  // Copy helper
-  const copyToClipboard = async (text) => {
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch (err) {
-      console.warn('Navigator clipboard failed, attempting fallback:', err);
-    }
-    try {
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-999999px';
-      textArea.style.top = '-999999px';
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      const successful = document.execCommand('copy');
-      textArea.remove();
-      return successful;
-    } catch (fallbackErr) {
-      console.error('Fallback clipboard copy failed:', fallbackErr);
-      return false;
-    }
-  };
-
-  const handleCopyText = (e, text, id) => {
+  const handleCopyText = async (e, text, id) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    copyToClipboard(text);
-    showAlert(`Copied "${text}" to clipboard`, 'success');
-    if (id) {
-      setCopiedId(id);
-      setTimeout(() => {
-        setCopiedId(prev => (prev === id ? null : prev));
-      }, 2000);
+    const success = await copyToClipboard(text);
+    if (success) {
+      showAlert(`Copied "${text}" to clipboard`, 'success');
+      if (id) {
+        setCopiedId(id);
+        setTimeout(() => {
+          setCopiedId(prev => (prev === id ? null : prev));
+        }, 2000);
+      }
+    } else {
+      showAlert('Failed to copy to clipboard', 'error');
     }
   };
 

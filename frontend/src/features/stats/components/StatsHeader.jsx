@@ -3,6 +3,7 @@ import { User, Share2, Tv, Film } from 'lucide-react';
 import { useStatsStore } from '../store/useStatsStore';
 import { useModal } from '../../../context/ModalContext';
 import { formatWatchTime } from '../utils';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 const StatsHeader = () => {
   const { stats, mediaTypeFilter, getActiveSummary } = useStatsStore();
@@ -11,12 +12,16 @@ const StatsHeader = () => {
 
   const { currentSummary, activePlayCount, activeMinutes } = getActiveSummary();
 
-  const handleCopyShareLink = () => {
+  const handleCopyShareLink = async () => {
     const shareUrl = `${window.location.protocol}//${window.location.host}/stats/${stats?.user?.username}`;
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    showAlert('Share link copied to clipboard!', 'success');
-    setTimeout(() => setCopied(false), 2000);
+    const success = await copyToClipboard(shareUrl);
+    if (success) {
+      setCopied(true);
+      showAlert('Share link copied to clipboard!', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      showAlert('Failed to copy share link to clipboard', 'error');
+    }
   };
 
   return (

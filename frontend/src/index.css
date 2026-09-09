@@ -3821,3 +3821,23 @@ select option {
 .highlight-comment {
   animation: highlightFade 3s ease-out forwards;
 }
+
+/* Copy button styling (matching calendar view) */
+.calendar-copy-btn {
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.calendar-copy-btn:hover {
+  opacity: 1 !important;
+  color: var(--text-main) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: scale(1.1);
+}
+.calendar-copy-btn:active {
+  transform: scale(0.95);
+}
+.calendar-copy-btn.copied,
+.calendar-copy-btn.copied:hover {
+  color: var(--success) !important;
+  opacity: 1 !important;
+}
