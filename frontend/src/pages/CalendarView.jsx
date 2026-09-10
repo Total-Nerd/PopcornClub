@@ -24,6 +24,14 @@ const CalendarView = () => {
 
   const [copiedId, setCopiedId] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedEmptyDays, setExpandedEmptyDays] = useState({});
+
+  const toggleEmptyDayExpand = (dateStr) => {
+    setExpandedEmptyDays(prev => ({
+      ...prev,
+      [dateStr]: !prev[dateStr]
+    }));
+  };
   
   const [activePopover, setActivePopover] = useState(null);
   const hoverTimeoutRef = useRef(null);
@@ -528,10 +536,59 @@ const CalendarView = () => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
+              const isEmpty = dayEvents.length === 0;
+              const isCollapsed = isEmpty && (
+                expandedEmptyDays[dateStr] !== undefined
+                  ? !expandedEmptyDays[dateStr]
+                  : !isToday
+              );
+
+              if (isCollapsed) {
+                return (
+                  <div
+                    key={idx}
+                    className={`calendar-week-column is-empty-collapsed ${isToday ? 'is-today' : ''}`}
+                    onClick={() => toggleEmptyDayExpand(dateStr)}
+                    title={`Click to expand ${format(day, 'EEEE, MMM d')}`}
+                  >
+                    <div className="calendar-accordion-strip">
+                      <div className="calendar-accordion-strip-header">
+                        <div className="calendar-accordion-day-name">
+                          {weekDaysHeader[idx]}
+                        </div>
+                        <div
+                          className="calendar-accordion-day-number"
+                          style={{ color: isToday ? 'var(--accent)' : 'var(--text-muted)' }}
+                        >
+                          {day.getDate()}
+                        </div>
+                      </div>
+                      <div className="calendar-accordion-strip-body">
+                        <div className="calendar-accordion-vertical-text">
+                          {weekDaysHeader[idx]} {day.getDate()} • No Airings
+                        </div>
+                        <ChevronRight size={14} className="calendar-accordion-expand-icon" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
-                <div key={idx} className={`calendar-week-column ${isToday ? 'is-today' : ''} ${dayEvents.length === 0 ? 'is-empty' : ''}`}>
-                  <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+                <div key={idx} className={`calendar-week-column ${isToday ? 'is-today' : ''} ${isEmpty ? 'is-empty' : ''}`}>
+                  <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px', position: 'relative' }}>
+                    {isEmpty && (
+                      <button
+                        type="button"
+                        onClick={() => toggleEmptyDayExpand(dateStr)}
+                        className="calendar-column-collapse-btn"
+                        title={`Collapse ${format(day, 'EEEE')}`}
+                        style={{ position: 'absolute', right: 0, top: 0 }}
+                      >
+                        <ChevronLeft size={13} />
+                        <span>Collapse</span>
+                      </button>
+                    )}
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>
                       {weekDaysHeader[idx]}
                     </div>
@@ -552,9 +609,17 @@ const CalendarView = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                    {dayEvents.length === 0 ? (
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
-                        No Airings
+                    {isEmpty ? (
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', gap: '10px' }}>
+                        <span>No Airings</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleEmptyDayExpand(dateStr)}
+                          className="btn btn-secondary"
+                          style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                        >
+                          Collapse day
+                        </button>
                       </div>
                     ) : (
                       groupDayEvents(dayEvents).map(ev => renderEventCard(ev))

@@ -243,7 +243,16 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
           boxSizing: 'border-box'
         }}
       >
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative' }}>
+        {poster && (
+          <div className="calendar-card-ambient">
+            <div
+              className="calendar-card-ambient-image"
+              style={{ backgroundImage: `url(https://image.tmdb.org/t/p/w185${poster})` }}
+            />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
           {poster ? (
             <Link
               to={ev.type === 'tv' ? `/shows/${ev.tmdbId}` : `/movies/${ev.tmdbId}`}
@@ -254,7 +263,7 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
               <img
                 src={`https://image.tmdb.org/t/p/w185${poster}`}
                 alt={title}
-                style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover' }}
+                style={{ width: '70px', borderRadius: '4px', aspectRatio: '2/3', objectFit: 'cover', boxShadow: '0 4px 10px rgba(0,0,0,0.35)' }}
               />
             </Link>
           ) : (
@@ -373,7 +382,7 @@ const SwipeableEventCard = ({ ev, onToggleWatch, onToggleCollect, onOpenDetails,
         </div>
 
         {ev.isStacked && expandedStacks[ev.id] && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px', position: 'relative', zIndex: 1 }} onClick={e => e.stopPropagation()}>
             {ev.originalEpisodes.map(subEv => (
               <div key={subEv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
