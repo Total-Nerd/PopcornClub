@@ -56,7 +56,7 @@ const PlexTab = ({ user, setUser, setIsError, setMessage }) => {
         <span>Plex Scrobble & Webhook</span>
       </h2>
       <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
-        Link your TVTracker account to a Plex Media Server to record play/pause events and track watch histories in real-time.
+        Link your PopcornClub account to a Plex Media Server to record play/pause events and track watch histories in real-time.
       </p>
 
       {user?.role === 'admin' && (
@@ -115,7 +115,7 @@ const PlexTab = ({ user, setUser, setIsError, setMessage }) => {
                     Last successful global webhook event received on: <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{new Date(user.plexGlobalLastWebhookAt).toLocaleString()}</span>
                   </>
                 ) : (
-                  'No global webhook events received yet. TVTracker is waiting to receive its first scrobble playback status from your Plex server.'
+                  'No global webhook events received yet. PopcornClub is waiting to receive its first scrobble playback status from your Plex server.'
                 )}
               </div>
             </div>
@@ -206,7 +206,7 @@ const PlexTab = ({ user, setUser, setIsError, setMessage }) => {
                   Last successful private webhook event received on: <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{new Date(user.plexLastWebhookAt).toLocaleString()}</span>
                 </>
               ) : (
-                'No private webhook events received yet. TVTracker is waiting to receive its first scrobble playback status from your Plex server.'
+                'No private webhook events received yet. PopcornClub is waiting to receive its first scrobble playback status from your Plex server.'
               )}
             </div>
           </div>

@@ -3,7 +3,7 @@
  * Handles IndexedDB operations and background prefetching for the 6-Month calendar cache.
  */
 
-const DB_NAME = 'TVTrackerPWA';
+const DB_NAME = 'PopcornClubPWA';
 const DB_VERSION = 1;
 const STORE_NAME = 'calendar-events';
 
@@ -25,7 +25,7 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('appinstalled', () => {
-    console.log('[PWA] TVTracker has been installed successfully!');
+    console.log('[PWA] PopcornClub has been installed successfully!');
     deferredPrompt = null;
     if (installCallback) {
       installCallback(false);

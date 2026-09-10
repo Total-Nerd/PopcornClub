@@ -78,7 +78,7 @@ const TraktTab = ({ user, setUser, setIsError, setMessage, setSyncing, setSyncPr
         <span>Trakt TV Sync</span>
       </h2>
       <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
-        Pull collections and histories from your Trakt TV profile directly into your custom TVTracker library lists.
+        Pull collections and histories from your Trakt TV profile directly into your custom PopcornClub library lists.
       </p>
 
       <form onSubmit={handleTraktSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Tv, ArrowLeft, Loader2 } from 'lucide-react';
+import { Popcorn, ArrowLeft, Loader2 } from 'lucide-react';
 import api from '../api';
 
 const Login = () => {
@@ -121,8 +121,8 @@ const Login = () => {
       <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
         <div className="glass-panel" style={{ width: '400px' }}>
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-            <Tv size={48} color="var(--accent)" />
-            <h2 style={{ marginTop: '16px' }}>Welcome to TVTracker</h2>
+            <Popcorn size={48} color="var(--accent)" />
+            <h2 style={{ marginTop: '16px' }}>Welcome to PopcornClub</h2>
             <p style={{ color: 'var(--text-muted)' }}>Create your admin account</p>
           </div>
 
@@ -162,7 +162,7 @@ const Login = () => {
     <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
       <div className="glass-panel" style={{ width: '400px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <Tv size={48} color="var(--accent)" style={{ margin: '0 auto' }} />
+          <Popcorn size={48} color="var(--accent)" style={{ margin: '0 auto' }} />
           <h2 style={{ marginTop: '16px' }}>Welcome Back</h2>
           <p style={{ color: 'var(--text-muted)' }}>Please log in to continue</p>
         </div>

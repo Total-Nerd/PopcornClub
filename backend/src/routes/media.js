@@ -308,7 +308,7 @@ router.post('/import-trakt', async (req, res) => {
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
       'trakt-api-key': traktApiKey,
-      'User-Agent': 'TVTracker/1.0'
+      'User-Agent': 'PopcornClub/1.0'
     };
     const tmdbApiKey = systemSettings?.tmdbApiKey;
 

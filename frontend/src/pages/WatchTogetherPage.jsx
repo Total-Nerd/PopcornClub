@@ -260,7 +260,7 @@ const WatchTogetherPage = () => {
 
         {shareableUsers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-            No other user accounts registered in TVTracker.
+            No other user accounts registered in PopcornClub.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
