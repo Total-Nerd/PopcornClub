@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'tvtracker-static-v3';
-const IMAGE_CACHE = 'tvtracker-images-v1';
+const STATIC_CACHE = 'popcornclub-static-v1';
+const IMAGE_CACHE = 'popcornclub-images-v1';
 
 // Asset types we want to cache on-the-fly
 const CACHEABLE_EXTENSIONS = ['.js', '.css', '.svg', '.png', '.jpg', '.jpeg', '.woff2', '.json'];

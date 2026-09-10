@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users, ListPlus, Activity } from 'lucide-react';
+import { Popcorn, Tv, Calendar, List, Settings, Search, Film, ChevronLeft, ChevronRight, History, User, AlertTriangle, LogOut, BarChart2, Users, ListPlus, Activity } from 'lucide-react';
 import MobileBottomSheet from '../components/MobileBottomSheet';
 import { AuthContext } from '../context/AuthContext';
 
@@ -15,8 +15,8 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
-        <Tv size={32} />
-        <span>TVTracker</span>
+        <Popcorn size={32} />
+        <span>PopcornClub</span>
       </div>
 
       <nav className="sidebar-nav">

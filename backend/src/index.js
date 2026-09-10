@@ -74,7 +74,7 @@ initWebSocket(server);
 
 // Start Server
 server.listen(PORT, async () => {
-  console.log(`TVTracker backend running on port ${PORT}`);
+  console.log(`PopcornClub backend running on port ${PORT}`);
   try {
     await seedWatchHistoryLogs();
     await cleanupDuplicateWatchLogs();

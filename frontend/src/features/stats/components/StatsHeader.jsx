@@ -72,7 +72,7 @@ const StatsHeader = () => {
           </div>
 
           <span style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.18em' }}>
-            TVTracker Wrapped
+            PopcornClub Wrapped
           </span>
 
           <h1 style={{ 

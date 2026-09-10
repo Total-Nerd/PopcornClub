@@ -6,7 +6,7 @@ const host = process.env.SMTP_HOST || '';
 const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
 const user = process.env.SMTP_USER || '';
 const pass = process.env.SMTP_PASS || '';
-const from = process.env.SMTP_FROM || 'no-reply@tvtracker.local';
+const from = process.env.SMTP_FROM || 'no-reply@popcornclub.local';
 
 if (host && user && pass) {
   transporter = nodemailer.createTransport({
@@ -30,14 +30,14 @@ if (host && user && pass) {
  * @param {string} inviteLink - Setup link
  */
 async function sendInvitationEmail(email, name, inviteLink) {
-  const subject = 'Welcome to TVTracker - Complete Your Account Setup';
-  const textBody = `Hello ${name || 'Watcher'},\n\nYou have been invited to join TVTracker!\n\nClick the link below to set up your password and access your account:\n${inviteLink}\n\nBest regards,\nTVTracker Team`;
+  const subject = 'Welcome to PopcornClub - Complete Your Account Setup';
+  const textBody = `Hello ${name || 'Watcher'},\n\nYou have been invited to join PopcornClub!\n\nClick the link below to set up your password and access your account:\n${inviteLink}\n\nBest regards,\nPopcornClub Team`;
   
   const htmlBody = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-      <h2 style="color: #3b82f6;">Welcome to TVTracker!</h2>
+      <h2 style="color: #3b82f6;">Welcome to PopcornClub!</h2>
       <p>Hello ${name || 'Watcher'},</p>
-      <p>You have been invited to join TVTracker to track your shows, movies, collections, and watch history.</p>
+      <p>You have been invited to join PopcornClub to track your shows, movies, collections, and watch history.</p>
       <p style="margin: 24px 0;">
         <a href="${inviteLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Set Up Your Password</a>
       </p>
@@ -53,7 +53,7 @@ async function sendInvitationEmail(email, name, inviteLink) {
   if (transporter) {
     try {
       await transporter.sendMail({
-        from: `TVTracker <${from}>`,
+        from: `PopcornClub <${from}>`,
         to: email,
         subject,
         text: textBody,
@@ -74,7 +74,7 @@ function logMockEmail(email, name, inviteLink) {
   console.log('\n================== MOCK INVITATION EMAIL ==================');
   console.log(`TO: ${email}`);
   console.log(`NAME: ${name || 'Watcher'}`);
-  console.log('SUBJECT: Welcome to TVTracker - Complete Your Account Setup');
+  console.log('SUBJECT: Welcome to PopcornClub - Complete Your Account Setup');
   console.log('SETUP LINK:');
   console.log(inviteLink);
   console.log('===========================================================\n');
@@ -157,7 +157,7 @@ async function sendAdminRequestNotification(admins, media, requester, season = n
     if (transporter) {
       try {
         await transporter.sendMail({
-          from: `TVTracker <${from}>`,
+          from: `PopcornClub <${from}>`,
           to: admin.email,
           subject,
           text: textBody,
@@ -251,7 +251,7 @@ async function sendUserRequestUpdateNotification(user, media, actionType, reason
   if (transporter) {
     try {
       await transporter.sendMail({
-        from: `TVTracker <${from}>`,
+        from: `PopcornClub <${from}>`,
         to: user.email,
         subject,
         text: textBody,
@@ -317,7 +317,7 @@ async function sendListInvitationEmail(email, inviterUsername, listName, listLin
 
   try {
     await transporter.sendMail({
-      from: `TVTracker <${from}>`,
+      from: `PopcornClub <${from}>`,
       to: email,
       subject,
       text: textBody,
@@ -359,7 +359,7 @@ async function sendMentionEmail(email, username, commenterName, commentContent, 
   if (transporter) {
     try {
       await transporter.sendMail({
-        from: `TVTracker <${from}>`,
+        from: `PopcornClub <${from}>`,
         to: email,
         subject,
         text: textBody,

@@ -190,7 +190,7 @@ const SystemTab = ({ user }) => {
             <span>Library & Server Configuration</span>
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Modify global TVTracker connections, API keys, and monitor library folders.
+            Modify global PopcornClub connections, API keys, and monitor library folders.
           </p>
         </div>
 

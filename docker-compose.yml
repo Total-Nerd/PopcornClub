@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:15-alpine
-    container_name: tvtracker-db
+    container_name: popcornclub-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: tvtracker
@@ -15,7 +15,7 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: tvtracker-backend
+    container_name: popcornclub-backend
     restart: unless-stopped
     ports:
       - "3002:3001"
@@ -42,7 +42,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: tvtracker-frontend
+    container_name: popcornclub-frontend
     restart: unless-stopped
     ports:
       - "8082:80"

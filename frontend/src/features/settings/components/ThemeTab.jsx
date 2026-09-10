@@ -329,7 +329,7 @@ const ThemeTab = () => {
           <span>PWA & Offline Calendar Sync</span>
         </h3>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '20px' }}>
-          TVTracker can cache upcoming movie and show release dates for the next 6 months locally. This enables offline access to the release calendar when disconnected.
+          PopcornClub can cache upcoming movie and show release dates for the next 6 months locally. This enables offline access to the release calendar when disconnected.
         </p>
 
         <div style={{ background: 'var(--overlay-subtle)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-color)', marginBottom: '20px', fontSize: '0.85rem' }}>
