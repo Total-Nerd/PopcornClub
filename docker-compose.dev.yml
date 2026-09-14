@@ -14,10 +14,9 @@ services:
 
   backend:
     build:
-      context: https://${GITHUB_TOKEN:+${GITHUB_TOKEN}@}github.com/Total-Nerd/PopcornClub.git#${GIT_REF:-main}:backend
+      context: ./backend
     container_name: popcornclub-backend
     restart: unless-stopped
-    command: npm start
     ports:
       - "3002:3001"
     environment:
@@ -42,7 +41,7 @@ services:
 
   frontend:
     build:
-      context: https://${GITHUB_TOKEN:+${GITHUB_TOKEN}@}github.com/Total-Nerd/PopcornClub.git#${GIT_REF:-main}:frontend
+      context: ./frontend
     container_name: popcornclub-frontend
     restart: unless-stopped
     ports:
