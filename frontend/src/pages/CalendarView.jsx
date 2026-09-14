@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, startOfWeek, isSameDay } from 'date-fns';
 
 import { AuthContext } from '../context/AuthContext';
@@ -26,11 +26,14 @@ const CalendarView = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [expandedEmptyDays, setExpandedEmptyDays] = useState({});
 
-  const toggleEmptyDayExpand = (dateStr) => {
-    setExpandedEmptyDays(prev => ({
-      ...prev,
-      [dateStr]: !prev[dateStr]
-    }));
+  const toggleEmptyDayExpand = (dateStr, isToday = false) => {
+    setExpandedEmptyDays(prev => {
+      const currentlyExpanded = prev[dateStr] !== undefined ? prev[dateStr] : isToday;
+      return {
+        ...prev,
+        [dateStr]: !currentlyExpanded
+      };
+    });
   };
   
   const [activePopover, setActivePopover] = useState(null);
@@ -499,27 +502,71 @@ const CalendarView = () => {
       {viewMode === 'week' && (
         isMobile ? (
           /* Mobile Week View */
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="mobile-agenda-container">
             {getWeekDays().map((day, idx) => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
+              const isEmpty = dayEvents.length === 0;
+              const isExpanded = expandedEmptyDays[dateStr] !== undefined
+                ? expandedEmptyDays[dateStr]
+                : isToday;
+              const isCollapsed = isEmpty && !isExpanded;
 
-              // Hide empty days unless it's today
-              if (dayEvents.length === 0 && !isToday) return null;
+              if (isCollapsed) {
+                return (
+                  <div
+                    key={idx}
+                    className={`mobile-agenda-day-collapsed ${isToday ? 'is-today' : ''}`}
+                    onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
+                    title={`Click to expand ${format(day, 'EEEE, MMM d')}`}
+                  >
+                    <div className="mobile-agenda-collapsed-left">
+                      <span className="mobile-agenda-collapsed-date">
+                        {format(day, 'EEE, do MMMM')}
+                      </span>
+                      {isToday && <span className="mobile-agenda-today-badge">Today</span>}
+                    </div>
+                    <div className="mobile-agenda-collapsed-right">
+                      <span className="mobile-agenda-collapsed-label">No Airings</span>
+                      <ChevronDown size={15} className="mobile-agenda-expand-icon" />
+                    </div>
+                  </div>
+                );
+              }
 
               return (
-                <div key={idx} style={{ marginBottom: '16px' }}>
+                <div key={idx} style={{ marginBottom: '16px' }} className={isToday ? 'is-today' : ''}>
                   <div className={`mobile-agenda-day-header ${isToday ? 'is-today' : ''}`}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>
-                      {format(day, 'EEE, do MMMM')}
-                    </span>
-                    {isToday && <span className="mobile-agenda-today-badge">Today</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>
+                        {format(day, 'EEE, do MMMM')}
+                      </span>
+                      {isToday && <span className="mobile-agenda-today-badge">Today</span>}
+                    </div>
+                    {isEmpty && (
+                      <button
+                        type="button"
+                        onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
+                        className="mobile-agenda-collapse-btn"
+                        title={`Collapse ${format(day, 'EEEE')}`}
+                      >
+                        <span>Collapse</span>
+                        <ChevronUp size={14} />
+                      </button>
+                    )}
                   </div>
                   <div className="mobile-agenda-events-list">
-                    {dayEvents.length === 0 ? (
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', padding: '8px 12px' }}>
-                        No Releases Scheduled
+                    {isEmpty ? (
+                      <div className="mobile-agenda-empty-state">
+                        <span>No Airings</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
+                          className="btn btn-secondary mobile-agenda-collapse-action-btn"
+                        >
+                          Collapse day
+                        </button>
                       </div>
                     ) : (
                       groupDayEvents(dayEvents).map(ev => renderEventCard(ev))
@@ -537,18 +584,17 @@ const CalendarView = () => {
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
               const isEmpty = dayEvents.length === 0;
-              const isCollapsed = isEmpty && (
-                expandedEmptyDays[dateStr] !== undefined
-                  ? !expandedEmptyDays[dateStr]
-                  : !isToday
-              );
+              const isExpanded = expandedEmptyDays[dateStr] !== undefined
+                ? expandedEmptyDays[dateStr]
+                : isToday;
+              const isCollapsed = isEmpty && !isExpanded;
 
               if (isCollapsed) {
                 return (
                   <div
                     key={idx}
                     className={`calendar-week-column is-empty-collapsed ${isToday ? 'is-today' : ''}`}
-                    onClick={() => toggleEmptyDayExpand(dateStr)}
+                    onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
                     title={`Click to expand ${format(day, 'EEEE, MMM d')}`}
                   >
                     <div className="calendar-accordion-strip">
@@ -580,7 +626,7 @@ const CalendarView = () => {
                     {isEmpty && (
                       <button
                         type="button"
-                        onClick={() => toggleEmptyDayExpand(dateStr)}
+                        onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
                         className="calendar-column-collapse-btn"
                         title={`Collapse ${format(day, 'EEEE')}`}
                         style={{ position: 'absolute', right: 0, top: 0 }}
@@ -614,7 +660,7 @@ const CalendarView = () => {
                         <span>No Airings</span>
                         <button
                           type="button"
-                          onClick={() => toggleEmptyDayExpand(dateStr)}
+                          onClick={() => toggleEmptyDayExpand(dateStr, isToday)}
                           className="btn btn-secondary"
                           style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}
                         >
