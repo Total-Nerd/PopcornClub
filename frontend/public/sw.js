@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'popcornclub-static-v1';
+const STATIC_CACHE = 'popcornclub-static-v2';
 const IMAGE_CACHE = 'popcornclub-images-v1';
 
 // Asset types we want to cache on-the-fly
@@ -9,6 +9,8 @@ const CORE_ASSETS = [
   '/',
   '/index.html',
   '/favicon.svg',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
   '/manifest.json'
 ];
 

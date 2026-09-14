@@ -1,6 +1,6 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_4226_27)">
-<path d="M400 0H112C50.1441 0 0 50.1441 0 112V400C0 461.856 50.1441 512 112 512H400C461.856 512 512 461.856 512 400V112C512 50.1441 461.856 0 400 0Z" fill="#302449"/>
+<rect width="512" height="512" fill="#302449"/>
 <g filter="url(#filter0_d_4226_27)">
 <rect x="173" y="256" width="165" height="165" rx="82.5" fill="#D9D9D9"/>
 </g>
