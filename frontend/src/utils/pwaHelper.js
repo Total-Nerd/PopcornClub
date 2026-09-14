@@ -89,69 +89,68 @@ export const initDB = () => {
 };
 
 /**
- * Save list of events to IndexedDB, completely replacing previous entries
+ * Save list of events to IndexedDB safely using upsert without wiping existing cache
  */
 export const saveEventsToIndexedDB = async (events) => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+  return upsertEventsToIndexedDB(events);
+};
 
-    // Clear previous calendar cache
-    const clearRequest = store.clear();
+/**
+ * Helper to compute an event's date key in the local timezone
+ */
+export const getEventDateKey = (ev) => {
+  if (ev.localDateStr) return ev.localDateStr;
+  if (ev.airDateTime) {
+    const d = new Date(ev.airDateTime);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return ev.airDate || '';
+};
 
-    clearRequest.onerror = (e) => {
-      console.error('[IndexedDB] Failed to clear database:', e.target.error);
-      reject(e.target.error);
-    };
+/**
+ * Retrieve all cached calendar events from IndexedDB
+ */
+export const getAllEventsFromIndexedDB = async () => {
+  try {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAll();
 
-    clearRequest.onsuccess = () => {
-      if (events.length === 0) {
-        resolve(0);
-        return;
-      }
+      request.onerror = (e) => {
+        console.error('[IndexedDB] Failed to get all events:', e.target.error);
+        reject(e.target.error);
+      };
 
-      let addedCount = 0;
-      events.forEach((event) => {
-        const addRequest = store.add(event);
-        addRequest.onsuccess = () => {
-          addedCount++;
-          if (addedCount === events.length) {
-            console.log(`[IndexedDB] Saved ${addedCount} calendar events for offline access.`);
-            resolve(addedCount);
-          }
-        };
-        addRequest.onerror = (err) => {
-          console.error('[IndexedDB] Error adding item:', err.target.error);
-        };
-      });
-    };
-  });
+      request.onsuccess = () => {
+        resolve(request.result || []);
+      };
+    });
+  } catch (err) {
+    console.error('[IndexedDB] Error reading cache:', err);
+    return [];
+  }
 };
 
 /**
  * Fetch calendar events from IndexedDB that fall inside start and end bounds
  */
 export const getEventsFromIndexedDB = async (startStr, endStr) => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.getAll();
-
-    request.onerror = (e) => {
-      reject(e.target.error);
-    };
-
-    request.onsuccess = () => {
-      const allEvents = request.result || [];
-      // Filter events by startStr and endStr (YYYY-MM-DD format)
-      const filtered = allEvents.filter((ev) => {
-        return ev.airDate >= startStr && ev.airDate <= endStr;
-      });
-      resolve(filtered);
-    };
-  });
+  try {
+    const allEvents = await getAllEventsFromIndexedDB();
+    const filtered = allEvents.filter((ev) => {
+      const dateKey = getEventDateKey(ev);
+      return dateKey >= startStr && dateKey <= endStr;
+    });
+    return filtered;
+  } catch (err) {
+    console.warn('[IndexedDB] Error filtering events from cache:', err);
+    return [];
+  }
 };
 
 /**
@@ -175,7 +174,7 @@ export const getCachedEventsCount = async () => {
 };
 
 /**
- * Pre-fetch 6 months of calendar data and save to IndexedDB
+ * Pre-fetch 1 month past to 6 months future of calendar data and save to IndexedDB
  */
 export const syncCalendarOffline = async (apiInstance) => {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -186,26 +185,27 @@ export const syncCalendarOffline = async (apiInstance) => {
   try {
     const today = new Date();
     
-    // Start date: 1st of current month
-    const startYear = today.getFullYear();
-    const startMonth = String(today.getMonth() + 1).padStart(2, '0');
+    // Start date: 1st of previous month to cover recent airings & boundary weeks
+    const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const startYear = prevMonthDate.getFullYear();
+    const startMonth = String(prevMonthDate.getMonth() + 1).padStart(2, '0');
     const startStr = `${startYear}-${startMonth}-01`;
 
     // End date: Last day of the month 6 months from now
-    const futureDate = new Date(today.getFullYear(), today.getMonth() + 6, 0);
+    const futureDate = new Date(today.getFullYear(), today.getMonth() + 7, 0);
     const endYear = futureDate.getFullYear();
     const endMonth = String(futureDate.getMonth() + 1).padStart(2, '0');
     const endDay = String(futureDate.getDate()).padStart(2, '0');
     const endStr = `${endYear}-${endMonth}-${endDay}`;
 
-    console.log(`[PWA] Background pre-fetching 6 months calendar data (${startStr} to ${endStr})...`);
+    console.log(`[PWA] Background pre-fetching calendar data (${startStr} to ${endStr})...`);
     
     const response = await apiInstance.get(`/calendar?start=${startStr}&end=${endStr}`);
     
     if (response.data && Array.isArray(response.data)) {
-      const count = await saveEventsToIndexedDB(response.data);
+      const count = await upsertEventsToIndexedDB(response.data);
       localStorage.setItem('pwa_last_sync_time', new Date().toISOString());
-      return { success: true, count };
+      return { success: true, count, events: response.data };
     } else {
       throw new Error('Invalid server calendar response format');
     }
@@ -221,7 +221,7 @@ export const syncCalendarOffline = async (apiInstance) => {
 export const upsertEventsToIndexedDB = async (events) => {
   try {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       let processedCount = 0;
@@ -254,3 +254,4 @@ export const upsertEventsToIndexedDB = async (events) => {
     return 0;
   }
 };
+

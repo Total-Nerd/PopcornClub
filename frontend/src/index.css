@@ -1132,6 +1132,35 @@ button {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* Calendar Loading Skeleton (Stable Placeholder) */
+.calendar-loading-skeleton {
+  width: 100%;
+  min-height: 80px;
+  border-radius: 8px;
+  background: linear-gradient(90deg,
+      var(--overlay-subtle) 25%,
+      var(--overlay-strong) 50%,
+      var(--overlay-subtle) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border: 1px solid var(--border-color);
+  opacity: 0.7;
+}
+
+.calendar-month-loading-skeleton {
+  width: 100%;
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+      var(--overlay-subtle) 25%,
+      var(--overlay-strong) 50%,
+      var(--overlay-subtle) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  opacity: 0.5;
+}
+
+
 .calendar-month-day {
   background: var(--overlay-subtle);
   border: 1px solid var(--border-color);

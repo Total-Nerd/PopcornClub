@@ -1,14 +1,20 @@
 import { create } from 'zustand';
 import api from '../../../api';
-import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, subDays } from 'date-fns';
-import { sortEvents, pad } from '../utils';
-import { getEventsFromIndexedDB, upsertEventsToIndexedDB } from '../../../utils/pwaHelper';
+import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
+import { sortEvents } from '../utils';
+import { getAllEventsFromIndexedDB, upsertEventsToIndexedDB, getEventDateKey } from '../../../utils/pwaHelper';
+
+let currentFetchId = 0;
+let activeAbortController = null;
+const fetchedRangeTimestamps = new Map();
 
 export const useCalendarStore = create((set, get) => ({
   events: [],
+  eventsById: {},
   loading: true,
   isOfflineMode: typeof navigator !== 'undefined' ? !navigator.onLine : false,
   updatingInBackground: false,
+  isHydrated: false,
 
   currentDate: new Date(),
   viewMode: localStorage.getItem('calendar_view_mode') || 'week',
@@ -64,64 +70,135 @@ export const useCalendarStore = create((set, get) => ({
     }
   },
 
-  // Fetch Events
+  // Merge events into the persistent in-memory cache
+  mergeEvents: (incomingEvents, dateRange = null) => {
+    if (!incomingEvents || !Array.isArray(incomingEvents)) return;
+
+    set(state => {
+      const nextMap = { ...state.eventsById };
+
+      // Prune events in the dateRange that are no longer returned by the server
+      if (dateRange && dateRange.start && dateRange.end) {
+        const incomingIds = new Set(incomingEvents.map(e => e.id));
+        Object.keys(nextMap).forEach(id => {
+          const ev = nextMap[id];
+          const dateStr = getEventDateKey(ev);
+          if (dateStr >= dateRange.start && dateStr <= dateRange.end && !incomingIds.has(id)) {
+            delete nextMap[id];
+          }
+        });
+      }
+
+      // Upsert incoming events into map
+      incomingEvents.forEach(ev => {
+        if (!ev || !ev.id) return;
+        nextMap[ev.id] = { ...(nextMap[ev.id] || {}), ...ev };
+      });
+
+      return {
+        eventsById: nextMap,
+        events: sortEvents(Object.values(nextMap))
+      };
+    });
+  },
+
+  // Hydrate store from IndexedDB on startup
+  hydrateFromCache: async () => {
+    try {
+      const cached = await getAllEventsFromIndexedDB();
+      if (cached && cached.length > 0) {
+        get().mergeEvents(cached);
+        set({ isHydrated: true, loading: false });
+      } else {
+        set({ isHydrated: true });
+      }
+    } catch (err) {
+      console.warn('[Calendar] Hydration error:', err);
+      set({ isHydrated: true });
+    }
+  },
+
+  // Fetch Events with Lookahead, In-Memory Caching & Stale-While-Revalidate
   fetchEvents: async () => {
-    const { currentDate, viewMode } = get();
-    
-    let start, end;
-    let gridStart, gridEnd;
-    
+    const { currentDate, viewMode, isHydrated } = get();
+
+    // Ensure cache hydration has been started
+    if (!isHydrated) {
+      await get().hydrateFromCache();
+    }
+
+    let gridStart, gridEnd, viewStart, viewEnd;
     if (viewMode === 'month') {
       const startMonth = startOfMonth(currentDate);
       const endMonth = endOfMonth(currentDate);
       gridStart = startOfWeek(startMonth, { weekStartsOn: 1 });
       gridEnd = endOfWeek(endMonth, { weekStartsOn: 1 });
-
-      start = format(gridStart, 'yyyy-MM-dd');
-      end = format(gridEnd, 'yyyy-MM-dd');
+      viewStart = format(gridStart, 'yyyy-MM-dd');
+      viewEnd = format(gridEnd, 'yyyy-MM-dd');
     } else {
       gridStart = startOfWeek(currentDate, { weekStartsOn: 1 });
       gridEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-
-      start = format(gridStart, 'yyyy-MM-dd');
-      end = format(gridEnd, 'yyyy-MM-dd');
+      viewStart = format(gridStart, 'yyyy-MM-dd');
+      viewEnd = format(gridEnd, 'yyyy-MM-dd');
     }
 
-    const startMinus1 = format(subDays(gridStart, 1), 'yyyy-MM-dd');
-    const endPlus1 = format(addDays(gridEnd, 1), 'yyyy-MM-dd');
+    // Determine if we already have events in memory for this visible range
+    const currentEvents = get().events;
+    const hasEventsForView = currentEvents.some(ev => {
+      const d = getEventDateKey(ev);
+      return d >= viewStart && d <= viewEnd;
+    });
 
-    let hasCache = false;
-    try {
-      const cached = await getEventsFromIndexedDB(startMinus1, endPlus1);
-      if (cached && cached.length > 0) {
-        set({ events: sortEvents(cached), loading: false, updatingInBackground: true });
-        hasCache = true;
-      }
-    } catch (cacheErr) {
-      console.warn('[PWA] Error reading calendar cache:', cacheErr);
-    }
+    const rangeKey = `${viewMode}-${viewStart}-${viewEnd}`;
+    const lastFetch = fetchedRangeTimestamps.get(rangeKey);
+    const isRecentlyFetched = lastFetch && (Date.now() - lastFetch < 60000); // 1 minute freshness
 
-    if (!hasCache) {
+    if (hasEventsForView || isRecentlyFetched) {
+      // Data already available in memory: instant display, background refresh only
+      set({ loading: false, updatingInBackground: !isRecentlyFetched });
+      if (isRecentlyFetched) return;
+    } else {
+      // Cold load for this specific range
       set({ loading: true, updatingInBackground: false });
     }
 
+    // Cancel in-flight request if user is navigating quickly
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeAbortController = new AbortController();
+    const fetchId = ++currentFetchId;
+
+    // Expand buffer for week view (1 week prior to 2 weeks ahead) for seamless lookahead
+    let fetchStart = viewStart;
+    let fetchEnd = viewEnd;
+    if (viewMode === 'week') {
+      fetchStart = format(subWeeks(gridStart, 1), 'yyyy-MM-dd');
+      fetchEnd = format(addWeeks(gridEnd, 2), 'yyyy-MM-dd');
+    }
+
     try {
-      const res = await api.get(`/calendar?start=${start}&end=${end}`);
-      set({ events: sortEvents(res.data), isOfflineMode: false });
-      await upsertEventsToIndexedDB(res.data);
-    } catch (netErr) {
-      console.warn('[PWA] Failed to fetch calendar from network, falling back to IndexedDB:', netErr);
-      set({ isOfflineMode: true });
-      if (!hasCache) {
-        const cached = await getEventsFromIndexedDB(startMinus1, endPlus1);
-        if (cached && cached.length > 0) {
-          set({ events: sortEvents(cached) });
-        } else {
-          set({ events: [] });
-        }
+      const res = await api.get(`/calendar?start=${fetchStart}&end=${fetchEnd}`, {
+        signal: activeAbortController.signal
+      });
+
+      fetchedRangeTimestamps.set(rangeKey, Date.now());
+
+      // Merge results into our persistent cache
+      get().mergeEvents(res.data, { start: fetchStart, end: fetchEnd });
+      upsertEventsToIndexedDB(res.data);
+
+      if (fetchId === currentFetchId) {
+        set({ isOfflineMode: false, loading: false, updatingInBackground: false });
       }
-    } finally {
-      set({ loading: false, updatingInBackground: false });
+    } catch (netErr) {
+      if (netErr?.name === 'CanceledError' || netErr?.name === 'AbortError' || netErr?.code === 'ERR_CANCELED') {
+        return; // Superseded by newer navigation
+      }
+      console.warn('[Calendar] Failed to fetch calendar from network:', netErr);
+      if (fetchId === currentFetchId) {
+        set({ isOfflineMode: true, loading: false, updatingInBackground: false });
+      }
     }
   },
 
@@ -165,9 +242,24 @@ export const useCalendarStore = create((set, get) => ({
 
       // Update local state
       const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
-      set(state => ({
-        events: state.events.map(e => subIds.includes(e.id) ? { ...e, isCollected: newVal } : e)
-      }));
+      set(state => {
+        const nextMap = { ...state.eventsById };
+        subIds.forEach(id => {
+          if (nextMap[id]) {
+            nextMap[id] = { ...nextMap[id], isCollected: newVal };
+          }
+        });
+        return {
+          eventsById: nextMap,
+          events: state.events.map(e => subIds.includes(e.id) ? { ...e, isCollected: newVal } : e)
+        };
+      });
+
+      const updatedList = get().events.filter(e => subIds.includes(e.id));
+      if (updatedList.length > 0) {
+        upsertEventsToIndexedDB(updatedList);
+      }
+
       return { success: true, newVal, title: isTV ? ev.showTitle : ev.title };
     } catch (err) {
       console.error('Failed to toggle collection status:', err);
@@ -199,9 +291,24 @@ export const useCalendarStore = create((set, get) => ({
         return { success: true, message: 'Started watching now', type: 'info' };
       } else if (choice === 'removed-last') {
         const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
-        set(state => ({
-          events: state.events.map(e => subIds.includes(e.id) ? { ...e, isWatched: watchedAt } : e)
-        }));
+        set(state => {
+          const nextMap = { ...state.eventsById };
+          subIds.forEach(id => {
+            if (nextMap[id]) {
+              nextMap[id] = { ...nextMap[id], isWatched: false };
+            }
+          });
+          return {
+            eventsById: nextMap,
+            events: state.events.map(e => subIds.includes(e.id) ? { ...e, isWatched: false } : e)
+          };
+        });
+
+        const updatedList = get().events.filter(e => subIds.includes(e.id));
+        if (updatedList.length > 0) {
+          upsertEventsToIndexedDB(updatedList);
+        }
+
         return { success: true, message: `Removed watch entry for "${isTV ? ev.showTitle : ev.title}"`, type: 'info' };
       } else {
         if (isTV) {
@@ -239,9 +346,24 @@ export const useCalendarStore = create((set, get) => ({
         }
 
         const subIds = ev.isStacked ? ev.originalEpisodes.map(sub => sub.id) : [ev.id];
-        set(state => ({
-          events: state.events.map(e => subIds.includes(e.id) ? { ...e, isWatched: true } : e)
-        }));
+        set(state => {
+          const nextMap = { ...state.eventsById };
+          subIds.forEach(id => {
+            if (nextMap[id]) {
+              nextMap[id] = { ...nextMap[id], isWatched: true };
+            }
+          });
+          return {
+            eventsById: nextMap,
+            events: state.events.map(e => subIds.includes(e.id) ? { ...e, isWatched: true } : e)
+          };
+        });
+
+        const updatedList = get().events.filter(e => subIds.includes(e.id));
+        if (updatedList.length > 0) {
+          upsertEventsToIndexedDB(updatedList);
+        }
+
         return { success: true, message: `Watched "${isTV ? ev.showTitle : ev.title}"`, type: 'success' };
       }
     } catch (err) {
@@ -250,3 +372,8 @@ export const useCalendarStore = create((set, get) => ({
     }
   }
 }));
+
+// Automatically hydrate from IndexedDB on startup
+if (typeof window !== 'undefined') {
+  useCalendarStore.getState().hydrateFromCache();
+}

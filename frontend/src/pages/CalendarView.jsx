@@ -1,7 +1,7 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
-import { format, startOfWeek, isSameDay } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, eachDayOfInterval } from 'date-fns';
 
 import { AuthContext } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
@@ -67,7 +67,7 @@ const CalendarView = () => {
   // Fetch data
   useEffect(() => {
     fetchEvents();
-  }, [currentDate, viewMode]);
+  }, [fetchEvents, currentDate, viewMode]);
 
   // Handle scrolling behavior for sticky headers
   useEffect(() => {
@@ -75,12 +75,9 @@ const CalendarView = () => {
       const currentScrollY = window.scrollY;
       const deltaY = currentScrollY - lastScrollY.current;
 
-      let limitY = 0;
-      if (isMobile) {
-        limitY = navigationRef.current ? Math.max(0, navigationRef.current.offsetTop - 16) : 80;
-      } else {
-        limitY = containerRef.current ? containerRef.current.offsetHeight : 140;
-      }
+      const limitY = isMobile
+        ? (navigationRef.current ? Math.max(0, navigationRef.current.offsetTop - 16) : 80)
+        : (containerRef.current ? containerRef.current.offsetHeight : 140);
 
       if (currentScrollY <= 0) {
         currentTranslation.current = 0;
@@ -253,7 +250,6 @@ const CalendarView = () => {
   });
 
   const getMonthDays = () => {
-    const { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval } = require('date-fns');
     const startM = startOfMonth(currentDate);
     const endM = endOfMonth(currentDate);
     const gridStart = startOfWeek(startM, { weekStartsOn: 1 });
@@ -262,7 +258,6 @@ const CalendarView = () => {
   };
 
   const getWeekDays = () => {
-    const { startOfWeek, endOfWeek, eachDayOfInterval } = require('date-fns');
     const gridStart = startOfWeek(currentDate, { weekStartsOn: 1 });
     const gridEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
     return eachDayOfInterval({ start: gridStart, end: gridEnd });
@@ -394,7 +389,9 @@ const CalendarView = () => {
               <h3 className="mobile-day-details-title">
                 Releases on {format(selectedMobileDate, 'EEEE, MMM d')}
               </h3>
-              {selectedDayEvents.length === 0 ? (
+              {loading && selectedDayEvents.length === 0 ? (
+                <div className="calendar-loading-skeleton" />
+              ) : selectedDayEvents.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '16px 8px' }}>
                   No releases or airings scheduled for this day.
                 </div>
@@ -438,57 +435,61 @@ const CalendarView = () => {
                     </span>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, overflowY: 'auto' }}>
-                      {groupDayEvents(dayEvents).map(ev => {
-                        const isWatched = ev.isWatched;
-                        return (
-                          <div
-                            key={ev.id}
-                            onClick={(e) => handleEventContainerClick(e, ev)}
-                            onMouseEnter={(e) => handleEventMouseEnter(e, ev)}
-                            onMouseLeave={handleEventMouseLeave}
-                            className="calendar-month-event"
-                            style={{
-                              padding: '4px 6px',
-                              background: ev.type === 'tv'
-                                ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : (ev.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)'))
-                                : 'rgba(167, 139, 250, 0.15)',
-                              border: ev.type === 'tv'
-                                ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : (ev.isCollected ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(255, 255, 255, 0.1)'))
-                                : '1px solid rgba(167,139,250,0.2)',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: '500',
-                              color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : (ev.isCollected ? '#60a5fa' : 'var(--text-main)')) : '#c084fc',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}
-                          >
-                            <span 
-                              style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                                setActivePopover(null);
-                                handleOpenDetails(ev);
+                      {loading && dayEvents.length === 0 && isCurrentMonth ? (
+                        <div className="calendar-month-loading-skeleton" />
+                      ) : (
+                        groupDayEvents(dayEvents).map(ev => {
+                          const isWatched = ev.isWatched;
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={(e) => handleEventContainerClick(e, ev)}
+                              onMouseEnter={(e) => handleEventMouseEnter(e, ev)}
+                              onMouseLeave={handleEventMouseLeave}
+                              className="calendar-month-event"
+                              style={{
+                                padding: '4px 6px',
+                                background: ev.type === 'tv'
+                                  ? (isWatched ? 'rgba(16, 185, 129, 0.1)' : (ev.isCollected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)'))
+                                  : 'rgba(167, 139, 250, 0.15)',
+                                border: ev.type === 'tv'
+                                  ? (isWatched ? '1px solid rgba(16,185,129,0.2)' : (ev.isCollected ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(255, 255, 255, 0.1)'))
+                                  : '1px solid rgba(167,139,250,0.2)',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                color: ev.type === 'tv' ? (isWatched ? 'var(--success)' : (ev.isCollected ? '#60a5fa' : 'var(--text-main)')) : '#c084fc',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
                               }}
-                              className="actionable-text"
                             >
-                              {ev.type === 'tv' ? (
-                                <>
-                                  {ev.localTimeStr && <span style={{ color: 'var(--text-muted)', marginRight: '4px', fontSize: '0.7rem' }}>[{ev.localTimeStr}]</span>}
-                                  {ev.showTitle} ({ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`})
-                                  {(ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber) === 1 && ' ⭐'}
-                                </>
-                              ) : ev.title}
-                            </span>
-                          </div>
-                        );
-                      })}
+                              <span 
+                                style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                  setActivePopover(null);
+                                  handleOpenDetails(ev);
+                                }}
+                                className="actionable-text"
+                              >
+                                {ev.type === 'tv' ? (
+                                  <>
+                                    {ev.localTimeStr && <span style={{ color: 'var(--text-muted)', marginRight: '4px', fontSize: '0.7rem' }}>[{ev.localTimeStr}]</span>}
+                                    {ev.showTitle} ({ev.isStacked ? ev.episodeRangeText : `S${pad(ev.seasonNumber)}E${pad(ev.episodeNumber)}`})
+                                    {(ev.isStacked ? ev.originalEpisodes[0].episodeNumber : ev.episodeNumber) === 1 && ' ⭐'}
+                                  </>
+                                ) : ev.title}
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 );
@@ -507,7 +508,8 @@ const CalendarView = () => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
-              const isEmpty = dayEvents.length === 0;
+              const isDayLoading = loading && dayEvents.length === 0;
+              const isEmpty = !isDayLoading && dayEvents.length === 0;
               const isExpanded = expandedEmptyDays[dateStr] !== undefined
                 ? expandedEmptyDays[dateStr]
                 : isToday;
@@ -557,7 +559,9 @@ const CalendarView = () => {
                     )}
                   </div>
                   <div className="mobile-agenda-events-list">
-                    {isEmpty ? (
+                    {isDayLoading ? (
+                      <div className="calendar-loading-skeleton" />
+                    ) : isEmpty ? (
                       <div className="mobile-agenda-empty-state">
                         <span>No Airings</span>
                         <button
@@ -583,7 +587,8 @@ const CalendarView = () => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayEvents = filteredEvents.filter(e => e.localDateStr === dateStr);
               const isToday = isSameDay(day, new Date());
-              const isEmpty = dayEvents.length === 0;
+              const isDayLoading = loading && dayEvents.length === 0;
+              const isEmpty = !isDayLoading && dayEvents.length === 0;
               const isExpanded = expandedEmptyDays[dateStr] !== undefined
                 ? expandedEmptyDays[dateStr]
                 : isToday;
@@ -655,7 +660,9 @@ const CalendarView = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                    {isEmpty ? (
+                    {isDayLoading ? (
+                      <div className="calendar-loading-skeleton" />
+                    ) : isEmpty ? (
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', gap: '10px' }}>
                         <span>No Airings</span>
                         <button
