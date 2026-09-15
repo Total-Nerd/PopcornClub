@@ -33,7 +33,7 @@ function cleanTitle(str) {
 }
 
 // Parse TV and Movie details from filename and directory path
-function parseFilename(filePath) {
+function parseFilename(filePath, folderType = null) {
   const filename = path.basename(filePath);
   const ext = path.extname(filename);
   const nameWithoutExt = path.basename(filename, ext);
@@ -47,8 +47,8 @@ function parseFilename(filePath) {
     tmdbId = parseInt(tmdbMatch[1], 10);
   }
 
-  // Determine if it's a TV show or Movie based on path segments
-  const isTvPath = normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/');
+  // Determine if it's a TV show or Movie based on folderType or path segments
+  const isTvPath = folderType === 'tv' || (!folderType && (normalizedPath.includes('/tv/') || normalizedPath.startsWith('/tv/')));
 
   if (isTvPath) {
     const parts = normalizedPath.split('/');
@@ -187,10 +187,22 @@ async function getFilesInDirectory(dirPath) {
     const list = await fs.promises.readdir(dirPath, { withFileTypes: true });
     for (const file of list) {
       const filePath = path.join(dirPath, file.name);
-      if (file.isDirectory()) {
+      let isDir = file.isDirectory();
+      let isFil = file.isFile();
+      if (file.isSymbolicLink()) {
+        try {
+          const stat = await fs.promises.stat(filePath);
+          isDir = stat.isDirectory();
+          isFil = stat.isFile();
+        } catch (e) {
+          // Skip broken symlinks
+          continue;
+        }
+      }
+      if (isDir) {
         const subResults = await getFilesInDirectory(filePath);
         results = results.concat(subResults);
-      } else if (file.isFile()) {
+      } else if (isFil) {
         results.push(filePath);
       }
     }
@@ -208,7 +220,7 @@ async function processSingleFile(filePath, folderType, apiKey) {
 
   try {
     // 1. Parse details from filename
-    const parsed = parseFilename(filePath);
+    const parsed = parseFilename(filePath, folderType);
     if (!parsed) return null;
 
     console.log(`[Folder Scanner] Resolving file: "${path.basename(filePath)}" parsed as:`, parsed);
@@ -505,7 +517,7 @@ async function scanAllFolders() {
   currentProgress = 'Loading settings...';
   try {
     const settings = await prisma.systemSettings.findFirst();
-    const apiKey = settings?.tmdbApiKey;
+    const apiKey = settings?.tmdbApiKey || process.env.TMDB_API_KEY;
     if (!apiKey) {
       currentProgress = 'Scan skipped: TMDB API Key is not configured under settings.';
       console.warn('[Folder Scanner] TMDB API Key not configured. Skipping scan.');
@@ -540,7 +552,7 @@ async function scanSingleFolder(folderRecord) {
   currentProgress = 'Loading settings...';
   try {
     const settings = await prisma.systemSettings.findFirst();
-    const apiKey = settings?.tmdbApiKey;
+    const apiKey = settings?.tmdbApiKey || process.env.TMDB_API_KEY;
     if (!apiKey) {
       currentProgress = 'Scan skipped: TMDB API Key is not configured under settings.';
       console.warn('[Folder Scanner] TMDB API Key not configured. Skipping scan.');
@@ -672,7 +684,7 @@ function startWatcher(folderRecord) {
   watcher.on('add', async (filePath) => {
     console.log(`[Watcher] File added: ${filePath}`);
     const settings = await prisma.systemSettings.findFirst();
-    const apiKey = settings?.tmdbApiKey;
+    const apiKey = settings?.tmdbApiKey || process.env.TMDB_API_KEY;
     if (apiKey) {
       await processSingleFile(filePath, folderType, apiKey);
     }
@@ -681,7 +693,7 @@ function startWatcher(folderRecord) {
   watcher.on('change', async (filePath) => {
     console.log(`[Watcher] File changed: ${filePath}`);
     const settings = await prisma.systemSettings.findFirst();
-    const apiKey = settings?.tmdbApiKey;
+    const apiKey = settings?.tmdbApiKey || process.env.TMDB_API_KEY;
     if (apiKey) {
       await processSingleFile(filePath, folderType, apiKey);
     }
@@ -779,7 +791,12 @@ async function initFolderScanner() {
     const envApiKey = process.env.TMDB_API_KEY;
     if (envApiKey) {
       const settings = await prisma.systemSettings.findFirst();
-      if (settings && settings.tmdbApiKey !== envApiKey) {
+      if (!settings) {
+        console.log('[Folder Scanner] Initializing SystemSettings with TMDB API Key from environment variable.');
+        await prisma.systemSettings.create({
+          data: { id: 1, tmdbApiKey: envApiKey }
+        });
+      } else if (!settings.tmdbApiKey || settings.tmdbApiKey !== envApiKey) {
         console.log('[Folder Scanner] Automatically updating TMDB API Key from environment variable.');
         await prisma.systemSettings.update({
           where: { id: settings.id },
@@ -795,6 +812,8 @@ async function initFolderScanner() {
   try {
     const defaults = [
       { path: '/movies', type: 'movie', watch: true },
+      { path: '/4k_movies', type: 'movie', watch: true },
+      { path: '/documentaries', type: 'movie', watch: true },
       { path: '/tv', type: 'tv', watch: true }
     ];
     for (const folder of defaults) {
@@ -878,7 +897,7 @@ function matchDirectoryToMedia(dirName, media) {
 async function scanMediaItem(mediaId, options = {}) {
   const { season, episode } = options;
   const settings = await prisma.systemSettings.findFirst();
-  const apiKey = settings?.tmdbApiKey;
+  const apiKey = settings?.tmdbApiKey || process.env.TMDB_API_KEY;
   if (!apiKey) {
     throw new Error('TMDB API Key is not configured.');
   }
@@ -1021,6 +1040,8 @@ module.exports = {
   startWatcher,
   stopWatcher,
   scanMediaItem,
+  VIDEO_EXTENSIONS,
+  isVideoFile,
   getStatus: () => ({
     isScanning,
     lastScanTime,

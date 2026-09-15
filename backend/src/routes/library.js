@@ -12,7 +12,7 @@ router.use(authenticateToken);
 router.get('/movies', async (req, res) => {
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    const tmdbApiKey = systemSettings?.tmdbApiKey;
+    const tmdbApiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
     const mediaList = await prisma.media.findMany({
       where: {
         type: 'movie',
@@ -70,7 +70,7 @@ router.get('/movies', async (req, res) => {
 router.get('/shows', async (req, res) => {
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    const tmdbApiKey = systemSettings?.tmdbApiKey;
+    const tmdbApiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
     const mediaList = await prisma.media.findMany({
       where: {
         type: 'tv',

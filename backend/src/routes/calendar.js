@@ -58,7 +58,8 @@ router.get('/', async (req, res) => {
 
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
+    const tmdbApiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
+    if (!tmdbApiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
@@ -83,7 +84,7 @@ router.get('/', async (req, res) => {
 
     // 2. Fetch calendar items for TV shows and Movies with concurrency limit of 3
     await pMap(mediaList, async (media) => {
-      media = await healMediaRecordIfMissingDetails(media, systemSettings.tmdbApiKey, req.user.id);
+      media = await healMediaRecordIfMissingDetails(media, tmdbApiKey, req.user.id);
       
       if (media.type === 'movie') {
         // For movies: check if release date is in range
@@ -108,7 +109,7 @@ router.get('/', async (req, res) => {
       } else if (media.type === 'tv') {
         // For TV shows: fetch seasons list from TMDB (utilizing cached details)
         try {
-          const tmdbShowData = await fetchTMDB(`/3/tv/${media.tmdbId}`, systemSettings.tmdbApiKey);
+          const tmdbShowData = await fetchTMDB(`/3/tv/${media.tmdbId}`, tmdbApiKey);
           const seasons = tmdbShowData.seasons || [];
           const originCountries = tmdbShowData.origin_country || [];
           
@@ -127,7 +128,7 @@ router.get('/', async (req, res) => {
             try {
               const tmdbSeasonData = await fetchTMDB(
                 `/3/tv/${media.tmdbId}/season/${s.season_number}`,
-                systemSettings.tmdbApiKey
+                tmdbApiKey
               );
 
               const episodes = tmdbSeasonData.episodes || [];

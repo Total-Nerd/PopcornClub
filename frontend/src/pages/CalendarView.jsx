@@ -15,6 +15,7 @@ import EventPopover from '../features/calendar/components/EventPopover';
 import SwipeableEventCard from '../features/calendar/components/SwipeableEventCard';
 import DesktopEventCard from '../features/calendar/components/DesktopEventCard';
 import { copyToClipboard } from '../utils/clipboard';
+import AdminOnboardingChecklist from '../components/AdminOnboardingChecklist';
 
 const CalendarView = () => {
   const { user } = useContext(AuthContext);
@@ -305,6 +306,7 @@ const CalendarView = () => {
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <AdminOnboardingChecklist />
       {/* Calendar Header Panel */}
       <div ref={containerRef} className="sticky-header-container">
         <div ref={headerRef} className="page-header">

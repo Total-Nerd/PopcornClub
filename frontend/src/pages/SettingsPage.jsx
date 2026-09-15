@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   RefreshCw, AlertCircle, CheckCircle2, ChevronRight, 
   Palette, User, UserPlus, Wifi, EyeOff, HardDrive
@@ -14,10 +15,19 @@ import ThemeTab from '../features/settings/components/ThemeTab';
 
 const SettingsPage = () => {
   const { user, setUser, logout } = useContext(AuthContext);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Tab navigation states
-  const [activeTab, setActiveTab] = useState('profile');
+  const tabFromQuery = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromQuery || 'profile');
   const [mobileSubViewOpen, setMobileSubViewOpen] = useState(false);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   // Global overlay states that child components might need
   const [message, setMessage] = useState('');
@@ -28,6 +38,7 @@ const SettingsPage = () => {
 
   const selectTab = (tabId) => {
     setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
     setMobileSubViewOpen(true);
   };
 

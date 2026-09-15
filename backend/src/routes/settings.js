@@ -116,6 +116,25 @@ router.put('/profile', upload.single('avatar'), async (req, res) => {
   }
 });
 
+// GET global system-wide configurations (Admin only)
+router.get('/system', async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can view system settings' });
+  }
+  try {
+    const systemSettings = await prisma.systemSettings.findFirst();
+    const envApiKey = process.env.TMDB_API_KEY || null;
+    const tmdbApiKey = systemSettings?.tmdbApiKey || envApiKey || '';
+    const isFromEnv = !!envApiKey && (!systemSettings?.tmdbApiKey || systemSettings?.tmdbApiKey === envApiKey);
+    res.json({
+      tmdbApiKey,
+      isFromEnv
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch system settings' });
+  }
+});
+
 // Update global system-wide configurations (Admin only)
 router.put('/system', async (req, res) => {
   if (req.user.role !== 'admin') {
@@ -125,8 +144,8 @@ router.put('/system', async (req, res) => {
   try {
     const updated = await prisma.systemSettings.upsert({
       where: { id: 1 },
-      update: { tmdbApiKey },
-      create: { id: 1, tmdbApiKey }
+      update: { tmdbApiKey: tmdbApiKey || process.env.TMDB_API_KEY || null },
+      create: { id: 1, tmdbApiKey: tmdbApiKey || process.env.TMDB_API_KEY || null }
     });
     res.json({ success: true, tmdbApiKey: updated.tmdbApiKey });
   } catch (err) {

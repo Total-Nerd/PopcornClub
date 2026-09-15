@@ -49,6 +49,64 @@ router.post('/setup', async (req, res) => {
     }
   });
 
+  // Initialize SystemSettings with TMDB API Key from environment if available
+  try {
+    const envApiKey = process.env.TMDB_API_KEY || null;
+    let systemSettings = await prisma.systemSettings.findFirst();
+    if (!systemSettings) {
+      await prisma.systemSettings.create({
+        data: { id: 1, tmdbApiKey: envApiKey }
+      });
+    } else if (!systemSettings.tmdbApiKey && envApiKey) {
+      await prisma.systemSettings.update({
+        where: { id: systemSettings.id },
+        data: { tmdbApiKey: envApiKey }
+      });
+    }
+  } catch (err) {
+    console.error('[Auth /setup] Failed to init system settings:', err.message);
+  }
+
+  // Backfill any pre-existing scanned media items to admin's collection
+  try {
+    const allMedia = await prisma.media.findMany({ select: { id: true } });
+    for (const m of allMedia) {
+      await prisma.collection.upsert({
+        where: { userId_mediaId: { userId: user.id, mediaId: m.id } },
+        update: {},
+        create: { userId: user.id, mediaId: m.id }
+      });
+    }
+    const allTvFiles = await prisma.localFile.findMany({
+      where: { type: 'tv', season: { not: null }, episode: { not: null } },
+      select: { mediaId: true, season: true, episode: true, endEpisode: true }
+    });
+    for (const f of allTvFiles) {
+      const endEp = f.endEpisode || f.episode;
+      for (let ep = f.episode; ep <= endEp; ep++) {
+        await prisma.episodeCollection.upsert({
+          where: {
+            userId_mediaId_season_episode: {
+              userId: user.id,
+              mediaId: f.mediaId,
+              season: f.season,
+              episode: ep
+            }
+          },
+          update: {},
+          create: {
+            userId: user.id,
+            mediaId: f.mediaId,
+            season: f.season,
+            episode: ep
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Auth /setup] Failed to backfill media collection for admin:', err.message);
+  }
+
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role },
     process.env.JWT_SECRET || 'supersecretkey_change_in_production',
@@ -182,10 +240,16 @@ router.get('/me', authenticateToken, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  const envApiKey = process.env.TMDB_API_KEY || null;
   let systemSettings = await prisma.systemSettings.findFirst();
   if (!systemSettings) {
     systemSettings = await prisma.systemSettings.create({
-      data: { id: 1 }
+      data: { id: 1, tmdbApiKey: envApiKey }
+    });
+  } else if (!systemSettings.tmdbApiKey && envApiKey) {
+    systemSettings = await prisma.systemSettings.update({
+      where: { id: systemSettings.id },
+      data: { tmdbApiKey: envApiKey }
     });
   }
 
@@ -207,7 +271,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     plexUser: user.plexUser, 
     plexWebhookToken: user.plexWebhookToken,
     plexLastWebhookAt: user.plexLastWebhookAt,
-    tmdbApiKey: systemSettings?.tmdbApiKey || null,
+    tmdbApiKey: systemSettings?.tmdbApiKey || envApiKey || null,
     traktUsername: user.traktUsername,
     traktClientId: user.traktClientId,
     showSpoilers: user.showSpoilers

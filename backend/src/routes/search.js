@@ -14,10 +14,10 @@ router.get('/discover', async (req, res) => {
   
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
+    const apiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
+    if (!apiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
-    const apiKey = systemSettings.tmdbApiKey;
 
     let upcomingPromise, popularPromise, bestRatedPromise;
 
@@ -116,7 +116,8 @@ router.get('/search', async (req, res) => {
 
   try {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    if (!systemSettings || !systemSettings.tmdbApiKey) {
+    const apiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
+    if (!apiKey) {
       return res.status(400).json({ error: 'TMDB API Key is not configured' });
     }
 
@@ -126,7 +127,7 @@ router.get('/search', async (req, res) => {
     if (searchType === 'movie') {
       const response = await axios.get(`https://api.themoviedb.org/3/search/movie`, {
         params: {
-          api_key: systemSettings.tmdbApiKey,
+          api_key: apiKey,
           query,
           page: 1,
           include_adult: false
@@ -136,7 +137,7 @@ router.get('/search', async (req, res) => {
     } else if (searchType === 'tv') {
       const response = await axios.get(`https://api.themoviedb.org/3/search/tv`, {
         params: {
-          api_key: systemSettings.tmdbApiKey,
+          api_key: apiKey,
           query,
           page: 1,
           include_adult: false
@@ -146,7 +147,7 @@ router.get('/search', async (req, res) => {
     } else {
       const response = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
         params: {
-          api_key: systemSettings.tmdbApiKey,
+          api_key: apiKey,
           query,
           page: 1,
           include_adult: false

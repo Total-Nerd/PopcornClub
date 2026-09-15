@@ -23,13 +23,28 @@ const SystemTab = ({ user }) => {
   const [folderError, setFolderError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [drives, setDrives] = useState([]);
+  const [browseVideoFileCount, setBrowseVideoFileCount] = useState(0);
+  const [isFromEnv, setIsFromEnv] = useState(false);
   
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setTmdbApiKey(user.tmdbApiKey || '');
+    const fetchSystemSettings = async () => {
+      try {
+        const res = await api.get('/settings/system');
+        if (res.data.tmdbApiKey) {
+          setTmdbApiKey(res.data.tmdbApiKey);
+        }
+        setIsFromEnv(!!res.data.isFromEnv);
+      } catch (err) {
+        if (user?.tmdbApiKey) {
+          setTmdbApiKey(user.tmdbApiKey);
+        }
+      }
+    };
+    if (user?.role === 'admin') {
+      fetchSystemSettings();
     }
   }, [user]);
 
@@ -151,6 +166,7 @@ const SystemTab = ({ user }) => {
       setBrowseParentPath(res.data.parentPath);
       setBrowseDirs(res.data.directories || []);
       setDrives(res.data.drives || []);
+      setBrowseVideoFileCount(res.data.videoFileCount || 0);
     } catch (err) {
       console.error('Failed to browse path', err);
     } finally {
@@ -167,6 +183,7 @@ const SystemTab = ({ user }) => {
       setBrowseParentPath(res.data.parentPath);
       setBrowseDirs(res.data.directories || []);
       setDrives(res.data.drives || []);
+      setBrowseVideoFileCount(res.data.videoFileCount || 0);
     } catch (err) {
       console.error('Failed to browse path', err);
     } finally {
@@ -199,6 +216,11 @@ const SystemTab = ({ user }) => {
           <h3 style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '16px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Key size={16} style={{ color: 'var(--accent)' }} />
             <span>TMDB Global API Key</span>
+            {isFromEnv && (
+              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: '500' }}>
+                Pre-populated from .env
+              </span>
+            )}
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: '1.5' }}>
             This API key is used by the server to fetch high quality metadata for movies and TV shows from TheMovieDB.
@@ -249,8 +271,21 @@ const SystemTab = ({ user }) => {
                   {scannerStatus.lastScanTime ? new Date(scannerStatus.lastScanTime).toLocaleString() : 'Never'}
                 </span>
               </div>
-              {scannerStatus.isScanning && (
-                <div style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic', wordBreak: 'break-all' }}>
+              {scannerStatus.currentProgress && scannerStatus.currentProgress !== 'Idle' && (
+                <div style={{
+                  marginTop: '10px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: scannerStatus.currentProgress.toLowerCase().includes('error') || scannerStatus.currentProgress.toLowerCase().includes('skipped')
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : 'var(--overlay-medium)',
+                  color: scannerStatus.currentProgress.toLowerCase().includes('error') || scannerStatus.currentProgress.toLowerCase().includes('skipped')
+                    ? '#f87171'
+                    : 'var(--text-muted)',
+                  fontSize: '0.8rem',
+                  fontStyle: scannerStatus.isScanning ? 'italic' : 'normal',
+                  wordBreak: 'break-all'
+                }}>
                   {scannerStatus.currentProgress}
                 </div>
               )}
@@ -573,14 +608,30 @@ const SystemTab = ({ user }) => {
                   background: 'rgba(0,0,0,0.15)'
                 }}
               >
+                {browseVideoFileCount > 0 && (
+                  <div style={{ padding: '8px 12px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Check size={14} />
+                    <span><strong>{browseVideoFileCount}</strong> video file{browseVideoFileCount === 1 ? '' : 's'} found in this directory</span>
+                  </div>
+                )}
+
                 {browseLoading ? (
                   <div style={{ padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     <RefreshCw className="spin" size={24} />
                     <span>Reading directory...</span>
                   </div>
                 ) : browseDirs.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    {searchQuery ? 'No matching directories found.' : 'No directories found.'}
+                  <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    {searchQuery ? (
+                      'No matching directories found.'
+                    ) : browseVideoFileCount > 0 ? (
+                      <>
+                        <span style={{ color: '#34d399', fontWeight: '600' }}>This folder contains {browseVideoFileCount} video file{browseVideoFileCount === 1 ? '' : 's'}.</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Click "Select This Folder" below to register and scan it.</span>
+                      </>
+                    ) : (
+                      'No subdirectories found.'
+                    )}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>

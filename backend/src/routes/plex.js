@@ -146,7 +146,7 @@ async function handlePlexWebhook(payload, user, res, isReplicated = false) {
 
   // Get TMDB API Key from SystemSettings
   const systemSettings = await prisma.systemSettings.findFirst();
-  const tmdbApiKey = systemSettings?.tmdbApiKey;
+  const tmdbApiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
 
   // 1. Manage Active Sessions (Play, Pause, Resume, Stop, Scrobble)
   if (

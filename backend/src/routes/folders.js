@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const prisma = require('../prismaClient');
 const { authenticateToken } = require('../middleware/auth');
-const { scanAllFolders, scanSingleFolder, startWatcher, stopWatcher, getStatus } = require('../utils/folderScanner');
+const { scanAllFolders, scanSingleFolder, startWatcher, stopWatcher, getStatus, VIDEO_EXTENSIONS } = require('../utils/folderScanner');
 
 const router = express.Router();
 
@@ -136,16 +136,30 @@ router.get('/browse', async (req, res) => {
 
     const items = await fs.promises.readdir(targetPath, { withFileTypes: true });
     const directories = [];
+    let videoFileCount = 0;
+    const extensions = VIDEO_EXTENSIONS || ['.mp4', '.mkv', '.avi', '.m4v', '.mov', '.wmv', '.flv'];
 
     for (const item of items) {
       // Ignore hidden directories
       if (item.name.startsWith('.')) continue;
 
-      if (item.isDirectory()) {
+      let isDir = item.isDirectory();
+      let isFil = item.isFile();
+      if (item.isSymbolicLink()) {
+        try {
+          const s = fs.statSync(path.join(targetPath, item.name));
+          isDir = s.isDirectory();
+          isFil = s.isFile();
+        } catch (e) {}
+      }
+
+      if (isDir) {
         directories.push({
           name: item.name,
           path: path.join(targetPath, item.name)
         });
+      } else if (isFil && extensions.includes(path.extname(item.name).toLowerCase())) {
+        videoFileCount++;
       }
     }
 
@@ -160,7 +174,8 @@ router.get('/browse', async (req, res) => {
       currentPath: targetPath,
       parentPath,
       drives,
-      directories
+      directories,
+      videoFileCount
     });
   } catch (err) {
     console.error(`[Folders Route] Error browsing directory ${targetPath}:`, err.message);

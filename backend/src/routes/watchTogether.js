@@ -14,7 +14,7 @@ async function getOrCreateMedia(tmdbId, type) {
   });
   if (!media) {
     const systemSettings = await prisma.systemSettings.findUnique({ where: { id: 1 } });
-    const tmdbApiKey = systemSettings?.tmdbApiKey;
+    const tmdbApiKey = systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY;
     let title = `${type} #${parsedId}`;
     
     if (tmdbApiKey) {

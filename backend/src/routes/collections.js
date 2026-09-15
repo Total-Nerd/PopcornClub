@@ -133,7 +133,7 @@ router.post('/watch', async (req, res) => {
       const runtime = await resolveDuration({
         tmdbId: media.tmdbId,
         type: type,
-        apiKey: systemSettings?.tmdbApiKey
+        apiKey: systemSettings?.tmdbApiKey || process.env.TMDB_API_KEY
       });
       const durationSec = runtime * 60;
       await prisma.watchHistoryLog.create({
